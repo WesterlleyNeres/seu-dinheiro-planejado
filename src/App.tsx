@@ -24,14 +24,16 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/auth" element={<Auth />} />
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <AppLayout>
                   <Dashboard />
-                </ProtectedRoute>
-              }
-            />
+                </AppLayout>
+              </ProtectedRoute>
+            }
+          />
             <Route
               path="/transactions"
               element={
