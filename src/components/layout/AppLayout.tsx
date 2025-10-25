@@ -11,6 +11,8 @@ import {
   TrendingUp,
   LogOut,
   DollarSign,
+  Tag,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +23,8 @@ interface AppLayoutProps {
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Lançamentos", href: "/transactions", icon: Receipt },
+  { name: "Categorias", href: "/categories", icon: Tag },
+  { name: "Carteiras", href: "/wallets", icon: Wallet },
   { name: "Calendário", href: "/calendar", icon: Calendar },
   { name: "Orçamento", href: "/budget", icon: PieChart },
   { name: "Metas", href: "/goals", icon: Target },

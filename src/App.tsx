@@ -6,9 +6,12 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
-import Index from "./pages/Index";
+import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
+import Transactions from "./pages/Transactions";
+import Categories from "./pages/Categories";
+import Wallets from "./pages/Wallets";
 
 const queryClient = new QueryClient();
 
@@ -25,9 +28,7 @@ const App = () => (
               path="/"
               element={
                 <ProtectedRoute>
-                  <AppLayout>
-                    <Index />
-                  </AppLayout>
+                  <Dashboard />
                 </ProtectedRoute>
               }
             />
@@ -35,12 +36,23 @@ const App = () => (
               path="/transactions"
               element={
                 <ProtectedRoute>
-                  <AppLayout>
-                    <div className="text-center py-12">
-                      <h1 className="text-2xl font-bold mb-2">Lançamentos</h1>
-                      <p className="text-muted-foreground">Em breve</p>
-                    </div>
-                  </AppLayout>
+                  <Transactions />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/categories"
+              element={
+                <ProtectedRoute>
+                  <Categories />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/wallets"
+              element={
+                <ProtectedRoute>
+                  <Wallets />
                 </ProtectedRoute>
               }
             />
