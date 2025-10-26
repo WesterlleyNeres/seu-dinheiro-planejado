@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { format } from 'date-fns';
+import { PaymentMethodSelect } from '@/components/forms/PaymentMethodSelect';
 
 interface TransactionFormProps {
   open: boolean;
@@ -62,6 +63,7 @@ export const TransactionForm = ({
       status: transaction?.status || 'pendente',
       forma_pagamento: transaction?.forma_pagamento || '',
       wallet_id: transaction?.wallet_id || null,
+      payment_method_id: transaction?.payment_method_id || null,
     },
   });
 
@@ -76,6 +78,7 @@ export const TransactionForm = ({
         status: transaction.status,
         forma_pagamento: transaction.forma_pagamento || '',
         wallet_id: transaction.wallet_id || null,
+        payment_method_id: transaction.payment_method_id || null,
       });
       setTipo(transaction.tipo);
     }
@@ -258,12 +261,15 @@ export const TransactionForm = ({
 
             <FormField
               control={form.control}
-              name="forma_pagamento"
+              name="payment_method_id"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Forma de Pagamento (Opcional)</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ex: Pix, Débito, Crédito" {...field} />
+                    <PaymentMethodSelect
+                      value={field.value || undefined}
+                      onChange={field.onChange}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

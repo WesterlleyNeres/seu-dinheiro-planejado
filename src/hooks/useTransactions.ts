@@ -15,6 +15,7 @@ export interface Transaction {
   mes_referencia: string;
   category_id: string;
   wallet_id?: string;
+  payment_method_id?: string;
   user_id: string;
   created_at: string;
   category?: {

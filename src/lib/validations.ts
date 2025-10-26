@@ -11,6 +11,7 @@ export const transactionSchema = z.object({
   status: z.enum(['paga', 'pendente']),
   forma_pagamento: z.string().optional(),
   wallet_id: z.string().uuid().optional().nullable(),
+  payment_method_id: z.string().uuid().optional().nullable(),
 });
 
 export const categorySchema = z.object({
