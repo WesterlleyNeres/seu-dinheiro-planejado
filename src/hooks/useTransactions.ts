@@ -115,8 +115,11 @@ export const useTransactions = (filters?: TransactionFilters) => {
     try {
       const mesReferencia = format(new Date(data.data), 'yyyy-MM');
       
+      // Remover campos que não existem na tabela
+      const { isInstallment, installmentType, installmentCount, installmentValue, totalValue, ...transactionData } = data as any;
+      
       const { error } = await supabase.from('transactions').insert({
-        ...data,
+        ...transactionData,
         user_id: user.id,
         mes_referencia: mesReferencia,
       });
