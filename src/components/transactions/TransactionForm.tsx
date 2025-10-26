@@ -207,6 +207,7 @@ export const TransactionForm = ({
                     checked={isInstallment}
                     onCheckedChange={(checked) => {
                       setIsInstallment(checked);
+                      form.setValue('isInstallment', checked);
                       if (!checked) {
                         form.setValue('installmentCount', undefined);
                         form.setValue('installmentValue', undefined);
@@ -225,7 +226,11 @@ export const TransactionForm = ({
                 <div className="space-y-3 pl-4 border-l-2 border-primary/20">
                   <Tabs 
                     value={installmentType} 
-                    onValueChange={(v) => setInstallmentType(v as 'fixed' | 'calculated')}
+                    onValueChange={(v) => {
+                      const newType = v as 'fixed' | 'calculated';
+                      setInstallmentType(newType);
+                      form.setValue('installmentType', newType);
+                    }}
                   >
                     <TabsList className="grid w-full grid-cols-2">
                       <TabsTrigger value="fixed">
