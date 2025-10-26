@@ -22,18 +22,11 @@ const Calendar = () => {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | undefined>();
   const [defaultDate, setDefaultDate] = useState<Date | undefined>();
 
-  const {
-    currentMonth,
-    currentYear,
-    calendarDays,
-    transactionsByDay,
-    nextMonth,
-    prevMonth,
-    goToToday,
-  } = useCalendar([]);
+  // Estado local para mês/ano selecionado
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
 
-  // Carrega transações do mês atual
-  const mesRef = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+  // Carregar transações do mês selecionado
   const {
     transactions,
     loading,
@@ -43,23 +36,46 @@ const Calendar = () => {
     deleteTransaction,
     toggleStatus,
   } = useTransactions({
-    startDate: format(new Date(currentYear, currentMonth - 1, 1), 'yyyy-MM-dd'),
-    endDate: format(new Date(currentYear, currentMonth, 0), 'yyyy-MM-dd'),
+    startDate: format(new Date(selectedYear, selectedMonth - 1, 1), 'yyyy-MM-dd'),
+    endDate: format(new Date(selectedYear, selectedMonth, 0), 'yyyy-MM-dd'),
   });
 
-  // Atualiza o hook do calendário com as transações carregadas
-  const calendar = useCalendar(transactions);
+  // useCalendar com as transações carregadas
+  const {
+    currentMonth,
+    currentYear,
+    calendarDays,
+    transactionsByDay,
+    nextMonth,
+    prevMonth,
+    goToToday,
+  } = useCalendar(transactions, selectedYear, selectedMonth);
 
-  // Calcula totais do mês
-  const receitas = transactions
+  // Sincronizar quando useCalendar mudar mês/ano
+  useEffect(() => {
+    setSelectedYear(currentYear);
+    setSelectedMonth(currentMonth);
+  }, [currentYear, currentMonth]);
+
+  // Calcular totais do mês (pagas + pendentes)
+  const receitasPagas = transactions
     .filter(t => t.tipo === 'receita' && t.status === 'paga')
     .reduce((sum, t) => sum + Number(t.valor), 0);
-  
-  const despesas = transactions
+
+  const receitasTotal = transactions
+    .filter(t => t.tipo === 'receita')
+    .reduce((sum, t) => sum + Number(t.valor), 0);
+
+  const despesasPagas = transactions
     .filter(t => t.tipo === 'despesa' && t.status === 'paga')
     .reduce((sum, t) => sum + Number(t.valor), 0);
-  
-  const saldo = receitas - despesas;
+
+  const despesasTotal = transactions
+    .filter(t => t.tipo === 'despesa')
+    .reduce((sum, t) => sum + Number(t.valor), 0);
+
+  const saldoPago = receitasPagas - despesasPagas;
+  const saldoPrevisto = receitasTotal - despesasTotal;
 
   const handleDayClick = (date: Date, dayTransactions: Transaction[]) => {
     setSelectedDate(date);
@@ -125,7 +141,10 @@ const Calendar = () => {
             <ArrowUpCircle className="h-4 w-4 text-success" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-success">{formatCurrency(receitas)}</div>
+            <div className="text-2xl font-bold text-success">{formatCurrency(receitasTotal)}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {formatCurrency(receitasPagas)} realizadas
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -134,7 +153,10 @@ const Calendar = () => {
             <ArrowDownCircle className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-destructive">{formatCurrency(despesas)}</div>
+            <div className="text-2xl font-bold text-destructive">{formatCurrency(despesasTotal)}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {formatCurrency(despesasPagas)} realizadas
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -143,9 +165,12 @@ const Calendar = () => {
             <Wallet className="h-4 w-4" />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${saldo >= 0 ? 'text-success' : 'text-destructive'}`}>
-              {formatCurrency(saldo)}
+            <div className={`text-2xl font-bold ${saldoPrevisto >= 0 ? 'text-success' : 'text-destructive'}`}>
+              {formatCurrency(saldoPrevisto)}
             </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {formatCurrency(saldoPago)} realizado
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -182,29 +207,25 @@ const Calendar = () => {
           <CalendarGrid
             month={currentMonth}
             year={currentYear}
-            calendarDays={calendar.calendarDays}
-            transactionsByDay={calendar.transactionsByDay}
+            calendarDays={calendarDays}
+            transactionsByDay={transactionsByDay}
             onDayClick={handleDayClick}
             selectedDate={selectedDate}
           />
-        </CardContent>
-      </Card>
 
-      {/* Legenda */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-center gap-6 text-sm">
+          {/* Legenda */}
+          <div className="flex items-center gap-4 text-sm text-muted-foreground mt-4">
             <div className="flex items-center gap-2">
-              <div className="h-3 w-3 rounded-full bg-success" />
-              <span>Receitas</span>
+              <div className="w-3 h-3 rounded-full bg-success" />
+              <span>Receita</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="h-3 w-3 rounded-full bg-destructive" />
-              <span>Despesas</span>
+              <div className="w-3 h-3 rounded-full bg-destructive" />
+              <span>Despesa</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="h-6 w-6 rounded border-2 border-primary" />
-              <span>Dia Atual</span>
+              <div className="w-3 h-3 rounded border-2 border-primary" />
+              <span>Hoje</span>
             </div>
           </div>
         </CardContent>

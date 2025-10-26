@@ -37,11 +37,11 @@ export const DayDetailsDialog = ({
   onCreateNew,
 }: DayDetailsDialogProps) => {
   const receitas = transactions
-    .filter(t => t.tipo === 'receita' && t.status === 'paga')
+    .filter(t => t.tipo === 'receita')
     .reduce((sum, t) => sum + Number(t.valor), 0);
   
   const despesas = transactions
-    .filter(t => t.tipo === 'despesa' && t.status === 'paga')
+    .filter(t => t.tipo === 'despesa')
     .reduce((sum, t) => sum + Number(t.valor), 0);
   
   const saldo = receitas - despesas;
@@ -108,7 +108,13 @@ export const DayDetailsDialog = ({
                       <h4 className="font-medium truncate">{transaction.descricao}</h4>
                     </div>
                     
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                      <Badge 
+                        variant={transaction.status === 'paga' ? 'default' : 'secondary'}
+                        className="text-xs"
+                      >
+                        {transaction.status === 'paga' ? 'Paga' : 'Pendente'}
+                      </Badge>
                       <Badge variant="outline" className="text-xs">
                         {transaction.category?.nome}
                       </Badge>

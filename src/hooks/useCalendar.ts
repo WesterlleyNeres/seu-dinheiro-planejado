@@ -12,10 +12,23 @@ export interface UseCalendarReturn {
   goToToday: () => void;
 }
 
-export const useCalendar = (transactions: Transaction[]): UseCalendarReturn => {
+export const useCalendar = (
+  transactions: Transaction[],
+  initialYear?: number,
+  initialMonth?: number
+): UseCalendarReturn => {
   const { year: currentYear, month: currentMonth } = getCurrentMonth();
-  const [selectedYear, setSelectedYear] = useState(currentYear);
-  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  const [selectedYear, setSelectedYear] = useState(initialYear ?? currentYear);
+  const [selectedMonth, setSelectedMonth] = useState(initialMonth ?? currentMonth);
+
+  // Sincronizar com valores externos quando mudarem
+  useEffect(() => {
+    if (initialYear !== undefined) setSelectedYear(initialYear);
+  }, [initialYear]);
+  
+  useEffect(() => {
+    if (initialMonth !== undefined) setSelectedMonth(initialMonth);
+  }, [initialMonth]);
 
   const calendarDays = useMemo(() => {
     return generateCalendarDays(selectedYear, selectedMonth);

@@ -23,13 +23,15 @@ export const CalendarDay = ({
   const hasTransactions = transactions.length > 0;
   
   const receitas = transactions
-    .filter(t => t.tipo === 'receita' && t.status === 'paga')
+    .filter(t => t.tipo === 'receita')
     .reduce((sum, t) => sum + Number(t.valor), 0);
   
   const despesas = transactions
-    .filter(t => t.tipo === 'despesa' && t.status === 'paga')
+    .filter(t => t.tipo === 'despesa')
     .reduce((sum, t) => sum + Number(t.valor), 0);
   
+  const totalReceitas = receitas;
+  const totalDespesas = despesas;
   const saldo = receitas - despesas;
   const hasReceitas = receitas > 0;
   const hasDespesas = despesas > 0;
@@ -68,19 +70,22 @@ export const CalendarDay = ({
 
       {hasTransactions && (
         <div className="flex-1 flex flex-col justify-end gap-1">
-          <Badge 
-            variant={saldo >= 0 ? "default" : "destructive"}
-            className={cn(
-              "text-[10px] px-1 py-0 h-5 w-full justify-center font-mono",
-              saldo >= 0 ? "bg-success/10 text-success border-success/20 hover:bg-success/20" : ""
-            )}
-          >
-            {formatCurrency(Math.abs(saldo))}
-          </Badge>
-          
-          <span className="text-[10px] text-muted-foreground text-center">
-            {transactions.length} {transactions.length === 1 ? 'lançamento' : 'lançamentos'}
-          </span>
+          {hasReceitas && (
+            <Badge 
+              variant="outline" 
+              className="bg-success/10 text-success border-success text-[10px] px-1 py-0 h-4 w-full justify-center"
+            >
+              +{formatCurrency(totalReceitas)}
+            </Badge>
+          )}
+          {hasDespesas && (
+            <Badge 
+              variant="outline" 
+              className="bg-destructive/10 text-destructive border-destructive text-[10px] px-1 py-0 h-4 w-full justify-center"
+            >
+              -{formatCurrency(totalDespesas)}
+            </Badge>
+          )}
         </div>
       )}
     </button>
