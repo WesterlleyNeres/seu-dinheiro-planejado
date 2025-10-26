@@ -111,7 +111,7 @@ export const TransactionForm = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col p-0">
+      <DialogContent className="sm:max-w-[500px] max-h-[85vh] flex flex-col p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-6">
           <DialogTitle>
             {transaction ? 'Editar Lançamento' : 'Novo Lançamento'}
@@ -123,7 +123,7 @@ export const TransactionForm = ({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1">
-            <div className="overflow-y-auto px-6 py-4 flex-1 space-y-4">
+            <div className="overflow-y-auto px-6 py-4 flex-1 space-y-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
               <FormField
               control={form.control}
               name="tipo"
@@ -221,7 +221,7 @@ export const TransactionForm = ({
               </div>
 
               {isInstallment && (
-                <div className="space-y-4 pl-6 border-l-2 border-primary/20">
+                <div className="space-y-3 pl-4 border-l-2 border-primary/20">
                   <Tabs 
                     value={installmentType} 
                     onValueChange={(v) => setInstallmentType(v as 'fixed' | 'calculated')}
@@ -229,15 +229,9 @@ export const TransactionForm = ({
                     <TabsList className="grid w-full grid-cols-2">
                       <TabsTrigger value="fixed">
                         Valor Fixo
-                        <Badge variant="outline" className="ml-2 text-xs">
-                          Ex: Luz
-                        </Badge>
                       </TabsTrigger>
                       <TabsTrigger value="calculated">
                         Valor Total
-                        <Badge variant="outline" className="ml-2 text-xs">
-                          Ex: TV
-                        </Badge>
                       </TabsTrigger>
                     </TabsList>
                   </Tabs>
@@ -285,9 +279,9 @@ export const TransactionForm = ({
                       </div>
                       
                       {form.watch('installmentValue') && form.watch('installmentCount') && (
-                        <div className="bg-muted p-3 rounded-lg">
-                          <p className="text-sm text-muted-foreground">Valor Total:</p>
-                          <p className="text-lg font-semibold">
+                        <div className="bg-muted p-2 rounded-lg">
+                          <p className="text-xs text-muted-foreground">Valor Total:</p>
+                          <p className="text-base font-semibold">
                             {formatCurrency((form.watch('installmentValue') || 0) * (form.watch('installmentCount') || 0))}
                           </p>
                         </div>
@@ -338,9 +332,9 @@ export const TransactionForm = ({
                       </div>
                       
                       {form.watch('totalValue') && form.watch('installmentCount') && (
-                        <div className="bg-muted p-3 rounded-lg">
-                          <p className="text-sm text-muted-foreground">Valor de Cada Parcela:</p>
-                          <p className="text-lg font-semibold">
+                        <div className="bg-muted p-2 rounded-lg">
+                          <p className="text-xs text-muted-foreground">Valor de Cada Parcela:</p>
+                          <p className="text-base font-semibold">
                             {formatCurrency((form.watch('totalValue') || 0) / (form.watch('installmentCount') || 0))}
                           </p>
                         </div>
@@ -349,9 +343,9 @@ export const TransactionForm = ({
                   )}
 
                   {form.watch('installmentCount') && form.watch('data') && (
-                    <div className="text-xs text-muted-foreground bg-blue-50 dark:bg-blue-950 p-3 rounded-lg">
-                      <p>📅 As parcelas terão vencimento mensal a partir de <strong>{format(new Date(form.watch('data')), 'dd/MM/yyyy')}</strong></p>
-                      <p className="mt-1">Última parcela: <strong>{format(
+                    <div className="text-xs text-muted-foreground bg-blue-50 dark:bg-blue-950 p-2 rounded-lg">
+                      <p>📅 Vencimento a partir de <strong>{format(new Date(form.watch('data')), 'dd/MM/yyyy')}</strong></p>
+                      <p className="mt-0.5">Última parcela: <strong>{format(
                         addMonths(new Date(form.watch('data')), (form.watch('installmentCount') || 1) - 1),
                         'dd/MM/yyyy'
                       )}</strong></p>
@@ -485,7 +479,7 @@ export const TransactionForm = ({
             )}
             </div>
 
-            <DialogFooter className="px-6 pb-6 border-t">
+            <DialogFooter className="px-6 py-4 border-t bg-background shadow-lg flex-shrink-0">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancelar
               </Button>
