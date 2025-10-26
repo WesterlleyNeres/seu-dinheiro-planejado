@@ -176,32 +176,47 @@ export const useTransactions = (filters?: TransactionFilters) => {
 
   const deleteTransaction = async (id: string) => {
     if (!user) return;
-    
-    try {
-      const { error } = await supabase
-        .from('transactions')
-        .update({ 
-          deleted_at: new Date().toISOString(),
-          user_id: user.id
-        })
-        .eq('id', id)
-        .eq('user_id', user.id);
 
-      if (error) throw error;
+    try {
+      // Tentativa: soft delete
+      const { error: softError } = await supabase
+        .from('transactions')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', id);
+
+      if (softError) {
+        throw softError;
+      }
 
       toast({
         title: 'Lançamento excluído',
         description: 'O lançamento foi excluído com sucesso',
       });
-
       loadTransactions();
-    } catch (error) {
-      console.error('Error deleting transaction:', error);
+    } catch (err: any) {
+      console.error('Error soft-deleting transaction:', err);
+
+      // Fallback: hard delete
+      const { error: hardError } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', id);
+
+      if (hardError) {
+        console.error('Error hard-deleting transaction:', hardError);
+        toast({
+          title: 'Erro ao excluir lançamento',
+          description: hardError.message || err?.message || 'Tente novamente mais tarde',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       toast({
-        title: 'Erro ao excluir lançamento',
-        description: 'Tente novamente mais tarde',
-        variant: 'destructive',
+        title: 'Lançamento excluído',
+        description: 'O lançamento foi excluído com sucesso',
       });
+      loadTransactions();
     }
   };
 
