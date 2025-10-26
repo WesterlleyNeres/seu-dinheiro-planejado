@@ -111,8 +111,9 @@ export const TransactionForm = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] max-h-[85vh] flex flex-col p-0 overflow-hidden">
-        <DialogHeader className="px-6 pt-6">
+      <DialogContent className="sm:max-w-[500px] p-0">
+        <div className="max-h-[85vh] flex flex-col overflow-hidden">
+          <DialogHeader className="px-6 pt-6">
           <DialogTitle>
             {transaction ? 'Editar Lançamento' : 'Novo Lançamento'}
           </DialogTitle>
@@ -123,7 +124,7 @@ export const TransactionForm = ({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1">
-            <div className="overflow-y-auto px-6 py-4 flex-1 space-y-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+            <div className="overflow-y-auto px-6 py-4 flex-1 space-y-3 overscroll-contain scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
               <FormField
               control={form.control}
               name="tipo"
@@ -489,6 +490,7 @@ export const TransactionForm = ({
             </DialogFooter>
           </form>
         </Form>
+        </div>
       </DialogContent>
     </Dialog>
   );
