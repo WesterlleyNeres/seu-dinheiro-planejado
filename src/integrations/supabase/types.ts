@@ -214,6 +214,7 @@ export type Database = {
           forma_pagamento: string | null
           id: string
           mes_referencia: string
+          natureza: string | null
           payment_method_id: string | null
           status: Database["public"]["Enums"]["transaction_status"]
           tipo: Database["public"]["Enums"]["transaction_type"]
@@ -231,6 +232,7 @@ export type Database = {
           forma_pagamento?: string | null
           id?: string
           mes_referencia: string
+          natureza?: string | null
           payment_method_id?: string | null
           status?: Database["public"]["Enums"]["transaction_status"]
           tipo: Database["public"]["Enums"]["transaction_type"]
@@ -248,6 +250,7 @@ export type Database = {
           forma_pagamento?: string | null
           id?: string
           mes_referencia?: string
+          natureza?: string | null
           payment_method_id?: string | null
           status?: Database["public"]["Enums"]["transaction_status"]
           tipo?: Database["public"]["Enums"]["transaction_type"]
@@ -330,7 +333,13 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      category_type: "fixa" | "variavel" | "investimento" | "divida" | "receita"
+      category_type:
+        | "fixa"
+        | "variavel"
+        | "investimento"
+        | "divida"
+        | "receita"
+        | "despesa"
       transaction_status: "paga" | "pendente"
       transaction_type: "despesa" | "receita"
       wallet_type: "conta" | "cartao"
@@ -461,7 +470,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      category_type: ["fixa", "variavel", "investimento", "divida", "receita"],
+      category_type: [
+        "fixa",
+        "variavel",
+        "investimento",
+        "divida",
+        "receita",
+        "despesa",
+      ],
       transaction_status: ["paga", "pendente"],
       transaction_type: ["despesa", "receita"],
       wallet_type: ["conta", "cartao"],
