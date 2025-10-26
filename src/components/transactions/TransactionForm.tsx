@@ -47,6 +47,7 @@ interface TransactionFormProps {
   onOpenChange: (open: boolean) => void;
   transaction?: Transaction;
   onSubmit: (data: any) => Promise<void>;
+  defaultDate?: Date;
 }
 
 export const TransactionForm = ({
@@ -54,6 +55,7 @@ export const TransactionForm = ({
   onOpenChange,
   transaction,
   onSubmit,
+  defaultDate,
 }: TransactionFormProps) => {
   const [tipo, setTipo] = useState<'receita' | 'despesa'>(transaction?.tipo || 'despesa');
   const { categories } = useCategories();
@@ -106,12 +108,15 @@ export const TransactionForm = ({
         });
         setTipo(transaction.tipo);
       } else {
-        // Creating new transaction - clean slate
-        form.reset(defaultValues);
+        // Creating new transaction - clean slate with optional defaultDate
+        form.reset({
+          ...defaultValues,
+          data: defaultDate ? format(defaultDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+        });
         setTipo('despesa');
       }
     }
-  }, [open, transaction]);
+  }, [open, transaction, defaultDate]);
 
   const handleSubmit = async (data: any) => {
     try {

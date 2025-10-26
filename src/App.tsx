@@ -12,6 +12,7 @@ import NotFound from "./pages/NotFound";
 import Transactions from "./pages/Transactions";
 import Categories from "./pages/Categories";
 import Wallets from "./pages/Wallets";
+import Calendar from "./pages/Calendar";
 
 const queryClient = new QueryClient();
 
@@ -63,10 +64,7 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <AppLayout>
-                    <div className="text-center py-12">
-                      <h1 className="text-2xl font-bold mb-2">Calendário</h1>
-                      <p className="text-muted-foreground">Em breve</p>
-                    </div>
+                    <Calendar />
                   </AppLayout>
                 </ProtectedRoute>
               }
