@@ -38,6 +38,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { formatCurrency } from '@/lib/currency';
+import { toast } from '@/hooks/use-toast';
 
 interface TransactionFormProps {
   open: boolean;
@@ -98,9 +99,25 @@ export const TransactionForm = ({
   }, [transaction, form]);
 
   const handleSubmit = async (data: any) => {
-    await onSubmit(data);
-    onOpenChange(false);
-    form.reset();
+    try {
+      console.log('=== FORM SUBMIT DATA ===', data);
+      console.log('isInstallment:', data.isInstallment);
+      console.log('installmentType:', data.installmentType);
+      console.log('installmentCount:', data.installmentCount);
+      console.log('installmentValue:', data.installmentValue);
+      console.log('totalValue:', data.totalValue);
+      
+      await onSubmit(data);
+      onOpenChange(false);
+      form.reset();
+    } catch (error) {
+      console.error('Erro ao submeter formulário:', error);
+      toast({
+        title: 'Erro ao criar lançamento',
+        description: error instanceof Error ? error.message : 'Verifique os campos e tente novamente',
+        variant: 'destructive',
+      });
+    }
   };
 
   const filteredCategories = categories.filter((cat) => {
@@ -206,6 +223,7 @@ export const TransactionForm = ({
                     id="installment-mode"
                     checked={isInstallment}
                     onCheckedChange={(checked) => {
+                      console.log('Switch parcelamento alterado:', checked);
                       setIsInstallment(checked);
                       form.setValue('isInstallment', checked);
                       if (!checked) {

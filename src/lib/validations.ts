@@ -23,17 +23,29 @@ export const transactionSchema = z.object({
 }).refine((data) => {
   if (!data.isInstallment) return true;
   
+  // Verificar se installmentType foi definido
+  if (!data.installmentType) {
+    return false;
+  }
+  
   if (data.installmentType === 'fixed') {
-    return !!data.installmentValue && !!data.installmentCount;
+    const hasValue = typeof data.installmentValue === 'number' && data.installmentValue > 0;
+    const hasCount = typeof data.installmentCount === 'number' && data.installmentCount > 0;
+    console.log('Validação fixed:', { hasValue, hasCount, installmentValue: data.installmentValue, installmentCount: data.installmentCount });
+    return hasValue && hasCount;
   }
   
   if (data.installmentType === 'calculated') {
-    return !!data.totalValue && !!data.installmentCount;
+    const hasTotal = typeof data.totalValue === 'number' && data.totalValue > 0;
+    const hasCount = typeof data.installmentCount === 'number' && data.installmentCount > 0;
+    console.log('Validação calculated:', { hasTotal, hasCount, totalValue: data.totalValue, installmentCount: data.installmentCount });
+    return hasTotal && hasCount;
   }
   
   return false;
 }, {
-  message: "Preencha todos os campos de parcelamento",
+  message: "Preencha o valor e número de parcelas corretamente",
+  path: ["installmentCount"],
 });
 
 export const categorySchema = z.object({
