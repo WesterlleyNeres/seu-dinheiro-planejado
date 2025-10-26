@@ -144,13 +144,16 @@ export const useTransactions = (filters?: TransactionFilters) => {
 
   const updateTransaction = async (id: string, data: Partial<Transaction>) => {
     try {
-      if (data.data) {
-        data.mes_referencia = format(new Date(data.data), 'yyyy-MM');
+      // Remover campos que não existem na tabela
+      const { isInstallment, installmentType, installmentCount, installmentValue, totalValue, ...transactionData } = data as any;
+      
+      if (transactionData.data) {
+        transactionData.mes_referencia = format(new Date(transactionData.data), 'yyyy-MM');
       }
 
       const { error } = await supabase
         .from('transactions')
-        .update(data)
+        .update(transactionData)
         .eq('id', id);
 
       if (error) throw error;
@@ -172,11 +175,17 @@ export const useTransactions = (filters?: TransactionFilters) => {
   };
 
   const deleteTransaction = async (id: string) => {
+    if (!user) return;
+    
     try {
       const { error } = await supabase
         .from('transactions')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', id);
+        .update({ 
+          deleted_at: new Date().toISOString(),
+          user_id: user.id
+        })
+        .eq('id', id)
+        .eq('user_id', user.id);
 
       if (error) throw error;
 
