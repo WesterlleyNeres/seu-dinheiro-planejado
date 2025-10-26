@@ -75,3 +75,33 @@ export const budgetSchema = z.object({
   category_id: z.string().uuid('Categoria inválida'),
   limite_valor: z.number().min(0.01, 'Valor deve ser maior que zero'),
 });
+
+export const goalSchema = z.object({
+  nome: z.string()
+    .min(3, "Nome deve ter no mínimo 3 caracteres")
+    .max(100, "Nome deve ter no máximo 100 caracteres"),
+  valor_meta: z.number()
+    .positive("Valor deve ser maior que zero"),
+  prazo: z.string()
+    .nullable()
+    .optional()
+    .refine((val) => {
+      if (!val) return true;
+      const prazoDate = new Date(val);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return prazoDate >= today;
+    }, "Prazo não pode ser no passado"),
+});
+
+export const contributionSchema = z.object({
+  valor: z.number()
+    .positive("Valor deve ser maior que zero"),
+  data: z.string()
+    .refine((val) => {
+      const date = new Date(val);
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      return date <= today;
+    }, "Data não pode ser no futuro"),
+});

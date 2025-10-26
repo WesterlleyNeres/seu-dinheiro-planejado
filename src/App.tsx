@@ -14,6 +14,7 @@ import Categories from "./pages/Categories";
 import Wallets from "./pages/Wallets";
 import Calendar from "./pages/Calendar";
 import Budget from "./pages/Budget";
+import Goals from "./pages/Goals";
 
 const queryClient = new QueryClient();
 
@@ -85,10 +86,7 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <AppLayout>
-                    <div className="text-center py-12">
-                      <h1 className="text-2xl font-bold mb-2">Metas</h1>
-                      <p className="text-muted-foreground">Em breve</p>
-                    </div>
+                    <Goals />
                   </AppLayout>
                 </ProtectedRoute>
               }
