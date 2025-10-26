@@ -88,8 +88,9 @@ export const useBudgets = (year: number, month: number): UseBudgetsReturn => {
       // Calculate realizado for each budget (including both paid and pending)
       const enrichedBudgets = await Promise.all(
         budgetsData.map(async (budget) => {
+          const lastDayOfMonth = new Date(year, month, 0).getDate();
           const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-          const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+          const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
 
           const { data: transactions } = await supabase
             .from('transactions')

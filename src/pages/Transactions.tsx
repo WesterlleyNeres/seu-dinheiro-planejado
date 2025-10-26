@@ -82,11 +82,11 @@ export default function Transactions() {
   };
 
   const totalReceitas = transactions
-    .filter((t) => t.tipo === 'receita' && t.status === 'paga')
+    .filter((t) => t.tipo === 'receita')
     .reduce((sum, t) => sum + Number(t.valor), 0);
 
   const totalDespesas = transactions
-    .filter((t) => t.tipo === 'despesa' && t.status === 'paga')
+    .filter((t) => t.tipo === 'despesa')
     .reduce((sum, t) => sum + Number(t.valor), 0);
 
   const saldo = totalReceitas - totalDespesas;
