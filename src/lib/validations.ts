@@ -24,6 +24,12 @@ export const transactionSchema = z.object({
   console.log('=== VALIDAÇÃO PARCELAMENTO ===');
   console.log('Raw data:', JSON.stringify(data, null, 2));
   
+  // Se tem dados de parcelamento mas isInstallment está false
+  if (!data.isInstallment && (data.installmentCount || data.installmentValue || data.totalValue)) {
+    console.log('❌ Erro: Dados de parcelamento preenchidos mas switch desativado');
+    return false;
+  }
+  
   if (!data.isInstallment) return true;
   
   // Verificar se installmentType foi definido
@@ -47,8 +53,8 @@ export const transactionSchema = z.object({
   
   return false;
 }, {
-  message: "Preencha o valor e número de parcelas corretamente",
-  path: ["installmentCount"],
+  message: "Ative o 'Lançamento Parcelado' ou preencha o valor e número de parcelas corretamente",
+  path: ["isInstallment"],
 });
 
 export const categorySchema = z.object({

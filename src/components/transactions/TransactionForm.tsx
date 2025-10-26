@@ -39,6 +39,8 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { formatCurrency } from '@/lib/currency';
 import { toast } from '@/hooks/use-toast';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle } from 'lucide-react';
 
 interface TransactionFormProps {
   open: boolean;
@@ -240,6 +242,15 @@ export const TransactionForm = ({
                 </div>
               </div>
 
+              {!isInstallment && (form.watch('installmentCount') || form.watch('installmentValue') || form.watch('totalValue')) && (
+                <Alert variant="default" className="bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800">
+                  <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  <AlertDescription className="text-amber-800 dark:text-amber-200">
+                    Ative o "Lançamento Parcelado" acima para criar parcelas
+                  </AlertDescription>
+                </Alert>
+              )}
+
               {isInstallment && (
                 <div className="space-y-3 pl-4 border-l-2 border-primary/20">
                   <Tabs 
@@ -295,7 +306,14 @@ export const TransactionForm = ({
                       value={field.value || ''}
                       onChange={(e) => {
                         const value = e.target.value;
-                        field.onChange(value ? Number(value) : undefined);
+                        const numValue = value ? Number(value) : undefined;
+                        field.onChange(numValue);
+                        
+                        // Auto-ativar parcelamento se usuário preencher o campo
+                        if (numValue && numValue > 0 && !isInstallment) {
+                          setIsInstallment(true);
+                          form.setValue('isInstallment', true);
+                        }
                       }}
                     />
                               </FormControl>
@@ -351,7 +369,14 @@ export const TransactionForm = ({
                                   value={field.value || ''}
                                   onChange={(e) => {
                                     const value = e.target.value;
-                                    field.onChange(value ? Number(value) : undefined);
+                                    const numValue = value ? Number(value) : undefined;
+                                    field.onChange(numValue);
+                                    
+                                    // Auto-ativar parcelamento se usuário preencher o campo
+                                    if (numValue && numValue > 0 && !isInstallment) {
+                                      setIsInstallment(true);
+                                      form.setValue('isInstallment', true);
+                                    }
                                   }}
                                 />
                               </FormControl>
