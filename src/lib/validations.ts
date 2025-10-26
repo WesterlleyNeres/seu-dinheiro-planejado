@@ -12,11 +12,12 @@ export const transactionSchema = z.object({
   forma_pagamento: z.string().optional(),
   wallet_id: z.string().uuid().optional().nullable(),
   payment_method_id: z.string().uuid().optional().nullable(),
+  natureza: z.enum(['fixa', 'variavel']).optional().nullable(),
 });
 
 export const categorySchema = z.object({
   nome: z.string().min(1, 'Nome é obrigatório').max(100, 'Nome muito longo'),
-  tipo: z.enum(['fixa', 'variavel', 'investimento', 'divida', 'receita'], {
+  tipo: z.enum(['despesa', 'receita', 'investimento', 'divida'], {
     required_error: 'Tipo é obrigatório',
   }),
 });

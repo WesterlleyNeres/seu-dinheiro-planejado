@@ -180,6 +180,28 @@ export const TransactionFilters = ({ filters, onFiltersChange }: TransactionFilt
               </SelectContent>
             </Select>
           </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Natureza</label>
+            <Select
+              value={filters.natureza || 'all'}
+              onValueChange={(value) =>
+                onFiltersChange({
+                  ...filters,
+                  natureza: value === 'all' ? undefined : (value as 'fixa' | 'variavel'),
+                })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Todas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                <SelectItem value="fixa">Fixa</SelectItem>
+                <SelectItem value="variavel">Variável</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       )}
     </div>

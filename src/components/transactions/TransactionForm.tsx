@@ -64,6 +64,7 @@ export const TransactionForm = ({
       forma_pagamento: transaction?.forma_pagamento || '',
       wallet_id: transaction?.wallet_id || null,
       payment_method_id: transaction?.payment_method_id || null,
+      natureza: transaction?.natureza || null,
     },
   });
 
@@ -79,6 +80,7 @@ export const TransactionForm = ({
         forma_pagamento: transaction.forma_pagamento || '',
         wallet_id: transaction.wallet_id || null,
         payment_method_id: transaction.payment_method_id || null,
+        natureza: transaction.natureza || null,
       });
       setTipo(transaction.tipo);
     }
@@ -90,9 +92,11 @@ export const TransactionForm = ({
     form.reset();
   };
 
-  const filteredCategories = categories.filter(
-    (cat) => cat.tipo === 'receita' ? tipo === 'receita' : tipo === 'despesa'
-  );
+  const filteredCategories = categories.filter((cat) => {
+    if (tipo === 'receita') return cat.tipo === 'receita';
+    if (tipo === 'despesa') return cat.tipo === 'despesa';
+    return false;
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -275,6 +279,34 @@ export const TransactionForm = ({
                 </FormItem>
               )}
             />
+
+            {tipo === 'despesa' && (
+              <FormField
+                control={form.control}
+                name="natureza"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Natureza (Opcional)</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value || undefined}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="null">Não especificado</SelectItem>
+                        <SelectItem value="fixa">Fixa</SelectItem>
+                        <SelectItem value="variavel">Variável</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

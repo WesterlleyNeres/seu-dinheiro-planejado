@@ -45,11 +45,10 @@ import { Plus, Pencil, Trash2, Tag } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const categoryTypeLabels = {
-  fixa: 'Fixa',
-  variavel: 'Variável',
+  despesa: 'Despesa',
+  receita: 'Receita',
   investimento: 'Investimento',
   divida: 'Dívida',
-  receita: 'Receita',
 };
 
 export default function Categories() {
@@ -64,7 +63,7 @@ export default function Categories() {
     resolver: zodResolver(categorySchema),
     defaultValues: {
       nome: '',
-      tipo: 'variavel' as 'fixa' | 'variavel' | 'investimento' | 'divida' | 'receita',
+      tipo: 'despesa' as 'despesa' | 'receita' | 'investimento' | 'divida',
     },
   });
 
@@ -83,7 +82,7 @@ export default function Categories() {
     setEditingCategory(category);
     form.reset({
       nome: category.nome,
-      tipo: category.tipo,
+      tipo: category.tipo as any,
     });
     setFormOpen(true);
   };
@@ -92,7 +91,7 @@ export default function Categories() {
     setEditingCategory(undefined);
     form.reset({
       nome: '',
-      tipo: 'variavel',
+      tipo: 'despesa',
     });
     setFormOpen(true);
   };
@@ -235,11 +234,10 @@ export default function Categories() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="variavel">Variável</SelectItem>
-                        <SelectItem value="fixa">Fixa</SelectItem>
+                        <SelectItem value="despesa">Despesa</SelectItem>
+                        <SelectItem value="receita">Receita</SelectItem>
                         <SelectItem value="investimento">Investimento</SelectItem>
                         <SelectItem value="divida">Dívida</SelectItem>
-                        <SelectItem value="receita">Receita</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />

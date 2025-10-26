@@ -6,7 +6,7 @@ import { toast } from '@/hooks/use-toast';
 export interface Category {
   id: string;
   nome: string;
-  tipo: 'fixa' | 'variavel' | 'investimento' | 'divida' | 'receita';
+  tipo: 'despesa' | 'receita' | 'investimento' | 'divida' | 'fixa' | 'variavel';
   user_id: string;
   created_at: string;
 }
@@ -35,7 +35,7 @@ export const useCategories = (tipo?: Category['tipo']) => {
       const { data, error } = await query;
 
       if (error) throw error;
-      setCategories(data || []);
+      setCategories((data as any) || []);
     } catch (error) {
       console.error('Error loading categories:', error);
       toast({

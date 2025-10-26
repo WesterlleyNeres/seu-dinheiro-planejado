@@ -16,6 +16,7 @@ export interface Transaction {
   category_id: string;
   wallet_id?: string;
   payment_method_id?: string;
+  natureza?: 'fixa' | 'variavel';
   user_id: string;
   created_at: string;
   category?: {
@@ -36,6 +37,7 @@ export interface TransactionFilters {
   category_id?: string;
   status?: 'paga' | 'pendente';
   wallet_id?: string;
+  natureza?: 'fixa' | 'variavel';
 }
 
 export const useTransactions = (filters?: TransactionFilters) => {
@@ -78,10 +80,14 @@ export const useTransactions = (filters?: TransactionFilters) => {
         query = query.eq('wallet_id', filters.wallet_id);
       }
 
+      if (filters?.natureza) {
+        query = query.eq('natureza', filters.natureza);
+      }
+
       const { data, error } = await query;
 
       if (error) throw error;
-      setTransactions(data || []);
+      setTransactions((data as any) || []);
     } catch (error) {
       console.error('Error loading transactions:', error);
       toast({
