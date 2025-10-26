@@ -50,7 +50,7 @@ export const useTransactions = (filters?: TransactionFilters) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadTransactions = async () => {
+  const loadTransactions = async (retryCount = 0) => {
     if (!user) return;
 
     try {
@@ -95,9 +95,16 @@ export const useTransactions = (filters?: TransactionFilters) => {
       setTransactions((data as any) || []);
     } catch (error) {
       console.error('Error loading transactions:', error);
+      
+      // Simple retry mechanism for network issues
+      if (retryCount < 1) {
+        setTimeout(() => loadTransactions(retryCount + 1), 500);
+        return;
+      }
+      
       toast({
         title: 'Erro ao carregar lançamentos',
-        description: 'Tente novamente mais tarde',
+        description: 'Verifique sua conexão e tente novamente',
         variant: 'destructive',
       });
     } finally {
@@ -242,20 +249,40 @@ export const useTransactions = (filters?: TransactionFilters) => {
       return createTransaction(formData);
     }
 
+    // Validate installment data
+    const count = Math.floor(Number(installmentCount));
+    if (!count || count < 1 || count > 60) {
+      toast({
+        title: 'Erro de validação',
+        description: 'Número de parcelas inválido (1-60)',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       const grupoId = crypto.randomUUID();
       const transactions = [];
       const baseDate = new Date(dataVencimento);
       
       const valorParcela = installmentType === 'fixed' 
-        ? installmentValue 
-        : totalValue / installmentCount;
+        ? Number(installmentValue)
+        : Number(totalValue) / count;
       
       const valorTotal = installmentType === 'fixed'
-        ? installmentValue * installmentCount
-        : totalValue;
+        ? Number(installmentValue) * count
+        : Number(totalValue);
 
-      for (let i = 0; i < installmentCount; i++) {
+      if (!valorParcela || valorParcela <= 0) {
+        toast({
+          title: 'Erro de validação',
+          description: 'Valor de parcela inválido',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      for (let i = 0; i < count; i++) {
         const parcelaDate = new Date(baseDate);
         parcelaDate.setMonth(parcelaDate.getMonth() + i);
         
@@ -269,7 +296,7 @@ export const useTransactions = (filters?: TransactionFilters) => {
           mes_referencia: mesReferencia,
           valor: valorParcela,
           parcela_numero: i + 1,
-          parcela_total: installmentCount,
+          parcela_total: count,
           valor_parcela: valorParcela,
           valor_total_parcelado: valorTotal,
           grupo_parcelamento: grupoId,
@@ -284,7 +311,7 @@ export const useTransactions = (filters?: TransactionFilters) => {
 
       toast({
         title: 'Parcelamento criado com sucesso',
-        description: `${installmentCount} parcelas criadas`,
+        description: `${count} parcelas criadas`,
       });
 
       loadTransactions();
@@ -292,9 +319,10 @@ export const useTransactions = (filters?: TransactionFilters) => {
       console.error('Error creating installment transactions:', error);
       toast({
         title: 'Erro ao criar parcelamento',
-        description: 'Tente novamente mais tarde',
+        description: error instanceof Error ? error.message : 'Tente novamente mais tarde',
         variant: 'destructive',
       });
+      throw error;
     }
   };
 

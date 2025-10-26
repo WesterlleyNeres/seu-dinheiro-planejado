@@ -56,62 +56,78 @@ export const TransactionForm = ({
   onSubmit,
 }: TransactionFormProps) => {
   const [tipo, setTipo] = useState<'receita' | 'despesa'>(transaction?.tipo || 'despesa');
-  const [isInstallment, setIsInstallment] = useState(false);
-  const [installmentType, setInstallmentType] = useState<'fixed' | 'calculated'>('fixed');
   const { categories } = useCategories();
   const { wallets } = useWallets();
 
+  const defaultValues = {
+    tipo: 'despesa' as 'receita' | 'despesa',
+    descricao: '',
+    valor: 0,
+    data: format(new Date(), 'yyyy-MM-dd'),
+    category_id: '',
+    status: 'pendente' as 'paga' | 'pendente',
+    forma_pagamento: '',
+    wallet_id: null as string | null,
+    payment_method_id: null as string | null,
+    natureza: null as 'fixa' | 'variavel' | null,
+    isInstallment: false,
+    installmentType: 'fixed' as 'fixed' | 'calculated',
+    installmentCount: undefined as number | undefined,
+    installmentValue: undefined as number | undefined,
+    totalValue: undefined as number | undefined,
+  };
+
   const form = useForm({
     resolver: zodResolver(transactionSchema),
-    defaultValues: {
-      tipo: transaction?.tipo || 'despesa',
-      descricao: transaction?.descricao || '',
-      valor: transaction?.valor || 0,
-      data: transaction?.data || format(new Date(), 'yyyy-MM-dd'),
-      category_id: transaction?.category_id || '',
-      status: transaction?.status || 'pendente',
-      forma_pagamento: transaction?.forma_pagamento || '',
-      wallet_id: transaction?.wallet_id || null,
-      payment_method_id: transaction?.payment_method_id || null,
-      natureza: transaction?.natureza || null,
-      isInstallment: false,
-      installmentType: 'fixed',
-      installmentCount: undefined,
-      installmentValue: undefined,
-      totalValue: undefined,
-    },
+    defaultValues,
   });
 
+  // Reset form when opening (new) or editing (existing transaction)
   useEffect(() => {
-    if (transaction) {
-      form.reset({
-        tipo: transaction.tipo,
-        descricao: transaction.descricao,
-        valor: transaction.valor,
-        data: transaction.data,
-        category_id: transaction.category_id,
-        status: transaction.status,
-        forma_pagamento: transaction.forma_pagamento || '',
-        wallet_id: transaction.wallet_id || null,
-        payment_method_id: transaction.payment_method_id || null,
-        natureza: transaction.natureza || null,
-      });
-      setTipo(transaction.tipo);
+    if (open) {
+      if (transaction) {
+        // Editing existing transaction
+        form.reset({
+          tipo: transaction.tipo,
+          descricao: transaction.descricao,
+          valor: transaction.valor,
+          data: transaction.data,
+          category_id: transaction.category_id,
+          status: transaction.status,
+          forma_pagamento: transaction.forma_pagamento || '',
+          wallet_id: transaction.wallet_id || null,
+          payment_method_id: transaction.payment_method_id || null,
+          natureza: transaction.natureza || null,
+          isInstallment: false,
+          installmentType: 'fixed',
+          installmentCount: undefined,
+          installmentValue: undefined,
+          totalValue: undefined,
+        });
+        setTipo(transaction.tipo);
+      } else {
+        // Creating new transaction - clean slate
+        form.reset(defaultValues);
+        setTipo('despesa');
+      }
     }
-  }, [transaction, form]);
+  }, [open, transaction]);
 
   const handleSubmit = async (data: any) => {
     try {
-      console.log('=== FORM SUBMIT DATA ===', data);
-      console.log('isInstallment:', data.isInstallment);
-      console.log('installmentType:', data.installmentType);
-      console.log('installmentCount:', data.installmentCount);
-      console.log('installmentValue:', data.installmentValue);
-      console.log('totalValue:', data.totalValue);
+      // Normalize empty optional fields
+      const sanitizedData = {
+        ...data,
+        forma_pagamento: data.forma_pagamento || undefined,
+        wallet_id: data.wallet_id === 'none' ? null : data.wallet_id || null,
+        natureza: data.natureza === 'none' ? null : data.natureza || null,
+        installmentCount: data.installmentCount ? Math.floor(Number(data.installmentCount)) : undefined,
+      };
       
-      await onSubmit(data);
+      await onSubmit(sanitizedData);
       onOpenChange(false);
-      form.reset();
+      form.reset(defaultValues);
+      setTipo('despesa');
     } catch (error) {
       console.error('Erro ao submeter formulário:', error);
       toast({
@@ -122,11 +138,25 @@ export const TransactionForm = ({
     }
   };
 
+  const handleValidationError = (errors: any) => {
+    console.error('Validation errors:', errors);
+    const firstError = Object.values(errors)[0] as any;
+    toast({
+      title: 'Erro de validação',
+      description: firstError?.message || 'Verifique os campos marcados',
+      variant: 'destructive',
+    });
+  };
+
   const filteredCategories = categories.filter((cat) => {
     if (tipo === 'receita') return cat.tipo === 'receita';
     if (tipo === 'despesa') return cat.tipo === 'despesa';
     return false;
   });
+
+  // Watch form values (replaces useState)
+  const isInstallment = form.watch('isInstallment');
+  const installmentType = form.watch('installmentType');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -142,7 +172,7 @@ export const TransactionForm = ({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 min-h-0">
+          <form onSubmit={form.handleSubmit(handleSubmit, handleValidationError)} className="flex flex-col flex-1 min-h-0">
             <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-4 pr-4 space-y-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
               <FormField
               control={form.control}
@@ -219,28 +249,37 @@ export const TransactionForm = ({
 
             {/* Seção de Parcelamento */}
             <div className="space-y-4 pt-2 border-t">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="installment-mode"
-                    checked={isInstallment}
-                    onCheckedChange={(checked) => {
-                      console.log('Switch parcelamento alterado:', checked);
-                      setIsInstallment(checked);
-                      form.setValue('isInstallment', checked);
-                      if (!checked) {
-                        form.setValue('installmentCount', undefined);
-                        form.setValue('installmentValue', undefined);
-                        form.setValue('totalValue', undefined);
-                      }
-                    }}
-                    disabled={!!transaction}
-                  />
-                  <Label htmlFor="installment-mode" className="text-sm font-medium">
-                    Lançamento Parcelado
-                  </Label>
-                </div>
-              </div>
+              <FormField
+                control={form.control}
+                name="isInstallment"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <FormControl>
+                          <Switch
+                            id="installment-mode"
+                            checked={field.value}
+                            onCheckedChange={(checked) => {
+                              field.onChange(checked);
+                              if (!checked) {
+                                form.setValue('installmentCount', undefined);
+                                form.setValue('installmentValue', undefined);
+                                form.setValue('totalValue', undefined);
+                              }
+                            }}
+                            disabled={!!transaction}
+                          />
+                        </FormControl>
+                        <Label htmlFor="installment-mode" className="text-sm font-medium">
+                          Lançamento Parcelado
+                        </Label>
+                      </div>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               {!isInstallment && (form.watch('installmentCount') || form.watch('installmentValue') || form.watch('totalValue')) && (
                 <Alert variant="default" className="bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800">
@@ -253,23 +292,31 @@ export const TransactionForm = ({
 
               {isInstallment && (
                 <div className="space-y-3 pl-4 border-l-2 border-primary/20">
-                  <Tabs 
-                    value={installmentType} 
-                    onValueChange={(v) => {
-                      const newType = v as 'fixed' | 'calculated';
-                      setInstallmentType(newType);
-                      form.setValue('installmentType', newType);
-                    }}
-                  >
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="fixed">
-                        Valor Fixo
-                      </TabsTrigger>
-                      <TabsTrigger value="calculated">
-                        Valor Total
-                      </TabsTrigger>
-                    </TabsList>
-                  </Tabs>
+                  <FormField
+                    control={form.control}
+                    name="installmentType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <Tabs 
+                            value={field.value} 
+                            onValueChange={(v) => {
+                              field.onChange(v);
+                            }}
+                          >
+                            <TabsList className="grid w-full grid-cols-2">
+                              <TabsTrigger value="fixed">
+                                Valor Fixo
+                              </TabsTrigger>
+                              <TabsTrigger value="calculated">
+                                Valor Total
+                              </TabsTrigger>
+                            </TabsList>
+                          </Tabs>
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
 
                   {installmentType === 'fixed' && (
                     <div className="space-y-4">
@@ -311,8 +358,7 @@ export const TransactionForm = ({
                         
                         // Auto-ativar parcelamento se usuário preencher o campo
                         if (numValue && numValue > 0 && !isInstallment) {
-                          setIsInstallment(true);
-                          form.setValue('isInstallment', true);
+                          form.setValue('isInstallment', true, { shouldValidate: true });
                         }
                       }}
                     />
@@ -374,8 +420,7 @@ export const TransactionForm = ({
                                     
                                     // Auto-ativar parcelamento se usuário preencher o campo
                                     if (numValue && numValue > 0 && !isInstallment) {
-                                      setIsInstallment(true);
-                                      form.setValue('isInstallment', true);
+                                      form.setValue('isInstallment', true, { shouldValidate: true });
                                     }
                                   }}
                                 />
@@ -465,8 +510,8 @@ export const TransactionForm = ({
                   <FormItem>
                     <FormLabel>Carteira (Opcional)</FormLabel>
                     <Select
-                      onValueChange={field.onChange}
-                      value={field.value || undefined}
+                      onValueChange={(value) => field.onChange(value === 'none' ? null : value)}
+                      value={field.value === null || field.value === undefined ? 'none' : field.value}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -474,7 +519,7 @@ export const TransactionForm = ({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="null">Nenhuma</SelectItem>
+                        <SelectItem value="none">Nenhuma</SelectItem>
                         {wallets.map((wallet) => (
                           <SelectItem key={wallet.id} value={wallet.id}>
                             {wallet.nome}
@@ -513,8 +558,8 @@ export const TransactionForm = ({
                   <FormItem>
                     <FormLabel>Natureza (Opcional)</FormLabel>
                     <Select
-                      onValueChange={field.onChange}
-                      value={field.value || undefined}
+                      onValueChange={(value) => field.onChange(value === 'none' ? null : value)}
+                      value={field.value === null || field.value === undefined ? 'none' : field.value}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -522,7 +567,7 @@ export const TransactionForm = ({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="null">Não especificado</SelectItem>
+                        <SelectItem value="none">Não especificado</SelectItem>
                         <SelectItem value="fixa">Fixa</SelectItem>
                         <SelectItem value="variavel">Variável</SelectItem>
                       </SelectContent>
