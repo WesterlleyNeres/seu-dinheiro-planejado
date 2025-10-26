@@ -212,15 +212,20 @@ export type Database = {
           deleted_at: string | null
           descricao: string
           forma_pagamento: string | null
+          grupo_parcelamento: string | null
           id: string
           mes_referencia: string
           natureza: string | null
+          parcela_numero: number | null
+          parcela_total: number | null
           payment_method_id: string | null
           status: Database["public"]["Enums"]["transaction_status"]
           tipo: Database["public"]["Enums"]["transaction_type"]
           updated_at: string
           user_id: string
           valor: number
+          valor_parcela: number | null
+          valor_total_parcelado: number | null
           wallet_id: string | null
         }
         Insert: {
@@ -230,15 +235,20 @@ export type Database = {
           deleted_at?: string | null
           descricao: string
           forma_pagamento?: string | null
+          grupo_parcelamento?: string | null
           id?: string
           mes_referencia: string
           natureza?: string | null
+          parcela_numero?: number | null
+          parcela_total?: number | null
           payment_method_id?: string | null
           status?: Database["public"]["Enums"]["transaction_status"]
           tipo: Database["public"]["Enums"]["transaction_type"]
           updated_at?: string
           user_id: string
           valor: number
+          valor_parcela?: number | null
+          valor_total_parcelado?: number | null
           wallet_id?: string | null
         }
         Update: {
@@ -248,15 +258,20 @@ export type Database = {
           deleted_at?: string | null
           descricao?: string
           forma_pagamento?: string | null
+          grupo_parcelamento?: string | null
           id?: string
           mes_referencia?: string
           natureza?: string | null
+          parcela_numero?: number | null
+          parcela_total?: number | null
           payment_method_id?: string | null
           status?: Database["public"]["Enums"]["transaction_status"]
           tipo?: Database["public"]["Enums"]["transaction_type"]
           updated_at?: string
           user_id?: string
           valor?: number
+          valor_parcela?: number | null
+          valor_total_parcelado?: number | null
           wallet_id?: string | null
         }
         Relationships: [

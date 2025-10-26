@@ -40,6 +40,7 @@ export default function Transactions() {
     transactions,
     loading,
     createTransaction,
+    createInstallmentTransactions,
     updateTransaction,
     deleteTransaction,
     toggleStatus,
@@ -49,7 +50,11 @@ export default function Transactions() {
     if (editingTransaction) {
       await updateTransaction(editingTransaction.id, data);
     } else {
-      await createTransaction(data);
+      if (data.isInstallment) {
+        await createInstallmentTransactions(data);
+      } else {
+        await createTransaction(data);
+      }
     }
     setEditingTransaction(undefined);
   };
@@ -172,7 +177,16 @@ export default function Transactions() {
                   {transactions.map((transaction) => (
                     <TableRow key={transaction.id}>
                       <TableCell>{formatDate(transaction.data)}</TableCell>
-                      <TableCell className="font-medium">{transaction.descricao}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{transaction.descricao}</span>
+                          {transaction.parcela_numero && transaction.parcela_total && (
+                            <Badge variant="secondary" className="text-xs">
+                              {transaction.parcela_numero}/{transaction.parcela_total}
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>{transaction.category?.nome}</TableCell>
                       <TableCell>
                         <Badge variant={transaction.tipo === 'receita' ? 'default' : 'secondary'}>

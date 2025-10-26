@@ -13,6 +13,27 @@ export const transactionSchema = z.object({
   wallet_id: z.string().uuid().optional().nullable(),
   payment_method_id: z.string().uuid().optional().nullable(),
   natureza: z.enum(['fixa', 'variavel']).optional().nullable(),
+  
+  // Campos de parcelamento
+  isInstallment: z.boolean().default(false),
+  installmentType: z.enum(['fixed', 'calculated']).optional(),
+  installmentCount: z.number().min(1).max(60).optional(),
+  installmentValue: z.number().min(0.01).optional(),
+  totalValue: z.number().min(0.01).optional(),
+}).refine((data) => {
+  if (!data.isInstallment) return true;
+  
+  if (data.installmentType === 'fixed') {
+    return !!data.installmentValue && !!data.installmentCount;
+  }
+  
+  if (data.installmentType === 'calculated') {
+    return !!data.totalValue && !!data.installmentCount;
+  }
+  
+  return false;
+}, {
+  message: "Preencha todos os campos de parcelamento",
 });
 
 export const categorySchema = z.object({

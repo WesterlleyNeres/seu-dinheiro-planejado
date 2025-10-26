@@ -17,6 +17,11 @@ export interface Transaction {
   wallet_id?: string;
   payment_method_id?: string;
   natureza?: 'fixa' | 'variavel';
+  parcela_numero?: number;
+  parcela_total?: number;
+  valor_parcela?: number;
+  valor_total_parcelado?: number;
+  grupo_parcelamento?: string;
   user_id: string;
   created_at: string;
   category?: {
@@ -193,10 +198,84 @@ export const useTransactions = (filters?: TransactionFilters) => {
     await updateTransaction(id, { status: newStatus });
   };
 
+  const createInstallmentTransactions = async (formData: any) => {
+    if (!user) return;
+
+    const { 
+      isInstallment, 
+      installmentType, 
+      installmentCount, 
+      installmentValue, 
+      totalValue,
+      data: dataVencimento,
+      ...baseData 
+    } = formData;
+
+    if (!isInstallment) {
+      return createTransaction(formData);
+    }
+
+    try {
+      const grupoId = crypto.randomUUID();
+      const transactions = [];
+      const baseDate = new Date(dataVencimento);
+      
+      const valorParcela = installmentType === 'fixed' 
+        ? installmentValue 
+        : totalValue / installmentCount;
+      
+      const valorTotal = installmentType === 'fixed'
+        ? installmentValue * installmentCount
+        : totalValue;
+
+      for (let i = 0; i < installmentCount; i++) {
+        const parcelaDate = new Date(baseDate);
+        parcelaDate.setMonth(parcelaDate.getMonth() + i);
+        
+        const mesReferencia = format(parcelaDate, 'yyyy-MM');
+        const dataFormatted = format(parcelaDate, 'yyyy-MM-dd');
+
+        transactions.push({
+          ...baseData,
+          user_id: user.id,
+          data: dataFormatted,
+          mes_referencia: mesReferencia,
+          valor: valorParcela,
+          parcela_numero: i + 1,
+          parcela_total: installmentCount,
+          valor_parcela: valorParcela,
+          valor_total_parcelado: valorTotal,
+          grupo_parcelamento: grupoId,
+        });
+      }
+
+      const { error } = await supabase
+        .from('transactions')
+        .insert(transactions);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Parcelamento criado com sucesso',
+        description: `${installmentCount} parcelas criadas`,
+      });
+
+      loadTransactions();
+    } catch (error) {
+      console.error('Error creating installment transactions:', error);
+      toast({
+        title: 'Erro ao criar parcelamento',
+        description: 'Tente novamente mais tarde',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return {
     transactions,
     loading,
     createTransaction,
+    createInstallmentTransactions,
     updateTransaction,
     deleteTransaction,
     toggleStatus,

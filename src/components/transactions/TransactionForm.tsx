@@ -32,8 +32,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { format } from 'date-fns';
+import { format, addMonths } from 'date-fns';
 import { PaymentMethodSelect } from '@/components/forms/PaymentMethodSelect';
+import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import { formatCurrency } from '@/lib/currency';
 
 interface TransactionFormProps {
   open: boolean;
@@ -49,6 +53,8 @@ export const TransactionForm = ({
   onSubmit,
 }: TransactionFormProps) => {
   const [tipo, setTipo] = useState<'receita' | 'despesa'>(transaction?.tipo || 'despesa');
+  const [isInstallment, setIsInstallment] = useState(false);
+  const [installmentType, setInstallmentType] = useState<'fixed' | 'calculated'>('fixed');
   const { categories } = useCategories();
   const { wallets } = useWallets();
 
@@ -65,6 +71,11 @@ export const TransactionForm = ({
       wallet_id: transaction?.wallet_id || null,
       payment_method_id: transaction?.payment_method_id || null,
       natureza: transaction?.natureza || null,
+      isInstallment: false,
+      installmentType: 'fixed',
+      installmentCount: undefined,
+      installmentValue: undefined,
+      totalValue: undefined,
     },
   });
 
@@ -175,7 +186,7 @@ export const TransactionForm = ({
                 name="data"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Data</FormLabel>
+                    <FormLabel>Data de Vencimento</FormLabel>
                     <FormControl>
                       <Input type="date" {...field} />
                     </FormControl>
@@ -183,6 +194,170 @@ export const TransactionForm = ({
                   </FormItem>
                 )}
               />
+            </div>
+
+            {/* Seção de Parcelamento */}
+            <div className="space-y-4 pt-2 border-t">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="installment-mode"
+                    checked={isInstallment}
+                    onCheckedChange={(checked) => {
+                      setIsInstallment(checked);
+                      if (!checked) {
+                        form.setValue('installmentCount', undefined);
+                        form.setValue('installmentValue', undefined);
+                        form.setValue('totalValue', undefined);
+                      }
+                    }}
+                    disabled={!!transaction}
+                  />
+                  <Label htmlFor="installment-mode" className="text-sm font-medium">
+                    Lançamento Parcelado
+                  </Label>
+                </div>
+              </div>
+
+              {isInstallment && (
+                <div className="space-y-4 pl-6 border-l-2 border-primary/20">
+                  <Tabs 
+                    value={installmentType} 
+                    onValueChange={(v) => setInstallmentType(v as 'fixed' | 'calculated')}
+                  >
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="fixed">
+                        Valor Fixo
+                        <Badge variant="outline" className="ml-2 text-xs">
+                          Ex: Luz
+                        </Badge>
+                      </TabsTrigger>
+                      <TabsTrigger value="calculated">
+                        Valor Total
+                        <Badge variant="outline" className="ml-2 text-xs">
+                          Ex: TV
+                        </Badge>
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+
+                  {installmentType === 'fixed' && (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="installmentValue"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Valor de Cada Parcela</FormLabel>
+                              <FormControl>
+                                <CurrencyInput
+                                  value={field.value || 0}
+                                  onChange={field.onChange}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name="installmentCount"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Número de Parcelas</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  min={1} 
+                                  max={60}
+                                  placeholder="12"
+                                  {...field}
+                                  onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      
+                      {form.watch('installmentValue') && form.watch('installmentCount') && (
+                        <div className="bg-muted p-3 rounded-lg">
+                          <p className="text-sm text-muted-foreground">Valor Total:</p>
+                          <p className="text-lg font-semibold">
+                            {formatCurrency((form.watch('installmentValue') || 0) * (form.watch('installmentCount') || 0))}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {installmentType === 'calculated' && (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="totalValue"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Valor Total</FormLabel>
+                              <FormControl>
+                                <CurrencyInput
+                                  value={field.value || 0}
+                                  onChange={field.onChange}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name="installmentCount"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Número de Parcelas</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  min={1} 
+                                  max={60}
+                                  placeholder="10"
+                                  {...field}
+                                  onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      
+                      {form.watch('totalValue') && form.watch('installmentCount') && (
+                        <div className="bg-muted p-3 rounded-lg">
+                          <p className="text-sm text-muted-foreground">Valor de Cada Parcela:</p>
+                          <p className="text-lg font-semibold">
+                            {formatCurrency((form.watch('totalValue') || 0) / (form.watch('installmentCount') || 0))}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {form.watch('installmentCount') && form.watch('data') && (
+                    <div className="text-xs text-muted-foreground bg-blue-50 dark:bg-blue-950 p-3 rounded-lg">
+                      <p>📅 As parcelas terão vencimento mensal a partir de <strong>{format(new Date(form.watch('data')), 'dd/MM/yyyy')}</strong></p>
+                      <p className="mt-1">Última parcela: <strong>{format(
+                        addMonths(new Date(form.watch('data')), (form.watch('installmentCount') || 1) - 1),
+                        'dd/MM/yyyy'
+                      )}</strong></p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <FormField
