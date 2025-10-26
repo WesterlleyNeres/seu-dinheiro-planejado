@@ -287,14 +287,17 @@ export const TransactionForm = ({
                             <FormItem>
                               <FormLabel>Número de Parcelas</FormLabel>
                               <FormControl>
-                                <Input 
-                                  type="number" 
-                                  min={1} 
-                                  max={60}
-                                  placeholder="12"
-                                  {...field}
-                                  onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
-                                />
+                    <Input 
+                      type="number" 
+                      min={1} 
+                      max={60}
+                      placeholder="12"
+                      value={field.value || ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        field.onChange(value ? Number(value) : undefined);
+                      }}
+                    />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -345,8 +348,11 @@ export const TransactionForm = ({
                                   min={1} 
                                   max={60}
                                   placeholder="10"
-                                  {...field}
-                                  onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                                  value={field.value || ''}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    field.onChange(value ? Number(value) : undefined);
+                                  }}
                                 />
                               </FormControl>
                               <FormMessage />

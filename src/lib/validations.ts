@@ -17,10 +17,13 @@ export const transactionSchema = z.object({
   // Campos de parcelamento
   isInstallment: z.boolean().default(false),
   installmentType: z.enum(['fixed', 'calculated']).optional(),
-  installmentCount: z.number().min(1).max(60).optional(),
-  installmentValue: z.number().min(0.01).optional(),
-  totalValue: z.number().min(0.01).optional(),
+  installmentCount: z.coerce.number().min(1).max(60).optional(),
+  installmentValue: z.coerce.number().min(0.01).optional(),
+  totalValue: z.coerce.number().min(0.01).optional(),
 }).refine((data) => {
+  console.log('=== VALIDAÇÃO PARCELAMENTO ===');
+  console.log('Raw data:', JSON.stringify(data, null, 2));
+  
   if (!data.isInstallment) return true;
   
   // Verificar se installmentType foi definido
