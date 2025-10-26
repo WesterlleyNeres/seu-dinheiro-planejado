@@ -13,8 +13,12 @@ export const maskCurrency = (value: string): string => {
 };
 
 export const unmaskCurrency = (value: string): number => {
-  // Remove R$, espaços e converte vírgula para ponto
-  const cleaned = value.replace(/[R$\s]/g, '').replace(',', '.');
+  // Remove R$ e espaços
+  let cleaned = value.replace(/[R$\s]/g, '');
+  // Remove pontos (separadores de milhares no Brasil)
+  cleaned = cleaned.replace(/\./g, '');
+  // Converte vírgula (separador decimal) para ponto
+  cleaned = cleaned.replace(',', '.');
   return parseFloat(cleaned) || 0;
 };
 
