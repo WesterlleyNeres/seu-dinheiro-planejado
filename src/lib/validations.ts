@@ -161,3 +161,30 @@ export const payStatementSchema = z.object({
   payment_wallet_id: z.string().uuid('Conta de pagamento inválida'),
   payment_date: z.string().min(1, 'Data de pagamento é obrigatória'),
 });
+
+export const recurringTransactionSchema = z.object({
+  tipo: z.enum(['receita', 'despesa'], {
+    required_error: 'Tipo é obrigatório',
+  }),
+  descricao: z.string().min(1, 'Descrição é obrigatória').max(200, 'Descrição muito longa'),
+  valor: z.number().min(0.01, 'Valor deve ser maior que zero'),
+  category_id: z.string().uuid('Categoria inválida'),
+  wallet_id: z.string().uuid().optional().nullable(),
+  payment_method_id: z.string().uuid().optional().nullable(),
+  natureza: z.enum(['fixa', 'variavel']).optional().nullable(),
+  
+  // Configuração da recorrência
+  frequencia: z.enum(['semanal', 'quinzenal', 'mensal', 'bimestral', 'trimestral', 'semestral', 'anual'], {
+    required_error: 'Frequência é obrigatória',
+  }),
+  dia_referencia: z.number().min(1).max(31),
+  data_inicio: z.string().min(1, 'Data de início é obrigatória'),
+  data_fim: z.string().optional().nullable(),
+  ativo: z.boolean().default(true),
+}).refine((data) => {
+  if (!data.data_fim) return true;
+  return new Date(data.data_fim) > new Date(data.data_inicio);
+}, {
+  message: 'Data de término deve ser após data de início',
+  path: ['data_fim'],
+});
