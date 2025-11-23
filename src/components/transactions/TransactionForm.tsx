@@ -118,6 +118,38 @@ export const TransactionForm = ({
     }
   }, [open, transaction, defaultDate]);
 
+  // Sincronizar campo 'valor' com cálculos de parcelamento
+  useEffect(() => {
+    const isInstallment = form.watch('isInstallment');
+    const installmentType = form.watch('installmentType');
+    
+    if (isInstallment) {
+      if (installmentType === 'fixed') {
+        const installmentValue = form.watch('installmentValue');
+        const installmentCount = form.watch('installmentCount');
+        
+        if (installmentValue && installmentCount) {
+          const calculatedValue = installmentValue * installmentCount;
+          form.setValue('valor', calculatedValue, { shouldValidate: false });
+        }
+      } else if (installmentType === 'calculated') {
+        const totalValue = form.watch('totalValue');
+        
+        if (totalValue) {
+          form.setValue('valor', totalValue, { shouldValidate: false });
+        }
+      }
+    }
+  }, [
+    form.watch('isInstallment'),
+    form.watch('installmentType'),
+    form.watch('installmentValue'),
+    form.watch('installmentCount'),
+    form.watch('totalValue'),
+    form
+  ]);
+
+
   const handleSubmit = async (data: any) => {
     try {
       // Normalize empty optional fields
@@ -220,22 +252,41 @@ export const TransactionForm = ({
             />
 
             <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="valor"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Valor</FormLabel>
-                    <FormControl>
-                      <CurrencyInput
-                        value={field.value}
-                        onChange={field.onChange}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                  <FormField
+                    control={form.control}
+                    name="valor"
+                    render={({ field }) => {
+                      const isInstallment = form.watch('isInstallment');
+                      return (
+                        <FormItem>
+                          <FormLabel>Valor</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <CurrencyInput
+                                value={field.value}
+                                onChange={field.onChange}
+                                disabled={isInstallment}
+                                className={isInstallment ? 'bg-muted cursor-not-allowed' : ''}
+                              />
+                              {isInstallment && (
+                                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+                                  <Badge variant="secondary" className="text-xs">
+                                    Auto
+                                  </Badge>
+                                </div>
+                              )}
+                            </div>
+                          </FormControl>
+                          {isInstallment && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              💡 Valor calculado automaticamente com base nas parcelas
+                            </p>
+                          )}
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
+                  />
 
               <FormField
                 control={form.control}
@@ -265,14 +316,15 @@ export const TransactionForm = ({
                           <Switch
                             id="installment-mode"
                             checked={field.value}
-                            onCheckedChange={(checked) => {
-                              field.onChange(checked);
-                              if (!checked) {
-                                form.setValue('installmentCount', undefined);
-                                form.setValue('installmentValue', undefined);
-                                form.setValue('totalValue', undefined);
-                              }
-                            }}
+                    onCheckedChange={(checked) => {
+                      field.onChange(checked);
+                      if (!checked) {
+                        form.setValue('installmentCount', undefined);
+                        form.setValue('installmentValue', undefined);
+                        form.setValue('totalValue', undefined);
+                        form.setValue('valor', 0);
+                      }
+                    }}
                             disabled={!!transaction}
                           />
                         </FormControl>
