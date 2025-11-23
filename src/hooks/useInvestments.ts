@@ -12,10 +12,13 @@ export interface Investment {
   tipo: InvestmentType;
   corretora?: string;
   observacoes?: string;
+  wallet_id?: string;
+  status: 'ativo' | 'resgatado' | 'liquidado';
   created_at: string;
   updated_at: string;
   total?: number;
   contributions?: InvestmentContribution[];
+  wallet?: { nome: string };
 }
 
 export interface InvestmentContribution {
@@ -31,6 +34,8 @@ export interface CreateInvestmentData {
   tipo: InvestmentType;
   corretora?: string;
   observacoes?: string;
+  wallet_id?: string;
+  status?: 'ativo' | 'resgatado' | 'liquidado';
 }
 
 export interface CreateContributionData {
@@ -47,6 +52,12 @@ interface InvestmentSummary {
     fundo: number;
     outros: number;
   };
+  byStatus: {
+    ativo: number;
+    resgatado: number;
+    liquidado: number;
+  };
+  byWallet: Record<string, { nome: string; total: number }>;
 }
 
 interface UseInvestmentsReturn {
@@ -68,6 +79,8 @@ export const useInvestments = (): UseInvestmentsReturn => {
   const [summary, setSummary] = useState<InvestmentSummary>({
     total: 0,
     byType: { rf: 0, rv: 0, fundo: 0, outros: 0 },
+    byStatus: { ativo: 0, resgatado: 0, liquidado: 0 },
+    byWallet: {},
   });
 
   const loadInvestments = async () => {
@@ -83,7 +96,10 @@ export const useInvestments = (): UseInvestmentsReturn => {
       // Load investments
       const { data: investmentsData, error: investmentsError } = await supabase
         .from('investments')
-        .select('*')
+        .select(`
+          *,
+          wallet:wallets(nome)
+        `)
         .eq('user_id', user.id)
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
@@ -123,7 +139,25 @@ export const useInvestments = (): UseInvestmentsReturn => {
         { rf: 0, rv: 0, fundo: 0, outros: 0 } as InvestmentSummary['byType']
       );
 
-      setSummary({ total: totalValue, byType });
+      const byStatus = investmentsWithContribs.reduce(
+        (acc, inv) => {
+          acc[inv.status] = (acc[inv.status] || 0) + (inv.total || 0);
+          return acc;
+        },
+        { ativo: 0, resgatado: 0, liquidado: 0 } as InvestmentSummary['byStatus']
+      );
+
+      const byWallet = investmentsWithContribs.reduce((acc, inv) => {
+        if (inv.wallet_id && inv.wallet) {
+          if (!acc[inv.wallet_id]) {
+            acc[inv.wallet_id] = { nome: inv.wallet.nome, total: 0 };
+          }
+          acc[inv.wallet_id].total += inv.total || 0;
+        }
+        return acc;
+      }, {} as InvestmentSummary['byWallet']);
+
+      setSummary({ total: totalValue, byType, byStatus, byWallet });
     } catch (error: any) {
       console.error('Error loading investments:', error);
       toast.error('Erro ao carregar investimentos');

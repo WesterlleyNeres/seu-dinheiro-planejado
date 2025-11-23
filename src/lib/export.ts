@@ -29,5 +29,6 @@ export const exportToCSV = (data: any[], filename: string) => {
 };
 
 export const generatePDFReport = async (data: any) => {
-  console.log('Gerando PDF...', data);
+  const { generateMonthlyReport } = await import('./pdfGenerator');
+  generateMonthlyReport(data);
 };

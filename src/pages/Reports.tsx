@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useReports } from '@/hooks/useReports';
+import { useReports, ReportFilters as IReportFilters } from '@/hooks/useReports';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -10,10 +10,11 @@ import { BalanceLineChart } from '@/components/reports/BalanceLineChart';
 import { ComparisonCard } from '@/components/reports/ComparisonCard';
 import { TopCategoriesCard } from '@/components/reports/TopCategoriesCard';
 import { RecurringInsightsCard } from '@/components/reports/RecurringInsightsCard';
-import { Download, TrendingUp } from 'lucide-react';
+import { ReportFiltersComponent } from '@/components/reports/ReportFilters';
+import { Download, FileText, TrendingUp } from 'lucide-react';
 import { format, subMonths } from 'date-fns';
 import { getCurrentMonth } from '@/lib/date';
-import { exportToCSV } from '@/lib/export';
+import { exportToCSV, generatePDFReport } from '@/lib/export';
 
 const Reports = () => {
   const {
@@ -34,10 +35,11 @@ const Reports = () => {
   const [recurringInsights, setRecurringInsights] = useState<any>(null);
   const [cashFlowProjection, setCashFlowProjection] = useState<any[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [activeFilters, setActiveFilters] = useState<IReportFilters | null>(null);
 
   useEffect(() => {
     loadReports();
-  }, [period]);
+  }, [period, activeFilters]);
 
   const loadReports = async () => {
     const { year, month } = getCurrentMonth();
@@ -45,11 +47,19 @@ const Reports = () => {
     setSelectedMonth(currentMonth);
 
     const months = parseInt(period);
-    const startMonth = format(subMonths(new Date(), months - 1), 'yyyy-MM');
+    const defaultStartMonth = format(subMonths(new Date(), months - 1), 'yyyy-MM');
+    
+    const filters: IReportFilters = {
+      startMonth: activeFilters?.startMonth || defaultStartMonth,
+      endMonth: activeFilters?.endMonth || currentMonth,
+      walletIds: activeFilters?.walletIds,
+      categoryIds: activeFilters?.categoryIds,
+      tipo: activeFilters?.tipo,
+    };
 
     const [summary, evolution, comparison, recurring, projection] = await Promise.all([
-      getMonthlySummary(startMonth, currentMonth),
-      getEvolutionData(startMonth, currentMonth),
+      getMonthlySummary(filters),
+      getEvolutionData(filters),
       getComparison(currentMonth, format(subMonths(new Date(), 1), 'yyyy-MM')),
       getRecurringInsights(),
       getCashFlowProjection(),
@@ -61,13 +71,31 @@ const Reports = () => {
     setRecurringInsights(recurring);
     setCashFlowProjection(projection);
 
-    const breakdown = await getCategoryBreakdown(currentMonth, 'despesa');
+    const breakdown = await getCategoryBreakdown(currentMonth, 'despesa', {
+      walletIds: activeFilters?.walletIds,
+      categoryIds: activeFilters?.categoryIds,
+    });
     setCategoryBreakdown(breakdown);
   };
 
-  const handleExport = () => {
+  const handleFiltersChange = (filters: IReportFilters) => {
+    setActiveFilters(Object.keys(filters).length > 0 ? filters : null);
+  };
+
+  const handleExportCSV = () => {
     if (evolutionData.length > 0) {
       exportToCSV(evolutionData, 'relatorio-financeiro');
+    }
+  };
+
+  const handleExportPDF = () => {
+    if (comparisonData && categoryBreakdown.length > 0 && recurringInsights) {
+      generatePDFReport({
+        period: selectedMonth,
+        summary: comparisonData.current,
+        categories: categoryBreakdown,
+        recurring: recurringInsights,
+      });
     }
   };
 
@@ -96,12 +124,18 @@ const Reports = () => {
               <SelectItem value="12">Últimos 12 meses</SelectItem>
             </SelectContent>
           </Select>
-          <Button onClick={handleExport} variant="outline">
+          <Button onClick={handleExportCSV} variant="outline">
             <Download className="h-4 w-4 mr-2" />
-            Exportar
+            CSV
+          </Button>
+          <Button onClick={handleExportPDF} variant="outline">
+            <FileText className="h-4 w-4 mr-2" />
+            PDF
           </Button>
         </div>
       </div>
+
+      <ReportFiltersComponent onFiltersChange={handleFiltersChange} />
 
       {comparisonData && (
         <div className="grid gap-6 md:grid-cols-3">
