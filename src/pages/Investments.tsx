@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus } from 'lucide-react';
 import { useInvestments, Investment } from '@/hooks/useInvestments';
 import { InvestmentCard } from '@/components/investments/InvestmentCard';
@@ -45,6 +46,7 @@ const Investments = () => {
   const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null);
   const [selectedInvestment, setSelectedInvestment] = useState<Investment | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'todos' | 'ativo' | 'resgatado' | 'liquidado'>('todos');
 
   const handleEdit = (investment: Investment) => {
     setEditingInvestment(investment);
@@ -96,6 +98,18 @@ const Investments = () => {
       value,
       percentage: summary.total > 0 ? (value / summary.total) * 100 : 0,
     }));
+
+  const walletChartData = Object.entries(summary.byWallet)
+    .filter(([, data]) => data.total > 0)
+    .map(([walletId, data]) => ({
+      name: data.nome,
+      value: data.total,
+      percentage: summary.total > 0 ? (data.total / summary.total) * 100 : 0,
+    }));
+
+  const filteredInvestments = statusFilter === 'todos'
+    ? investments
+    : investments.filter(inv => inv.status === statusFilter);
 
   if (loading) {
     return (
@@ -213,52 +227,111 @@ const Investments = () => {
       </div>
 
       {summary.total > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Alocação por Tipo</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={chartData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percentage }) =>
-                    `${name}: ${percentage.toFixed(1)}%`
-                  }
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {chartData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={COLORS[index % COLORS.length]}
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Alocação por Tipo</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={chartData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percentage }) =>
+                      `${name}: ${percentage.toFixed(1)}%`
+                    }
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {chartData.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={COLORS[index % COLORS.length]}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value: number) => formatCurrency(value)}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {walletChartData.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Alocação por Carteira</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={walletChartData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percentage }) =>
+                        `${name}: ${percentage.toFixed(1)}%`
+                      }
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {walletChartData.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={COLORS[index % COLORS.length]}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: number) => formatCurrency(value)}
                     />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(value: number) => formatCurrency(value)}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {investments.map((investment) => (
-          <InvestmentCard
-            key={investment.id}
-            investment={investment}
-            onEdit={handleEdit}
-            onDelete={handleDeleteClick}
-            onAddContribution={handleAddContribution}
-          />
-        ))}
-      </div>
+      <Tabs value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
+        <TabsList>
+          <TabsTrigger value="todos">Todos</TabsTrigger>
+          <TabsTrigger value="ativo">Ativos</TabsTrigger>
+          <TabsTrigger value="resgatado">Resgatados</TabsTrigger>
+          <TabsTrigger value="liquidado">Liquidados</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value={statusFilter} className="mt-6">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {filteredInvestments.map((investment) => (
+              <InvestmentCard
+                key={investment.id}
+                investment={investment}
+                onEdit={handleEdit}
+                onDelete={handleDeleteClick}
+                onAddContribution={handleAddContribution}
+              />
+            ))}
+          </div>
+
+          {filteredInvestments.length === 0 && (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <p className="text-muted-foreground mb-4">
+                  Nenhum investimento encontrado nesta categoria
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {investments.length === 0 && (
         <Card>

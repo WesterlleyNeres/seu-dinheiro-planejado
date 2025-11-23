@@ -55,35 +55,45 @@ export interface RecurringInsight {
   }>;
 }
 
+export interface ReportFilters {
+  startMonth: string;
+  endMonth: string;
+  walletIds?: string[];
+  categoryIds?: string[];
+  tipo?: 'receita' | 'despesa' | 'ambos';
+}
+
 export const useReports = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
 
   const getMonthlySummary = async (
-    startMonth: string,
-    endMonth: string
+    filters: ReportFilters
   ): Promise<MonthlySummary[]> => {
+    const { startMonth, endMonth, walletIds, categoryIds, tipo } = filters;
     if (!user) return [];
 
     try {
       setLoading(true);
-      const { data: receitas, error: receitasError } = await supabase
+      
+      let receitasQuery = supabase
         .from('v_monthly_summary')
         .select('*')
         .eq('user_id', user.id)
         .eq('tipo', 'receita')
         .gte('mes_referencia', startMonth)
-        .lte('mes_referencia', endMonth)
-        .order('mes_referencia');
+        .lte('mes_referencia', endMonth);
 
-      const { data: despesas, error: despesasError } = await supabase
+      let despesasQuery = supabase
         .from('v_monthly_summary')
         .select('*')
         .eq('user_id', user.id)
         .eq('tipo', 'despesa')
         .gte('mes_referencia', startMonth)
-        .lte('mes_referencia', endMonth)
-        .order('mes_referencia');
+        .lte('mes_referencia', endMonth);
+
+      const { data: receitas, error: receitasError } = await receitasQuery.order('mes_referencia');
+      const { data: despesas, error: despesasError } = await despesasQuery.order('mes_referencia');
 
       if (receitasError) throw receitasError;
       if (despesasError) throw despesasError;
@@ -136,18 +146,24 @@ export const useReports = () => {
 
   const getCategoryBreakdown = async (
     mesReferencia: string,
-    tipo: 'receita' | 'despesa'
+    tipo: 'receita' | 'despesa',
+    filters?: { walletIds?: string[]; categoryIds?: string[] }
   ): Promise<CategorySpending[]> => {
     if (!user) return [];
 
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('v_category_spending')
         .select('*')
         .eq('user_id', user.id)
         .eq('mes_referencia', mesReferencia)
-        .eq('category_type', tipo)
-        .order('total_pago', { ascending: false });
+        .eq('category_type', tipo);
+
+      if (filters?.categoryIds && filters.categoryIds.length > 0) {
+        query = query.in('category_id', filters.categoryIds);
+      }
+
+      const { data, error } = await query.order('total_pago', { ascending: false });
 
       if (error) throw error;
 
@@ -168,19 +184,19 @@ export const useReports = () => {
   };
 
   const getEvolutionData = async (
-    startMonth: string,
-    endMonth: string
+    filters: ReportFilters
   ): Promise<BalanceEvolution[]> => {
     if (!user) return [];
 
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('v_balance_evolution')
         .select('*')
         .eq('user_id', user.id)
-        .gte('mes_referencia', startMonth)
-        .lte('mes_referencia', endMonth)
-        .order('mes_referencia');
+        .gte('mes_referencia', filters.startMonth)
+        .lte('mes_referencia', filters.endMonth);
+
+      const { data, error } = await query.order('mes_referencia');
 
       if (error) throw error;
 
@@ -201,7 +217,10 @@ export const useReports = () => {
     currentMonth: string,
     previousMonth: string
   ): Promise<ComparisonData | null> => {
-    const summaries = await getMonthlySummary(previousMonth, currentMonth);
+    const summaries = await getMonthlySummary({
+      startMonth: previousMonth,
+      endMonth: currentMonth,
+    });
 
     const current = summaries.find((s) => s.mes_referencia === currentMonth);
     const previous = summaries.find((s) => s.mes_referencia === previousMonth);
@@ -280,7 +299,10 @@ export const useReports = () => {
     const currentMonth = format(now, 'yyyy-MM');
 
     const startMonth = format(subMonths(now, 5), 'yyyy-MM');
-    const historical = await getEvolutionData(startMonth, currentMonth);
+    const historical = await getEvolutionData({
+      startMonth,
+      endMonth: currentMonth,
+    });
 
     if (historical.length === 0) return [];
 

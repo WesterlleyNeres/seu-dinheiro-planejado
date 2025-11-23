@@ -28,6 +28,18 @@ const investmentTypeColors: Record<string, string> = {
   outros: 'bg-muted text-muted-foreground',
 };
 
+const statusColors: Record<string, string> = {
+  ativo: 'bg-success/10 text-success',
+  resgatado: 'bg-warning/10 text-warning',
+  liquidado: 'bg-muted text-muted-foreground',
+};
+
+const statusLabels: Record<string, string> = {
+  ativo: 'Ativo',
+  resgatado: 'Resgatado',
+  liquidado: 'Liquidado',
+};
+
 export const InvestmentCard = ({
   investment,
   onEdit,
@@ -40,12 +52,22 @@ export const InvestmentCard = ({
         <div className="flex items-start justify-between">
           <div className="space-y-1 flex-1">
             <CardTitle className="text-xl">{investment.nome}</CardTitle>
-            <Badge className={investmentTypeColors[investment.tipo]}>
-              {investmentTypeLabels[investment.tipo]}
-            </Badge>
+            <div className="flex gap-2 flex-wrap">
+              <Badge className={investmentTypeColors[investment.tipo]}>
+                {investmentTypeLabels[investment.tipo]}
+              </Badge>
+              <Badge className={statusColors[investment.status]}>
+                {statusLabels[investment.status]}
+              </Badge>
+            </div>
             {investment.corretora && (
               <p className="text-sm text-muted-foreground">
                 Corretora: {investment.corretora}
+              </p>
+            )}
+            {investment.wallet && (
+              <p className="text-sm text-muted-foreground">
+                Carteira: {investment.wallet.nome}
               </p>
             )}
           </div>

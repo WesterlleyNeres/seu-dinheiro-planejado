@@ -127,6 +127,8 @@ export const investmentSchema = z.object({
   }),
   corretora: z.string().trim().max(100).optional(),
   observacoes: z.string().trim().max(500).optional(),
+  wallet_id: z.string().uuid().optional().or(z.literal('')),
+  status: z.enum(['ativo', 'resgatado', 'liquidado']).default('ativo'),
 });
 
 export const investmentContributionSchema = z.object({

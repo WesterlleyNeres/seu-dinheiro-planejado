@@ -391,9 +391,11 @@ export type Database = {
           id: string
           nome: string
           observacoes: string | null
+          status: string
           tipo: string
           updated_at: string
           user_id: string
+          wallet_id: string | null
         }
         Insert: {
           corretora?: string | null
@@ -402,9 +404,11 @@ export type Database = {
           id?: string
           nome: string
           observacoes?: string | null
+          status?: string
           tipo: string
           updated_at?: string
           user_id: string
+          wallet_id?: string | null
         }
         Update: {
           corretora?: string | null
@@ -413,11 +417,28 @@ export type Database = {
           id?: string
           nome?: string
           observacoes?: string | null
+          status?: string
           tipo?: string
           updated_at?: string
           user_id?: string
+          wallet_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "investments_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "v_wallet_balance"
+            referencedColumns: ["wallet_id"]
+          },
+          {
+            foreignKeyName: "investments_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "wallets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       payment_methods: {
         Row: {

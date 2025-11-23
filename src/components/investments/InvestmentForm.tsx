@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Investment, InvestmentType } from '@/hooks/useInvestments';
+import { useWallets } from '@/hooks/useWallets';
 
 interface InvestmentFormProps {
   open: boolean;
@@ -41,12 +42,20 @@ const investmentTypeOptions: { value: InvestmentType; label: string }[] = [
   { value: 'outros', label: 'Outros' },
 ];
 
+const statusOptions: { value: 'ativo' | 'resgatado' | 'liquidado'; label: string }[] = [
+  { value: 'ativo', label: 'Ativo' },
+  { value: 'resgatado', label: 'Resgatado' },
+  { value: 'liquidado', label: 'Liquidado' },
+];
+
 export const InvestmentForm = ({
   open,
   onClose,
   onSubmit,
   investment,
 }: InvestmentFormProps) => {
+  const { wallets } = useWallets();
+  
   const form = useForm({
     resolver: zodResolver(investmentSchema),
     defaultValues: {
@@ -54,6 +63,8 @@ export const InvestmentForm = ({
       tipo: investment?.tipo || 'rf',
       corretora: investment?.corretora || '',
       observacoes: investment?.observacoes || '',
+      wallet_id: investment?.wallet_id || '',
+      status: investment?.status || 'ativo',
     },
   });
 
@@ -102,6 +113,57 @@ export const InvestmentForm = ({
                     </FormControl>
                     <SelectContent>
                       {investmentTypeOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="wallet_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Carteira (opcional)</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione uma carteira" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="">Nenhuma</SelectItem>
+                      {wallets.map((wallet) => (
+                        <SelectItem key={wallet.id} value={wallet.id}>
+                          {wallet.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="status"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {statusOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
                         </SelectItem>
