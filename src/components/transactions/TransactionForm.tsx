@@ -127,17 +127,50 @@ export const TransactionForm = ({
 
   // Sincronizar campo 'valor' com cálculos de parcelamento
   useEffect(() => {
+    console.log('🔍 useEffect DISPAROU:', {
+      isInstallment,
+      installmentType,
+      installmentValue,
+      installmentCount,
+      totalValue,
+      valorAtual: form.getValues('valor')
+    });
+
     if (isInstallment) {
+      console.log('✅ Parcelamento ATIVO');
+      
       if (installmentType === 'fixed') {
+        console.log('📊 Modo: Valor Fixo');
+        
         if (installmentValue && installmentCount) {
           const calculatedValue = installmentValue * installmentCount;
-          form.setValue('valor', calculatedValue, { shouldValidate: false });
+          console.log('💰 CALCULANDO:', `${installmentValue} × ${installmentCount} = ${calculatedValue}`);
+          
+          form.setValue('valor', calculatedValue, { shouldValidate: true, shouldDirty: true });
+          console.log('✅ setValue CHAMADO com:', calculatedValue);
+          
+          // Verificar se realmente foi setado
+          setTimeout(() => {
+            console.log('🔄 Valor após setValue:', form.getValues('valor'));
+          }, 100);
+        } else {
+          console.log('⚠️ Campos faltando:', { installmentValue, installmentCount });
         }
       } else if (installmentType === 'calculated') {
+        console.log('📊 Modo: Valor Calculado');
+        
         if (totalValue) {
-          form.setValue('valor', totalValue, { shouldValidate: false });
+          console.log('💰 USANDO VALOR TOTAL:', totalValue);
+          form.setValue('valor', totalValue, { shouldValidate: true, shouldDirty: true });
+          console.log('✅ setValue CHAMADO com:', totalValue);
+        } else {
+          console.log('⚠️ totalValue está vazio');
         }
+      } else {
+        console.log('⚠️ installmentType desconhecido:', installmentType);
       }
+    } else {
+      console.log('❌ Parcelamento INATIVO');
     }
   }, [isInstallment, installmentType, installmentValue, installmentCount, totalValue, form]);
 
