@@ -1,7 +1,9 @@
-import { ReactNode } from "react";
+import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { QuickPeriodActions } from "@/components/periods/QuickPeriodActions";
+import { usePeriods } from "@/hooks/usePeriods";
 import {
   LayoutDashboard,
   Receipt,
@@ -40,6 +42,15 @@ const navigation = [
 export const AppLayout = ({ children }: AppLayoutProps) => {
   const location = useLocation();
   const { signOut, user } = useAuth();
+  const { periodStatus, getPeriodStatus } = usePeriods();
+  const [currentPeriod, setCurrentPeriod] = useState({
+    year: new Date().getFullYear(),
+    month: new Date().getMonth() + 1,
+  });
+
+  useEffect(() => {
+    getPeriodStatus(currentPeriod.year, currentPeriod.month);
+  }, [currentPeriod, getPeriodStatus]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -55,6 +66,16 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
               <span className="text-sm font-semibold leading-tight">Seu Dinheiro</span>
               <span className="text-xs text-muted-foreground">Planejado</span>
             </div>
+          </div>
+
+          {/* Quick Period Actions */}
+          <div className="border-b border-border px-4 py-3">
+            <QuickPeriodActions
+              year={currentPeriod.year}
+              month={currentPeriod.month}
+              status={periodStatus || 'open'}
+              onSuccess={() => getPeriodStatus(currentPeriod.year, currentPeriod.month)}
+            />
           </div>
 
           {/* Navigation */}

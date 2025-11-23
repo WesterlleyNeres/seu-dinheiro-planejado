@@ -5,6 +5,8 @@ import { transactionSchema } from '@/lib/validations';
 import { Transaction } from '@/hooks/useTransactions';
 import { useCategories } from '@/hooks/useCategories';
 import { useWallets } from '@/hooks/useWallets';
+import { useAuth } from '@/contexts/AuthContext';
+import { usePeriods } from '@/hooks/usePeriods';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -39,8 +41,10 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { formatCurrency } from '@/lib/currency';
 import { toast } from '@/hooks/use-toast';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
+import { ToastAction } from '@/components/ui/toast';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertCircle, Unlock } from 'lucide-react';
+import { validatePeriodForTransaction } from '@/lib/periodValidation';
 
 interface TransactionFormProps {
   open: boolean;
@@ -60,6 +64,14 @@ export const TransactionForm = ({
   const [tipo, setTipo] = useState<'receita' | 'despesa'>(transaction?.tipo || 'despesa');
   const { categories } = useCategories();
   const { wallets } = useWallets();
+  const { user } = useAuth();
+  const { reopenPeriod } = usePeriods();
+  const [periodValidation, setPeriodValidation] = useState<{
+    isValid: boolean;
+    message: string;
+    year?: number;
+    month?: number;
+  } | null>(null);
 
   const defaultValues = {
     tipo: 'despesa' as 'receita' | 'despesa',
@@ -127,55 +139,83 @@ export const TransactionForm = ({
 
   // Sincronizar campo 'valor' com cálculos de parcelamento
   useEffect(() => {
-    console.log('🔍 useEffect DISPAROU:', {
-      isInstallment,
-      installmentType,
-      installmentValue,
-      installmentCount,
-      totalValue,
-      valorAtual: form.getValues('valor')
-    });
-
     if (isInstallment) {
-      console.log('✅ Parcelamento ATIVO');
-      
       if (installmentType === 'fixed') {
-        console.log('📊 Modo: Valor Fixo');
-        
         if (installmentValue && installmentCount) {
           const calculatedValue = installmentValue * installmentCount;
-          console.log('💰 CALCULANDO:', `${installmentValue} × ${installmentCount} = ${calculatedValue}`);
-          
           form.setValue('valor', calculatedValue, { shouldValidate: true, shouldDirty: true });
-          console.log('✅ setValue CHAMADO com:', calculatedValue);
-          
-          // Verificar se realmente foi setado
-          setTimeout(() => {
-            console.log('🔄 Valor após setValue:', form.getValues('valor'));
-          }, 100);
-        } else {
-          console.log('⚠️ Campos faltando:', { installmentValue, installmentCount });
         }
       } else if (installmentType === 'calculated') {
-        console.log('📊 Modo: Valor Calculado');
-        
         if (totalValue) {
-          console.log('💰 USANDO VALOR TOTAL:', totalValue);
           form.setValue('valor', totalValue, { shouldValidate: true, shouldDirty: true });
-          console.log('✅ setValue CHAMADO com:', totalValue);
-        } else {
-          console.log('⚠️ totalValue está vazio');
         }
-      } else {
-        console.log('⚠️ installmentType desconhecido:', installmentType);
       }
-    } else {
-      console.log('❌ Parcelamento INATIVO');
     }
   }, [isInstallment, installmentType, installmentValue, installmentCount, totalValue, form]);
 
 
   const handleSubmit = async (data: any) => {
+    if (!user) return;
+
+    // 1. Validar período da primeira transação
+    const firstDate = new Date(data.data);
+    const validation = await validatePeriodForTransaction(firstDate, user.id);
+
+    if (!validation.isValid) {
+      setPeriodValidation(validation);
+      toast({
+        title: 'Período Fechado',
+        description: validation.message,
+        variant: 'destructive',
+        action: (
+          <ToastAction
+            altText="Reabrir período"
+            onClick={async () => {
+              const success = await reopenPeriod(validation.year!, validation.month!);
+              if (success) {
+                setPeriodValidation(null);
+                // Re-submeter após reabrir
+                handleSubmit(data);
+              }
+            }}
+          >
+            Reabrir
+          </ToastAction>
+        ),
+      });
+      return;
+    }
+
+    // 2. Validar período de todas as parcelas (se parcelado)
+    if (data.isInstallment && data.installmentCount > 1) {
+      for (let i = 0; i < data.installmentCount; i++) {
+        const installmentDate = new Date(firstDate);
+        installmentDate.setMonth(installmentDate.getMonth() + i);
+        
+        const installmentValidation = await validatePeriodForTransaction(installmentDate, user.id);
+        
+        if (!installmentValidation.isValid) {
+          toast({
+            title: 'Período Fechado',
+            description: `Parcela ${i + 1}/${data.installmentCount} cairia em período fechado (${installmentValidation.month}/${installmentValidation.year})`,
+            variant: 'destructive',
+            action: (
+              <ToastAction
+                altText="Reabrir período"
+                onClick={async () => {
+                  await reopenPeriod(installmentValidation.year!, installmentValidation.month!);
+                }}
+              >
+                Reabrir
+              </ToastAction>
+            ),
+          });
+          return;
+        }
+      }
+    }
+
+    // 3. Processar normalmente se tudo OK
     try {
       // Normalize empty optional fields
       const sanitizedData = {
@@ -190,6 +230,7 @@ export const TransactionForm = ({
       onOpenChange(false);
       form.reset(defaultValues);
       setTipo('despesa');
+      setPeriodValidation(null);
     } catch (error) {
       console.error('Erro ao submeter formulário:', error);
       toast({
@@ -301,12 +342,33 @@ export const TransactionForm = ({
                             💡 Valor calculado automaticamente com base nas parcelas
                           </p>
                         )}
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-              <FormField
+            {periodValidation && !periodValidation.isValid && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Período Fechado</AlertTitle>
+                <AlertDescription className="flex items-center justify-between">
+                  <span>{periodValidation.message}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      const success = await reopenPeriod(periodValidation.year!, periodValidation.month!);
+                      if (success) setPeriodValidation(null);
+                    }}
+                  >
+                    <Unlock className="mr-2 h-4 w-4" />
+                    Reabrir
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <FormField
                 control={form.control}
                 name="data"
                 render={({ field }) => (
