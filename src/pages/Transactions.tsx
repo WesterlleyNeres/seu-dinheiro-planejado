@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -26,6 +26,7 @@ import { useTransactions, TransactionFilters, Transaction } from '@/hooks/useTra
 import { useRecurringTransactions } from '@/hooks/useRecurringTransactions';
 import { TransactionForm } from '@/components/transactions/TransactionForm';
 import { TransactionFilters as TransactionFiltersComponent } from '@/components/transactions/TransactionFilters';
+import { InstallmentGroupRow } from '@/components/transactions/InstallmentGroupRow';
 import { RecurringTransactionsList } from '@/components/recurring/RecurringTransactionsList';
 import { RecurringTransactionForm } from '@/components/recurring/RecurringTransactionForm';
 import { RecurringTransactionHistory } from '@/components/recurring/RecurringTransactionHistory';
@@ -126,6 +127,57 @@ export default function Transactions() {
     setHistoryOpen(true);
   };
 
+  // Group transactions by installment group
+  const { groups, standalone } = useMemo(() => {
+    const groupsMap = new Map<string, Transaction[]>();
+    const standaloneList: Transaction[] = [];
+
+    transactions.forEach((txn) => {
+      if (txn.grupo_parcelamento) {
+        const existing = groupsMap.get(txn.grupo_parcelamento) || [];
+        existing.push(txn);
+        groupsMap.set(txn.grupo_parcelamento, existing);
+      } else {
+        standaloneList.push(txn);
+      }
+    });
+
+    // Sort parcels within each group
+    groupsMap.forEach((parcels) => {
+      parcels.sort((a, b) => (a.parcela_numero || 0) - (b.parcela_numero || 0));
+    });
+
+    return { groups: groupsMap, standalone: standaloneList };
+  }, [transactions]);
+
+  // Intercalate groups and standalone by date
+  const sortedGroups = useMemo(() => {
+    const allItems: Array<{ date: Date; type: 'group' | 'standalone'; data: any }> = [];
+
+    // Add standalone transactions
+    standalone.forEach((txn) => {
+      allItems.push({
+        date: new Date(txn.data),
+        type: 'standalone',
+        data: txn,
+      });
+    });
+
+    // Add groups (by first parcel date)
+    groups.forEach((parcels, groupId) => {
+      allItems.push({
+        date: new Date(parcels[0].data),
+        type: 'group',
+        data: { groupId, parcels },
+      });
+    });
+
+    // Sort by date descending
+    allItems.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+    return allItems;
+  }, [groups, standalone]);
+
   const totalReceitas = transactions
     .filter((t) => t.tipo === 'receita')
     .reduce((sum, t) => sum + Number(t.valor), 0);
@@ -222,6 +274,7 @@ export default function Transactions() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[50px]"></TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead>Descrição</TableHead>
                     <TableHead>Categoria</TableHead>
@@ -232,66 +285,78 @@ export default function Transactions() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {transactions.map((transaction) => (
-                    <TableRow key={transaction.id}>
-                      <TableCell>{formatDate(transaction.data)}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{transaction.descricao}</span>
-                          {transaction.parcela_numero && transaction.parcela_total && (
-                            <Badge variant="secondary" className="text-xs">
-                              {transaction.parcela_numero}/{transaction.parcela_total}
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>{transaction.category?.nome}</TableCell>
-                      <TableCell>
-                        <Badge variant={transaction.tipo === 'receita' ? 'default' : 'secondary'}>
-                          {transaction.tipo}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => toggleStatus(transaction.id, transaction.status)}
+                  {sortedGroups.map((item, idx) =>
+                    item.type === 'group' ? (
+                      <InstallmentGroupRow
+                        key={`group-${item.data.groupId}`}
+                        parcels={item.data.parcels}
+                        onEdit={handleEdit}
+                        onDelete={handleDeleteClick}
+                        onToggleStatus={toggleStatus}
+                      />
+                    ) : (
+                      <TableRow key={item.data.id}>
+                        <TableCell></TableCell>
+                        <TableCell>{formatDate(item.data.data)}</TableCell>
+                        <TableCell>
+                          <span className="font-medium">{item.data.descricao}</span>
+                        </TableCell>
+                        <TableCell>{item.data.category?.nome}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              item.data.tipo === 'receita' ? 'default' : 'secondary'
+                            }
+                          >
+                            {item.data.tipo}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              toggleStatus(item.data.id, item.data.status)
+                            }
+                          >
+                            {item.data.status === 'paga' ? (
+                              <CheckCircle2 className="h-4 w-4 text-success" />
+                            ) : (
+                              <Clock className="h-4 w-4 text-warning" />
+                            )}
+                          </Button>
+                        </TableCell>
+                        <TableCell
+                          className={`text-right font-semibold ${
+                            item.data.tipo === 'receita'
+                              ? 'text-success'
+                              : 'text-destructive'
+                          }`}
                         >
-                          {transaction.status === 'paga' ? (
-                            <CheckCircle2 className="h-4 w-4 text-success" />
-                          ) : (
-                            <Clock className="h-4 w-4 text-warning" />
-                          )}
-                        </Button>
-                      </TableCell>
-                      <TableCell
-                        className={`text-right font-semibold ${
-                          transaction.tipo === 'receita' ? 'text-success' : 'text-destructive'
-                        }`}
-                      >
-                        {transaction.tipo === 'receita' ? '+' : '-'}
-                        {formatCurrency(Number(transaction.valor))}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEdit(transaction)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteClick(transaction.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                          {item.data.tipo === 'receita' ? '+' : '-'}
+                          {formatCurrency(Number(item.data.valor))}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEdit(item.data)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteClick(item.data.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  )}
                 </TableBody>
               </Table>
             )}

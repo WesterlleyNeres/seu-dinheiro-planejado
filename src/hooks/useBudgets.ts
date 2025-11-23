@@ -10,6 +10,8 @@ export interface Budget {
   ano: number;
   mes: number;
   limite_valor: number;
+  rollover_policy?: 'none' | 'carry_over' | 'clamp';
+  rollover_cap?: number | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -28,6 +30,8 @@ interface CreateBudgetData {
   ano: number;
   mes: number;
   limite_valor: number;
+  rollover_policy?: 'none' | 'carry_over' | 'clamp';
+  rollover_cap?: number | null;
 }
 
 interface BudgetTotals {

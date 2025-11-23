@@ -1,14 +1,22 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useBudgets, type Budget as BudgetType } from '@/hooks/useBudgets';
 import { useCategories } from '@/hooks/useCategories';
 import { useUserSettings } from '@/hooks/useUserSettings';
+import { usePeriods } from '@/hooks/usePeriods';
 import { BudgetCard } from '@/components/budget/BudgetCard';
 import { BudgetForm } from '@/components/budget/BudgetForm';
 import { BudgetModeToggle } from '@/components/settings/BudgetModeToggle';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +36,9 @@ import {
   TrendingUp,
   Wallet,
   PieChart,
+  Lock,
+  Unlock,
+  RotateCcw,
 } from 'lucide-react';
 
 const Budget = () => {
@@ -37,13 +48,28 @@ const Budget = () => {
   const [editingBudget, setEditingBudget] = useState<BudgetType | undefined>();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [budgetToDelete, setBudgetToDelete] = useState<string | null>(null);
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
+  const [rolloverDialogOpen, setRolloverDialogOpen] = useState(false);
 
   const { settings, updateSettings } = useUserSettings();
+  const {
+    periodStatus,
+    loading: periodLoading,
+    getPeriodStatus,
+    closePeriod,
+    reopenPeriod,
+    applyRollover,
+  } = usePeriods();
   
   const { budgets, loading, createBudget, updateBudget, deleteBudget, totals } =
     useBudgets(selectedYear, selectedMonth, settings?.budget_mode || 'pagas');
 
   const { categories } = useCategories('despesa');
+
+  useEffect(() => {
+    getPeriodStatus(selectedYear, selectedMonth);
+  }, [selectedYear, selectedMonth, getPeriodStatus]);
 
   const nextMonth = () => {
     if (selectedMonth === 12) {
@@ -102,6 +128,29 @@ const Budget = () => {
     setFormOpen(open);
   };
 
+  const handleClosePeriod = async () => {
+    const success = await closePeriod(selectedYear, selectedMonth);
+    if (success) {
+      setCloseDialogOpen(false);
+      await getPeriodStatus(selectedYear, selectedMonth);
+    }
+  };
+
+  const handleReopenPeriod = async () => {
+    const success = await reopenPeriod(selectedYear, selectedMonth);
+    if (success) {
+      setReopenDialogOpen(false);
+      await getPeriodStatus(selectedYear, selectedMonth);
+    }
+  };
+
+  const handleApplyRollover = async () => {
+    const success = await applyRollover(selectedYear, selectedMonth);
+    if (success) {
+      setRolloverDialogOpen(false);
+    }
+  };
+
   const monthName = new Date(selectedYear, selectedMonth - 1).toLocaleString(
     'pt-BR',
     { month: 'long', year: 'numeric' }
@@ -114,11 +163,25 @@ const Budget = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
+      <div className="space-y-2">
         <h1 className="text-3xl font-bold capitalize">Orçamento - {monthName}</h1>
-        <p className="text-muted-foreground">
-          Defina limites de gastos por categoria
-        </p>
+        <div className="flex items-center gap-2">
+          <p className="text-muted-foreground">
+            Defina limites de gastos por categoria
+          </p>
+          {periodStatus && (
+            <Badge 
+              variant={periodStatus === 'closed' ? 'destructive' : 'default'}
+              className="gap-1"
+            >
+              {periodStatus === 'closed' ? (
+                <><Lock className="h-3 w-3" /> Período Fechado</>
+              ) : (
+                <><Unlock className="h-3 w-3" /> Período Aberto</>
+              )}
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* Month Navigation */}
@@ -132,10 +195,61 @@ const Budget = () => {
         <Button variant="outline" size="icon" onClick={nextMonth}>
           <ChevronRight className="h-4 w-4" />
         </Button>
-        <Button onClick={() => setFormOpen(true)} className="ml-auto">
-          <Plus className="h-4 w-4 mr-2" />
-          Novo Orçamento
-        </Button>
+        
+        <div className="ml-auto flex gap-2">
+          {periodStatus === 'closed' && (
+            <>
+              <Button 
+                variant="outline"
+                onClick={() => setReopenDialogOpen(true)}
+                disabled={periodLoading}
+              >
+                <Unlock className="h-4 w-4 mr-2" />
+                Reabrir Mês
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={() => setRolloverDialogOpen(true)}
+                disabled={periodLoading}
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Aplicar Rollover
+              </Button>
+            </>
+          )}
+          
+          {periodStatus === 'open' && (
+            <Button 
+              variant="outline"
+              onClick={() => setCloseDialogOpen(true)}
+              disabled={periodLoading}
+            >
+              <Lock className="h-4 w-4 mr-2" />
+              Fechar Mês
+            </Button>
+          )}
+          
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <Button 
+                    onClick={() => setFormOpen(true)}
+                    disabled={periodStatus === 'closed'}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Novo Orçamento
+                  </Button>
+                </div>
+              </TooltipTrigger>
+              {periodStatus === 'closed' && (
+                <TooltipContent>
+                  <p>Período fechado. Reabra para editar.</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -220,8 +334,8 @@ const Budget = () => {
               <BudgetCard
                 key={budget.id}
                 budget={budget}
-                onEdit={handleEdit}
-                onDelete={handleDeleteClick}
+                onEdit={periodStatus === 'closed' ? undefined : handleEdit}
+                onDelete={periodStatus === 'closed' ? undefined : handleDeleteClick}
               />
             ))}
           </div>
@@ -270,6 +384,62 @@ const Budget = () => {
         categories={categories}
         existingBudgets={budgets}
       />
+
+      {/* Close Period Dialog */}
+      <AlertDialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Fechar Mês de {monthName}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Após o fechamento, não será possível editar transações ou orçamentos deste período. 
+              Deseja continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleClosePeriod}>
+              Fechar Período
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reopen Period Dialog */}
+      <AlertDialog open={reopenDialogOpen} onOpenChange={setReopenDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reabrir Mês de {monthName}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Isso permitirá editar transações e orçamentos novamente. Reabrir?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleReopenPeriod}>
+              Reabrir Período
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Apply Rollover Dialog */}
+      <AlertDialog open={rolloverDialogOpen} onOpenChange={setRolloverDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Aplicar Rollover de Orçamento</AlertDialogTitle>
+            <AlertDialogDescription>
+              Isso aplicará as políticas de rollover configuradas em cada orçamento, 
+              transferindo saldos para o próximo mês. Continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleApplyRollover}>
+              Aplicar Rollover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
