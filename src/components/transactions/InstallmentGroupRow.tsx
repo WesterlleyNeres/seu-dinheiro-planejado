@@ -39,17 +39,29 @@ export const InstallmentGroupRow = ({
 }: InstallmentGroupRowProps) => {
   const [expanded, setExpanded] = useState(false);
   const [deleteAllDialogOpen, setDeleteAllDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   if (parcels.length === 0) return null;
 
   const firstParcel = parcels[0];
-  const totalValue = firstParcel.valor_total_parcelado
-    ? Number(firstParcel.valor_total_parcelado)
-    : parcels.reduce((sum, p) => sum + Number(p.valor), 0);
+  // Calcular valor total baseado nas parcelas realmente presentes
+  const totalValue = parcels.reduce((sum, p) => sum + Number(p.valor), 0);
 
-  const handleDeleteAll = () => {
-    parcels.forEach((parcel) => onDelete(parcel.id));
-    setDeleteAllDialogOpen(false);
+  const handleDeleteAll = async () => {
+    setIsDeleting(true);
+    try {
+      // Executar todas as exclusões em paralelo e aguardar completarem
+      await Promise.all(
+        parcels.map((parcel) => onDelete(parcel.id))
+      );
+      
+      // Fechar dialog apenas APÓS todas as exclusões completarem
+      setDeleteAllDialogOpen(false);
+    } catch (error) {
+      console.error('Erro ao excluir parcelas:', error);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -210,9 +222,9 @@ export const InstallmentGroupRow = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteAll}>
-              Excluir Todas
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteAll} disabled={isDeleting}>
+              {isDeleting ? 'Excluindo...' : 'Excluir Todas'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
