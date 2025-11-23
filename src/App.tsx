@@ -18,6 +18,7 @@ import Goals from "./pages/Goals";
 import Settings from "./pages/Settings";
 import Investments from "./pages/Investments";
 import Transfers from "./pages/Transfers";
+import Reports from "./pages/Reports";
 
 const queryClient = new QueryClient();
 
@@ -127,10 +128,7 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <AppLayout>
-                    <div className="text-center py-12">
-                      <h1 className="text-2xl font-bold mb-2">Relatórios</h1>
-                      <p className="text-muted-foreground">Em breve</p>
-                    </div>
+                    <Reports />
                   </AppLayout>
                 </ProtectedRoute>
               }
