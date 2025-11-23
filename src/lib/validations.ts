@@ -105,3 +105,30 @@ export const contributionSchema = z.object({
       return date <= today;
     }, "Data não pode ser no futuro"),
 });
+
+export const investmentSchema = z.object({
+  nome: z.string()
+    .trim()
+    .min(1, "Nome é obrigatório")
+    .max(100, "Nome deve ter no máximo 100 caracteres"),
+  tipo: z.enum(['rf', 'rv', 'fundo', 'outros'], {
+    required_error: "Tipo é obrigatório"
+  }),
+  corretora: z.string().trim().max(100).optional(),
+  observacoes: z.string().trim().max(500).optional(),
+});
+
+export const investmentContributionSchema = z.object({
+  valor: z.coerce
+    .number({ required_error: "Valor é obrigatório" })
+    .positive("Valor deve ser positivo"),
+  data: z.string().refine((date) => {
+    return new Date(date) <= new Date();
+  }, "Data não pode ser no futuro"),
+});
+
+export const userSettingsSchema = z.object({
+  budget_mode: z.enum(['pagas', 'pagas_e_pendentes'], {
+    required_error: "Modo de orçamento é obrigatório"
+  }),
+});

@@ -47,7 +47,7 @@ export interface UseBudgetsReturn {
   totals: BudgetTotals;
 }
 
-export const useBudgets = (year: number, month: number): UseBudgetsReturn => {
+export const useBudgets = (year: number, month: number, budgetMode: 'pagas' | 'pagas_e_pendentes' = 'pagas'): UseBudgetsReturn => {
   const { user } = useAuth();
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,14 +85,14 @@ export const useBudgets = (year: number, month: number): UseBudgetsReturn => {
         return;
       }
 
-      // Calculate realizado for each budget (including both paid and pending)
+      // Calculate realizado for each budget based on budget_mode
       const enrichedBudgets = await Promise.all(
         budgetsData.map(async (budget) => {
           const lastDayOfMonth = new Date(year, month, 0).getDate();
           const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
           const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
 
-          const { data: transactions } = await supabase
+          let query = supabase
             .from('transactions')
             .select('valor')
             .eq('user_id', user.id)
@@ -101,6 +101,15 @@ export const useBudgets = (year: number, month: number): UseBudgetsReturn => {
             .gte('data', startDate)
             .lte('data', endDate)
             .is('deleted_at', null);
+
+          // Apply status filter based on budget mode
+          if (budgetMode === 'pagas') {
+            query = query.eq('status', 'paga');
+          } else {
+            query = query.in('status', ['paga', 'pendente']);
+          }
+
+          const { data: transactions } = await query;
 
           const realizado = transactions?.reduce(
             (sum, t) => sum + Number(t.valor),
@@ -156,7 +165,7 @@ export const useBudgets = (year: number, month: number): UseBudgetsReturn => {
 
   useEffect(() => {
     loadBudgets();
-  }, [user, year, month]);
+  }, [user, year, month, budgetMode]);
 
   const createBudget = async (data: CreateBudgetData) => {
     if (!user) return;
