@@ -18,6 +18,7 @@ import {
   LineChart,
   Settings,
   ArrowLeftRight,
+  Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,7 @@ const navigation = [
   { name: "Metas", href: "/goals", icon: Target },
   { name: "Investimentos", href: "/investments", icon: LineChart },
   { name: "Relatórios", href: "/reports", icon: TrendingUp },
+  { name: "Importar", href: "/import", icon: Upload },
   { name: "Configurações", href: "/settings", icon: Settings },
 ];
 

@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
@@ -36,9 +37,11 @@ const App = () => (
             path="/"
             element={
               <ProtectedRoute>
-                <AppLayout>
-                  <Dashboard />
-                </AppLayout>
+                <ErrorBoundary>
+                  <AppLayout>
+                    <Dashboard />
+                  </AppLayout>
+                </ErrorBoundary>
               </ProtectedRoute>
             }
           />
@@ -128,9 +131,23 @@ const App = () => (
               path="/reports"
               element={
                 <ProtectedRoute>
-                  <AppLayout>
-                    <Reports />
-                  </AppLayout>
+                  <ErrorBoundary>
+                    <AppLayout>
+                      <Reports />
+                    </AppLayout>
+                  </ErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/import"
+              element={
+                <ProtectedRoute>
+                  <ErrorBoundary>
+                    <AppLayout>
+                      <Import />
+                    </AppLayout>
+                  </ErrorBoundary>
                 </ProtectedRoute>
               }
             />
