@@ -89,50 +89,49 @@ export const useBudgets = (year: number, month: number, budgetMode: 'pagas' | 'p
         return;
       }
 
-      // Calculate realizado for each budget based on budget_mode
-      const enrichedBudgets = await Promise.all(
-        budgetsData.map(async (budget) => {
-          const lastDayOfMonth = new Date(year, month, 0).getDate();
-          const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-          const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
+    // Calculate realizado for ALL budgets in single query based on budget_mode
+    const lastDayOfMonth = new Date(year, month, 0).getDate();
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
 
-          let query = supabase
-            .from('transactions')
-            .select('valor')
-            .eq('user_id', user.id)
-            .eq('category_id', budget.category_id)
-            .eq('tipo', 'despesa')
-            .gte('data', startDate)
-            .lte('data', endDate)
-            .is('deleted_at', null);
+    const statusFilter = (budgetMode === 'pagas') ? ['paga'] as const : (['paga', 'pendente'] as const);
 
-          // Apply status filter based on budget mode
-          if (budgetMode === 'pagas') {
-            query = query.eq('status', 'paga');
-          } else {
-            query = query.in('status', ['paga', 'pendente']);
-          }
+    // Single aggregation query for all categories
+    const { data: realizedAgg, error: aggErr } = await supabase
+      .from('transactions')
+      .select('category_id, valor')
+      .eq('user_id', user.id)
+      .eq('tipo', 'despesa')
+      .gte('data', startDate)
+      .lte('data', endDate)
+      .in('status', statusFilter)
+      .is('deleted_at', null);
 
-          const { data: transactions } = await query;
+    if (aggErr) throw aggErr;
 
-          const realizado = transactions?.reduce(
-            (sum, t) => sum + Number(t.valor),
-            0
-          ) || 0;
+    // Build map: category_id -> total realizado
+    const realizedMap: Record<string, number> = {};
+    (realizedAgg || []).forEach((row: any) => {
+      const catId = row.category_id;
+      if (!realizedMap[catId]) realizedMap[catId] = 0;
+      realizedMap[catId] += Number(row.valor);
+    });
 
-          const limite = Number(budget.limite_valor);
-          const percentual = limite > 0 ? (realizado / limite) * 100 : 0;
-          const restante = limite - realizado;
+    // Enrich budgets with realized values
+    const enrichedBudgets = budgetsData.map((budget) => {
+      const realizado = realizedMap[budget.category_id] ?? 0;
+      const limite = Number(budget.limite_valor);
+      const percentual = limite > 0 ? (realizado / limite) * 100 : 0;
+      const restante = limite - realizado;
 
-          return {
-            ...budget,
-            category: Array.isArray(budget.category) ? budget.category[0] : budget.category,
-            realizado,
-            percentual: Math.round(percentual * 10) / 10,
-            restante,
-          };
-        })
-      );
+      return {
+        ...budget,
+        category: Array.isArray(budget.category) ? budget.category[0] : budget.category,
+        realizado,
+        percentual: Math.round(percentual * 10) / 10,
+        restante,
+      };
+    });
 
       // Calculate totals
       const totalOrcado = enrichedBudgets.reduce(
@@ -202,7 +201,13 @@ export const useBudgets = (year: number, month: number, budgetMode: 'pagas' | 'p
       await loadBudgets();
     } catch (error: any) {
       console.error('Error creating budget:', error);
-      toast.error('Erro ao criar orçamento');
+      const msg = String(error?.message || error);
+      
+      if (msg.toLowerCase().includes('período') || msg.toLowerCase().includes('fechado')) {
+        toast.error('Período fechado. Vá em Orçamento para reabrí-lo.');
+      } else {
+        toast.error('Erro ao criar orçamento');
+      }
     }
   };
 
@@ -222,7 +227,13 @@ export const useBudgets = (year: number, month: number, budgetMode: 'pagas' | 'p
       await loadBudgets();
     } catch (error: any) {
       console.error('Error updating budget:', error);
-      toast.error('Erro ao atualizar orçamento');
+      const msg = String(error?.message || error);
+      
+      if (msg.toLowerCase().includes('período') || msg.toLowerCase().includes('fechado')) {
+        toast.error('Período fechado. Vá em Orçamento para reabrí-lo.');
+      } else {
+        toast.error('Erro ao atualizar orçamento');
+      }
     }
   };
 
@@ -242,7 +253,13 @@ export const useBudgets = (year: number, month: number, budgetMode: 'pagas' | 'p
       await loadBudgets();
     } catch (error: any) {
       console.error('Error deleting budget:', error);
-      toast.error('Erro ao excluir orçamento');
+      const msg = String(error?.message || error);
+      
+      if (msg.toLowerCase().includes('período') || msg.toLowerCase().includes('fechado')) {
+        toast.error('Período fechado. Vá em Orçamento para reabrí-lo.');
+      } else {
+        toast.error('Erro ao excluir orçamento');
+      }
     }
   };
 

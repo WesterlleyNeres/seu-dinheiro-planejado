@@ -49,7 +49,11 @@ const App = () => (
               path="/transactions"
               element={
                 <ProtectedRoute>
-                  <Transactions />
+                  <ErrorBoundary>
+                    <AppLayout>
+                      <Transactions />
+                    </AppLayout>
+                  </ErrorBoundary>
                 </ProtectedRoute>
               }
             />
@@ -57,7 +61,11 @@ const App = () => (
               path="/categories"
               element={
                 <ProtectedRoute>
-                  <Categories />
+                  <ErrorBoundary>
+                    <AppLayout>
+                      <Categories />
+                    </AppLayout>
+                  </ErrorBoundary>
                 </ProtectedRoute>
               }
             />
@@ -65,7 +73,11 @@ const App = () => (
               path="/wallets"
               element={
                 <ProtectedRoute>
-                  <Wallets />
+                  <ErrorBoundary>
+                    <AppLayout>
+                      <Wallets />
+                    </AppLayout>
+                  </ErrorBoundary>
                 </ProtectedRoute>
               }
             />
@@ -73,9 +85,11 @@ const App = () => (
               path="/calendar"
               element={
                 <ProtectedRoute>
-                  <AppLayout>
-                    <Calendar />
-                  </AppLayout>
+                  <ErrorBoundary>
+                    <AppLayout>
+                      <Calendar />
+                    </AppLayout>
+                  </ErrorBoundary>
                 </ProtectedRoute>
               }
             />
@@ -83,9 +97,11 @@ const App = () => (
               path="/budget"
               element={
                 <ProtectedRoute>
-                  <AppLayout>
-                    <Budget />
-                  </AppLayout>
+                  <ErrorBoundary>
+                    <AppLayout>
+                      <Budget />
+                    </AppLayout>
+                  </ErrorBoundary>
                 </ProtectedRoute>
               }
             />
@@ -93,9 +109,11 @@ const App = () => (
               path="/goals"
               element={
                 <ProtectedRoute>
-                  <AppLayout>
-                    <Goals />
-                  </AppLayout>
+                  <ErrorBoundary>
+                    <AppLayout>
+                      <Goals />
+                    </AppLayout>
+                  </ErrorBoundary>
                 </ProtectedRoute>
               }
             />
@@ -103,9 +121,11 @@ const App = () => (
               path="/investments"
               element={
                 <ProtectedRoute>
-                  <AppLayout>
-                    <Investments />
-                  </AppLayout>
+                  <ErrorBoundary>
+                    <AppLayout>
+                      <Investments />
+                    </AppLayout>
+                  </ErrorBoundary>
                 </ProtectedRoute>
               }
             />
@@ -113,9 +133,11 @@ const App = () => (
               path="/settings"
               element={
                 <ProtectedRoute>
-                  <AppLayout>
-                    <Settings />
-                  </AppLayout>
+                  <ErrorBoundary>
+                    <AppLayout>
+                      <Settings />
+                    </AppLayout>
+                  </ErrorBoundary>
                 </ProtectedRoute>
               }
             />
@@ -123,7 +145,11 @@ const App = () => (
               path="/transfers"
               element={
                 <ProtectedRoute>
-                  <Transfers />
+                  <ErrorBoundary>
+                    <AppLayout>
+                      <Transfers />
+                    </AppLayout>
+                  </ErrorBoundary>
                 </ProtectedRoute>
               }
             />

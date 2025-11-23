@@ -674,6 +674,7 @@ export type Database = {
           data: string
           deleted_at: string | null
           descricao: string
+          fingerprint: string | null
           forma_pagamento: string | null
           grupo_parcelamento: string | null
           id: string
@@ -698,6 +699,7 @@ export type Database = {
           data: string
           deleted_at?: string | null
           descricao: string
+          fingerprint?: string | null
           forma_pagamento?: string | null
           grupo_parcelamento?: string | null
           id?: string
@@ -722,6 +724,7 @@ export type Database = {
           data?: string
           deleted_at?: string | null
           descricao?: string
+          fingerprint?: string | null
           forma_pagamento?: string | null
           grupo_parcelamento?: string | null
           id?: string
