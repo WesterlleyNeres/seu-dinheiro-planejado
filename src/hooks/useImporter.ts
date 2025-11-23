@@ -295,7 +295,18 @@ export const useImporter = () => {
               status: 'pendente',
             });
           
-          if (error) throw error;
+          if (error) {
+            const errMsg = String(error.message).toLowerCase();
+            
+            // Check for duplicate fingerprint violation - skip silently
+            if (errMsg.includes('duplicate') || errMsg.includes('ux_transactions_fingerprint')) {
+              // Silent skip - duplicates are expected and already filtered in preview
+              continue;
+            }
+            
+            throw error;
+          }
+          
           imported++;
         } catch (error: any) {
           errors.push({ row: i + 1, error: error.message });

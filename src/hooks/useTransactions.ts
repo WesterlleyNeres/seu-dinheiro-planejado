@@ -139,13 +139,23 @@ export const useTransactions = (filters?: TransactionFilters) => {
       });
 
       loadTransactions();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating transaction:', error);
-      toast({
-        title: 'Erro ao criar lançamento',
-        description: 'Tente novamente mais tarde',
-        variant: 'destructive',
-      });
+      const msg = String(error?.message || error).toLowerCase();
+      
+      if (msg.includes('período') || msg.includes('fechado')) {
+        toast({
+          title: 'Período Fechado',
+          description: 'Este mês está fechado. Vá em Orçamento para reabrí-lo.',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Erro ao criar lançamento',
+          description: 'Tente novamente mais tarde',
+          variant: 'destructive',
+        });
+      }
     }
   };
 
