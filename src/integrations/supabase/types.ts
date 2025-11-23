@@ -23,6 +23,8 @@ export type Database = {
           id: string
           limite_valor: number
           mes: number
+          rollover_cap: number | null
+          rollover_policy: Database["public"]["Enums"]["rollover_policy"]
           updated_at: string
           user_id: string
         }
@@ -34,6 +36,8 @@ export type Database = {
           id?: string
           limite_valor: number
           mes: number
+          rollover_cap?: number | null
+          rollover_policy?: Database["public"]["Enums"]["rollover_policy"]
           updated_at?: string
           user_id: string
         }
@@ -45,6 +49,8 @@ export type Database = {
           id?: string
           limite_valor?: number
           mes?: number
+          rollover_cap?: number | null
+          rollover_policy?: Database["public"]["Enums"]["rollover_policy"]
           updated_at?: string
           user_id?: string
         }
@@ -329,6 +335,42 @@ export type Database = {
           nome?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      periods: {
+        Row: {
+          closed_at: string | null
+          closed_by: string | null
+          created_at: string
+          id: string
+          month: number
+          status: Database["public"]["Enums"]["period_status"]
+          updated_at: string
+          user_id: string
+          year: number
+        }
+        Insert: {
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          id?: string
+          month: number
+          status?: Database["public"]["Enums"]["period_status"]
+          updated_at?: string
+          user_id: string
+          year: number
+        }
+        Update: {
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          id?: string
+          month?: number
+          status?: Database["public"]["Enums"]["period_status"]
+          updated_at?: string
+          user_id?: string
+          year?: number
         }
         Relationships: []
       }
@@ -801,6 +843,10 @@ export type Database = {
       }
     }
     Functions: {
+      aplicar_rollover: {
+        Args: { p_month: number; p_user_id: string; p_year: number }
+        Returns: undefined
+      }
       calculate_next_occurrence: {
         Args: {
           p_current_date: string
@@ -811,6 +857,10 @@ export type Database = {
       }
       close_card_statement: {
         Args: { p_statement_id: string }
+        Returns: undefined
+      }
+      fechar_mensal: {
+        Args: { p_month: number; p_user_id: string; p_year: number }
         Returns: undefined
       }
       pay_card_statement: {
@@ -828,6 +878,20 @@ export type Database = {
           processed_count: number
         }[]
       }
+      reabrir_mensal: {
+        Args: { p_month: number; p_user_id: string; p_year: number }
+        Returns: undefined
+      }
+      realizado_categoria: {
+        Args: {
+          p_category_id: string
+          p_month: number
+          p_user_id: string
+          p_year: number
+        }
+        Returns: number
+      }
+      yyyymm: { Args: { d: string }; Returns: number }
     }
     Enums: {
       category_type:
@@ -837,6 +901,7 @@ export type Database = {
         | "divida"
         | "receita"
         | "despesa"
+      period_status: "open" | "closed"
       recurrence_frequency:
         | "semanal"
         | "quinzenal"
@@ -845,6 +910,7 @@ export type Database = {
         | "trimestral"
         | "semestral"
         | "anual"
+      rollover_policy: "none" | "carry_over" | "clamp"
       statement_status: "aberta" | "fechada" | "paga"
       transaction_status: "paga" | "pendente"
       transaction_type: "despesa" | "receita"
@@ -984,6 +1050,7 @@ export const Constants = {
         "receita",
         "despesa",
       ],
+      period_status: ["open", "closed"],
       recurrence_frequency: [
         "semanal",
         "quinzenal",
@@ -993,6 +1060,7 @@ export const Constants = {
         "semestral",
         "anual",
       ],
+      rollover_policy: ["none", "carry_over", "clamp"],
       statement_status: ["aberta", "fechada", "paga"],
       transaction_status: ["paga", "pendente"],
       transaction_type: ["despesa", "receita"],
