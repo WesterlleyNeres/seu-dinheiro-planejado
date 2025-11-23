@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { BudgetModeToggle } from '@/components/settings/BudgetModeToggle';
+import { AlertSettings } from '@/components/settings/AlertSettings';
 import { useUserSettings, BudgetMode } from '@/hooks/useUserSettings';
 import { Separator } from '@/components/ui/separator';
 
@@ -55,6 +56,8 @@ const Settings = () => {
           )}
         </CardContent>
       </Card>
+
+      <AlertSettings />
 
       <Card>
         <CardHeader>
