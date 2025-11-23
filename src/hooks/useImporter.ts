@@ -30,6 +30,13 @@ export interface ImportSummary {
   errorDetails: Array<{ row: number; error: string }>;
 }
 
+export interface ImportPreset {
+  id: string;
+  nome: string;
+  column_mapping: ColumnMapping;
+  is_default: boolean;
+}
+
 export const useImporter = () => {
   const { user } = useAuth();
   const [step, setStep] = useState<ImportStep>('upload');
@@ -39,6 +46,7 @@ export const useImporter = () => {
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<Array<{ id: string; nome: string; tipo: string }>>([]);
+  const [presets, setPresets] = useState<ImportPreset[]>([]);
 
   const loadCategories = async () => {
     if (!user) return;
@@ -52,6 +60,101 @@ export const useImporter = () => {
     if (!error && data) {
       setCategories(data);
     }
+  };
+
+  const loadPresets = async () => {
+    if (!user) return;
+    
+    const { data, error } = await supabase
+      .from('import_presets')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('is_default', { ascending: false })
+      .order('nome');
+    
+    if (!error && data) {
+      setPresets(data as ImportPreset[]);
+      
+      // Create default presets if none exist
+      if (data.length === 0) {
+        await createDefaultPresets();
+      }
+    }
+  };
+
+  const createDefaultPresets = async () => {
+    if (!user) return;
+    
+    const defaultPresets = [
+      {
+        user_id: user.id,
+        nome: 'Nubank',
+        is_default: true,
+        column_mapping: {
+          data: 'date',
+          valor: 'amount',
+          descricao: 'title',
+        },
+      },
+      {
+        user_id: user.id,
+        nome: 'Inter',
+        is_default: true,
+        column_mapping: {
+          data: 'Data',
+          valor: 'Valor',
+          descricao: 'Descrição',
+        },
+      },
+      {
+        user_id: user.id,
+        nome: 'Itaú',
+        is_default: true,
+        column_mapping: {
+          data: 'data',
+          valor: 'valor',
+          descricao: 'histórico',
+        },
+      },
+    ];
+    
+    for (const preset of defaultPresets) {
+      await supabase
+        .from('import_presets')
+        .insert({
+          user_id: preset.user_id,
+          nome: preset.nome,
+          is_default: preset.is_default,
+          column_mapping: preset.column_mapping as any,
+        });
+    }
+    
+    await loadPresets();
+  };
+
+  const savePreset = async (nome: string) => {
+    if (!user) return;
+    
+    const { error } = await supabase
+      .from('import_presets')
+      .insert({
+        user_id: user.id,
+        nome,
+        column_mapping: mapping as any,
+        is_default: false,
+      });
+    
+    if (error) {
+      toast.error('Erro ao salvar preset');
+    } else {
+      toast.success('Preset salvo com sucesso!');
+      await loadPresets();
+    }
+  };
+
+  const applyPreset = (preset: ImportPreset) => {
+    setMapping(preset.column_mapping as ColumnMapping);
+    toast.success(`Preset "${preset.nome}" aplicado`);
   };
 
   const processFile = async (file: File) => {
@@ -68,6 +171,7 @@ export const useImporter = () => {
       const autoMapping = detectColumns(parsed.headers);
       setMapping(autoMapping);
       await loadCategories();
+      await loadPresets();
       
       toast.success(`Arquivo carregado: ${parsed.rows.length} linhas`);
       setStep('map');
@@ -251,9 +355,12 @@ export const useImporter = () => {
     summary,
     loading,
     categories,
+    presets,
     processFile,
     generatePreview,
     processImport,
     reset,
+    savePreset,
+    applyPreset,
   };
 };

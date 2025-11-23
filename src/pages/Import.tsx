@@ -18,10 +18,13 @@ const Import = () => {
     setPreview,
     summary,
     loading,
+    presets,
     processFile,
     generatePreview,
     processImport,
     reset,
+    savePreset,
+    applyPreset,
   } = useImporter();
 
   const steps = [
@@ -106,6 +109,9 @@ const Import = () => {
               mapping={mapping}
               onMappingChange={setMapping}
               onNext={generatePreview}
+              presets={presets}
+              onApplyPreset={applyPreset}
+              onSavePreset={savePreset}
             />
           </div>
         )}
