@@ -733,6 +733,48 @@ export type Database = {
       }
     }
     Views: {
+      v_balance_evolution: {
+        Row: {
+          despesas: number | null
+          mes_referencia: string | null
+          receitas: number | null
+          saldo_mensal: number | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      v_category_spending: {
+        Row: {
+          category_id: string | null
+          category_name: string | null
+          category_type: Database["public"]["Enums"]["category_type"] | null
+          mes_referencia: string | null
+          total_pago: number | null
+          total_transacoes: number | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_monthly_summary: {
+        Row: {
+          mes_referencia: string | null
+          tipo: Database["public"]["Enums"]["transaction_type"] | null
+          total_pago: number | null
+          total_pendente: number | null
+          total_transacoes: number | null
+          transacoes_pagas: number | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
       v_wallet_balance: {
         Row: {
           saldo: number | null
