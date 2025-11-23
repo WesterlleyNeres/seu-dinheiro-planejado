@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -22,11 +23,15 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useTransactions, TransactionFilters, Transaction } from '@/hooks/useTransactions';
+import { useRecurringTransactions } from '@/hooks/useRecurringTransactions';
 import { TransactionForm } from '@/components/transactions/TransactionForm';
 import { TransactionFilters as TransactionFiltersComponent } from '@/components/transactions/TransactionFilters';
+import { RecurringTransactionsList } from '@/components/recurring/RecurringTransactionsList';
+import { RecurringTransactionForm } from '@/components/recurring/RecurringTransactionForm';
+import { RecurringTransactionHistory } from '@/components/recurring/RecurringTransactionHistory';
 import { formatCurrency } from '@/lib/currency';
 import { formatDate } from '@/lib/date';
-import { Plus, Pencil, Trash2, CheckCircle2, Clock } from 'lucide-react';
+import { Plus, Pencil, Trash2, CheckCircle2, Clock, Repeat, Play } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function Transactions() {
@@ -35,6 +40,11 @@ export default function Transactions() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | undefined>();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+  
+  const [recurringFormOpen, setRecurringFormOpen] = useState(false);
+  const [editingRecurring, setEditingRecurring] = useState<any>();
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [selectedRecurring, setSelectedRecurring] = useState<any>(null);
 
   const {
     transactions,
@@ -45,6 +55,17 @@ export default function Transactions() {
     deleteTransaction,
     toggleStatus,
   } = useTransactions(filters);
+
+  const {
+    recurringTransactions,
+    loading: recurringLoading,
+    createRecurringTransaction,
+    updateRecurringTransaction,
+    toggleActive,
+    deleteRecurringTransaction,
+    processRecurringTransactions,
+    getHistory,
+  } = useRecurringTransactions();
 
   const handleSubmit = async (data: any) => {
     if (editingTransaction) {
@@ -81,6 +102,30 @@ export default function Transactions() {
     setFormOpen(true);
   };
 
+  const handleNewRecurring = () => {
+    setEditingRecurring(undefined);
+    setRecurringFormOpen(true);
+  };
+
+  const handleEditRecurring = (transaction: any) => {
+    setEditingRecurring(transaction);
+    setRecurringFormOpen(true);
+  };
+
+  const handleRecurringSubmit = async (data: any) => {
+    if (editingRecurring) {
+      await updateRecurringTransaction(editingRecurring.id, data);
+    } else {
+      await createRecurringTransaction(data);
+    }
+    setEditingRecurring(undefined);
+  };
+
+  const handleShowHistory = (transaction: any) => {
+    setSelectedRecurring(transaction);
+    setHistoryOpen(true);
+  };
+
   const totalReceitas = transactions
     .filter((t) => t.tipo === 'receita')
     .reduce((sum, t) => sum + Number(t.valor), 0);
@@ -99,10 +144,6 @@ export default function Transactions() {
             <h1 className="text-3xl font-bold">Lançamentos</h1>
             <p className="text-muted-foreground">Gerencie suas receitas e despesas</p>
           </div>
-          <Button onClick={handleNewTransaction}>
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Lançamento
-          </Button>
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
@@ -144,9 +185,26 @@ export default function Transactions() {
           </Card>
         </div>
 
-        <TransactionFiltersComponent filters={filters} onFiltersChange={setFilters} />
+        <Tabs defaultValue="transactions" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="transactions">Lançamentos</TabsTrigger>
+            <TabsTrigger value="recurring">
+              <Repeat className="h-4 w-4 mr-2" />
+              Recorrentes
+            </TabsTrigger>
+          </TabsList>
 
-        <Card>
+          <TabsContent value="transactions" className="space-y-6">
+            <div className="flex justify-end">
+              <Button onClick={handleNewTransaction}>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Lançamento
+              </Button>
+            </div>
+
+            <TransactionFiltersComponent filters={filters} onFiltersChange={setFilters} />
+
+            <Card>
           <CardContent className="p-0">
             {loading ? (
               <div className="p-6 space-y-4">
@@ -239,6 +297,45 @@ export default function Transactions() {
             )}
           </CardContent>
         </Card>
+          </TabsContent>
+
+          <TabsContent value="recurring" className="space-y-6">
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => processRecurringTransactions()}>
+                <Play className="h-4 w-4 mr-2" />
+                Processar Recorrências
+              </Button>
+              <Button onClick={handleNewRecurring}>
+                <Plus className="h-4 w-4 mr-2" />
+                Nova Recorrência
+              </Button>
+            </div>
+
+            {recurringLoading ? (
+              <div className="space-y-4">
+                {[...Array(3)].map((_, i) => (
+                  <Skeleton key={i} className="h-32 w-full" />
+                ))}
+              </div>
+            ) : recurringTransactions.length === 0 ? (
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <p className="text-muted-foreground">
+                    Nenhuma recorrência encontrada. Crie sua primeira recorrência!
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <RecurringTransactionsList
+                transactions={recurringTransactions}
+                onEdit={handleEditRecurring}
+                onDelete={deleteRecurringTransaction}
+                onToggle={toggleActive}
+                onShowHistory={handleShowHistory}
+              />
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
 
       <TransactionForm
@@ -246,6 +343,20 @@ export default function Transactions() {
         onOpenChange={setFormOpen}
         transaction={editingTransaction}
         onSubmit={handleSubmit}
+      />
+
+      <RecurringTransactionForm
+        open={recurringFormOpen}
+        onOpenChange={setRecurringFormOpen}
+        transaction={editingRecurring}
+        onSubmit={handleRecurringSubmit}
+      />
+
+      <RecurringTransactionHistory
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        transaction={selectedRecurring}
+        onLoadHistory={getHistory}
       />
 
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>

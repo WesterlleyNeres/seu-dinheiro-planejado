@@ -353,6 +353,146 @@ export type Database = {
         }
         Relationships: []
       }
+      recurring_transaction_history: {
+        Row: {
+          data_geracao: string | null
+          data_prevista: string
+          erro_msg: string | null
+          id: string
+          recurring_transaction_id: string
+          status: string | null
+          transaction_id: string | null
+        }
+        Insert: {
+          data_geracao?: string | null
+          data_prevista: string
+          erro_msg?: string | null
+          id?: string
+          recurring_transaction_id: string
+          status?: string | null
+          transaction_id?: string | null
+        }
+        Update: {
+          data_geracao?: string | null
+          data_prevista?: string
+          erro_msg?: string | null
+          id?: string
+          recurring_transaction_id?: string
+          status?: string | null
+          transaction_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_transaction_history_recurring_transaction_id_fkey"
+            columns: ["recurring_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_transaction_history_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recurring_transactions: {
+        Row: {
+          ativo: boolean | null
+          category_id: string
+          created_at: string | null
+          data_fim: string | null
+          data_inicio: string
+          deleted_at: string | null
+          descricao: string
+          dia_referencia: number
+          frequencia: Database["public"]["Enums"]["recurrence_frequency"]
+          id: string
+          natureza: string | null
+          payment_method_id: string | null
+          proxima_ocorrencia: string
+          tipo: Database["public"]["Enums"]["transaction_type"]
+          ultima_geracao: string | null
+          updated_at: string | null
+          user_id: string
+          valor: number
+          wallet_id: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          category_id: string
+          created_at?: string | null
+          data_fim?: string | null
+          data_inicio: string
+          deleted_at?: string | null
+          descricao: string
+          dia_referencia: number
+          frequencia: Database["public"]["Enums"]["recurrence_frequency"]
+          id?: string
+          natureza?: string | null
+          payment_method_id?: string | null
+          proxima_ocorrencia: string
+          tipo: Database["public"]["Enums"]["transaction_type"]
+          ultima_geracao?: string | null
+          updated_at?: string | null
+          user_id: string
+          valor: number
+          wallet_id?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          category_id?: string
+          created_at?: string | null
+          data_fim?: string | null
+          data_inicio?: string
+          deleted_at?: string | null
+          descricao?: string
+          dia_referencia?: number
+          frequencia?: Database["public"]["Enums"]["recurrence_frequency"]
+          id?: string
+          natureza?: string | null
+          payment_method_id?: string | null
+          proxima_ocorrencia?: string
+          tipo?: Database["public"]["Enums"]["transaction_type"]
+          ultima_geracao?: string | null
+          updated_at?: string | null
+          user_id?: string
+          valor?: number
+          wallet_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_transactions_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_transactions_payment_method_id_fkey"
+            columns: ["payment_method_id"]
+            isOneToOne: false
+            referencedRelation: "payment_methods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_transactions_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "v_wallet_balance"
+            referencedColumns: ["wallet_id"]
+          },
+          {
+            foreignKeyName: "recurring_transactions_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           category_id: string
@@ -619,6 +759,14 @@ export type Database = {
       }
     }
     Functions: {
+      calculate_next_occurrence: {
+        Args: {
+          p_current_date: string
+          p_dia_referencia: number
+          p_frequencia: Database["public"]["Enums"]["recurrence_frequency"]
+        }
+        Returns: string
+      }
       close_card_statement: {
         Args: { p_statement_id: string }
         Returns: undefined
@@ -631,6 +779,13 @@ export type Database = {
         }
         Returns: undefined
       }
+      process_recurring_transactions: {
+        Args: never
+        Returns: {
+          failed_count: number
+          processed_count: number
+        }[]
+      }
     }
     Enums: {
       category_type:
@@ -640,6 +795,14 @@ export type Database = {
         | "divida"
         | "receita"
         | "despesa"
+      recurrence_frequency:
+        | "semanal"
+        | "quinzenal"
+        | "mensal"
+        | "bimestral"
+        | "trimestral"
+        | "semestral"
+        | "anual"
       statement_status: "aberta" | "fechada" | "paga"
       transaction_status: "paga" | "pendente"
       transaction_type: "despesa" | "receita"
@@ -778,6 +941,15 @@ export const Constants = {
         "divida",
         "receita",
         "despesa",
+      ],
+      recurrence_frequency: [
+        "semanal",
+        "quinzenal",
+        "mensal",
+        "bimestral",
+        "trimestral",
+        "semestral",
+        "anual",
       ],
       statement_status: ["aberta", "fechada", "paga"],
       transaction_status: ["paga", "pendente"],
