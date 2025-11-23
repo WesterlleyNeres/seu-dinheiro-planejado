@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,19 +40,37 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useWallets, Wallet } from '@/hooks/useWallets';
+import { useTransfers } from '@/hooks/useTransfers';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { walletSchema } from '@/lib/validations';
 import { Plus, Pencil, Trash2, Wallet as WalletIcon, CreditCard, Building } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { formatCurrency } from '@/lib/currency';
+import { StatementsList } from '@/components/statements/StatementsList';
 
 export default function Wallets() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingWallet, setEditingWallet] = useState<Wallet | undefined>();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [walletToDelete, setWalletToDelete] = useState<string | null>(null);
+  const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
 
   const { wallets, loading, createWallet, updateWallet, deleteWallet } = useWallets();
+  const { getWalletBalances } = useTransfers();
+
+  useEffect(() => {
+    loadBalances();
+  }, [wallets]);
+
+  const loadBalances = async () => {
+    const balances = await getWalletBalances();
+    const balancesMap: Record<string, number> = {};
+    balances.forEach(wb => {
+      balancesMap[wb.wallet_id] = wb.saldo;
+    });
+    setWalletBalances(balancesMap);
+  };
 
   const form = useForm({
     resolver: zodResolver(walletSchema),
@@ -132,7 +151,7 @@ export default function Wallets() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">Carteiras</h1>
-            <p className="text-muted-foreground">Gerencie suas contas e cartões</p>
+            <p className="text-muted-foreground">Gerencie suas contas, cartões e faturas</p>
           </div>
           <Button onClick={handleNew}>
             <Plus className="h-4 w-4 mr-2" />
@@ -140,135 +159,154 @@ export default function Wallets() {
           </Button>
         </div>
 
-        {loading ? (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {[...Array(6)].map((_, i) => (
-              <Skeleton key={i} className="h-56" />
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-8">
-            {contas.length > 0 && (
-              <div>
-                <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                  <WalletIcon className="h-5 w-5" />
-                  Contas
-                </h2>
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {contas.map((wallet) => (
-                    <Card key={wallet.id}>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-lg flex items-center justify-between">
-                          <span className="flex items-center gap-2">
-                            <Building className="h-4 w-4" />
-                            {wallet.nome}
-                          </span>
-                          <Badge variant={wallet.ativo ? 'default' : 'secondary'}>
-                            {wallet.ativo ? 'Ativa' : 'Inativa'}
-                          </Badge>
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        {wallet.instituicao && (
-                          <p className="text-sm text-muted-foreground">
-                            {wallet.instituicao}
-                          </p>
-                        )}
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEdit(wallet)}
-                          >
-                            <Pencil className="h-4 w-4 mr-2" />
-                            Editar
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDeleteClick(wallet.id)}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Excluir
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+        <Tabs defaultValue="wallets" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 max-w-md">
+            <TabsTrigger value="wallets">Carteiras</TabsTrigger>
+            <TabsTrigger value="statements">Faturas</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="wallets" className="mt-6">
+            {loading ? (
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {[...Array(6)].map((_, i) => (
+                  <Skeleton key={i} className="h-56" />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {contas.length > 0 && (
+                  <div>
+                    <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                      <WalletIcon className="h-5 w-5" />
+                      Contas
+                    </h2>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      {contas.map((wallet) => (
+                        <Card key={wallet.id}>
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-lg flex items-center justify-between">
+                              <span className="flex items-center gap-2">
+                                <Building className="h-4 w-4" />
+                                {wallet.nome}
+                              </span>
+                              <Badge variant={wallet.ativo ? 'default' : 'secondary'}>
+                                {wallet.ativo ? 'Ativa' : 'Inativa'}
+                              </Badge>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-3">
+                            {wallet.instituicao && (
+                              <p className="text-sm text-muted-foreground">
+                                {wallet.instituicao}
+                              </p>
+                            )}
+                            <div className="p-3 bg-primary/5 rounded-lg">
+                              <p className="text-xs text-muted-foreground mb-1">Saldo atual</p>
+                              <p className="text-xl font-bold text-primary">
+                                {formatCurrency(walletBalances[wallet.id] || 0)}
+                              </p>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEdit(wallet)}
+                              >
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Editar
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteClick(wallet.id)}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Excluir
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {cartoes.length > 0 && (
+                  <div>
+                    <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                      <CreditCard className="h-5 w-5" />
+                      Cartões de Crédito
+                    </h2>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      {cartoes.map((wallet) => (
+                        <Card key={wallet.id}>
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-lg flex items-center justify-between">
+                              <span className="flex items-center gap-2">
+                                <CreditCard className="h-4 w-4" />
+                                {wallet.nome}
+                              </span>
+                              <Badge variant={wallet.ativo ? 'default' : 'secondary'}>
+                                {wallet.ativo ? 'Ativo' : 'Inativo'}
+                              </Badge>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-3">
+                            {wallet.instituicao && (
+                              <p className="text-sm text-muted-foreground">
+                                {wallet.instituicao}
+                              </p>
+                            )}
+                            <div className="text-sm space-y-1">
+                              {wallet.dia_fechamento && (
+                                <p>Fechamento: dia {wallet.dia_fechamento}</p>
+                              )}
+                              {wallet.dia_vencimento && (
+                                <p>Vencimento: dia {wallet.dia_vencimento}</p>
+                              )}
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEdit(wallet)}
+                              >
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Editar
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteClick(wallet.id)}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Excluir
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {wallets.length === 0 && (
+                  <Card>
+                    <CardContent className="p-12 text-center">
+                      <p className="text-muted-foreground">
+                        Nenhuma carteira encontrada. Crie sua primeira carteira!
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             )}
+          </TabsContent>
 
-            {cartoes.length > 0 && (
-              <div>
-                <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                  <CreditCard className="h-5 w-5" />
-                  Cartões de Crédito
-                </h2>
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {cartoes.map((wallet) => (
-                    <Card key={wallet.id}>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-lg flex items-center justify-between">
-                          <span className="flex items-center gap-2">
-                            <CreditCard className="h-4 w-4" />
-                            {wallet.nome}
-                          </span>
-                          <Badge variant={wallet.ativo ? 'default' : 'secondary'}>
-                            {wallet.ativo ? 'Ativo' : 'Inativo'}
-                          </Badge>
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        {wallet.instituicao && (
-                          <p className="text-sm text-muted-foreground">
-                            {wallet.instituicao}
-                          </p>
-                        )}
-                        <div className="text-sm space-y-1">
-                          {wallet.dia_fechamento && (
-                            <p>Fechamento: dia {wallet.dia_fechamento}</p>
-                          )}
-                          {wallet.dia_vencimento && (
-                            <p>Vencimento: dia {wallet.dia_vencimento}</p>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEdit(wallet)}
-                          >
-                            <Pencil className="h-4 w-4 mr-2" />
-                            Editar
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDeleteClick(wallet.id)}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Excluir
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {wallets.length === 0 && (
-              <Card>
-                <CardContent className="p-12 text-center">
-                  <p className="text-muted-foreground">
-                    Nenhuma carteira encontrada. Crie sua primeira carteira!
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        )}
+          <TabsContent value="statements" className="mt-6">
+            <StatementsList />
+          </TabsContent>
+        </Tabs>
       </div>
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>

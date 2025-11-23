@@ -17,6 +17,7 @@ import Budget from "./pages/Budget";
 import Goals from "./pages/Goals";
 import Settings from "./pages/Settings";
 import Investments from "./pages/Investments";
+import Transfers from "./pages/Transfers";
 
 const queryClient = new QueryClient();
 
@@ -110,6 +111,14 @@ const App = () => (
                   <AppLayout>
                     <Settings />
                   </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/transfers"
+              element={
+                <ProtectedRoute>
+                  <Transfers />
                 </ProtectedRoute>
               }
             />

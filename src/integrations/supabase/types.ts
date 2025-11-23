@@ -58,6 +58,87 @@ export type Database = {
           },
         ]
       }
+      card_statement_lines: {
+        Row: {
+          statement_id: string
+          transaction_id: string
+        }
+        Insert: {
+          statement_id: string
+          transaction_id: string
+        }
+        Update: {
+          statement_id?: string
+          transaction_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_statement_lines_statement_id_fkey"
+            columns: ["statement_id"]
+            isOneToOne: false
+            referencedRelation: "card_statements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_statement_lines_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      card_statements: {
+        Row: {
+          abre: string
+          created_at: string
+          fecha: string
+          id: string
+          status: Database["public"]["Enums"]["statement_status"]
+          total: number
+          user_id: string
+          vence: string
+          wallet_id: string
+        }
+        Insert: {
+          abre: string
+          created_at?: string
+          fecha: string
+          id?: string
+          status?: Database["public"]["Enums"]["statement_status"]
+          total?: number
+          user_id: string
+          vence: string
+          wallet_id: string
+        }
+        Update: {
+          abre?: string
+          created_at?: string
+          fecha?: string
+          id?: string
+          status?: Database["public"]["Enums"]["statement_status"]
+          total?: number
+          user_id?: string
+          vence?: string
+          wallet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_statements_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "v_wallet_balance"
+            referencedColumns: ["wallet_id"]
+          },
+          {
+            foreignKeyName: "card_statements_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           created_at: string
@@ -364,6 +445,81 @@ export type Database = {
             foreignKeyName: "transactions_wallet_id_fkey"
             columns: ["wallet_id"]
             isOneToOne: false
+            referencedRelation: "v_wallet_balance"
+            referencedColumns: ["wallet_id"]
+          },
+          {
+            foreignKeyName: "transactions_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transfers: {
+        Row: {
+          created_at: string
+          data: string
+          deleted_at: string | null
+          descricao: string | null
+          from_wallet_id: string
+          id: string
+          to_wallet_id: string
+          updated_at: string
+          user_id: string
+          valor: number
+        }
+        Insert: {
+          created_at?: string
+          data: string
+          deleted_at?: string | null
+          descricao?: string | null
+          from_wallet_id: string
+          id?: string
+          to_wallet_id: string
+          updated_at?: string
+          user_id: string
+          valor: number
+        }
+        Update: {
+          created_at?: string
+          data?: string
+          deleted_at?: string | null
+          descricao?: string | null
+          from_wallet_id?: string
+          id?: string
+          to_wallet_id?: string
+          updated_at?: string
+          user_id?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transfers_from_wallet_id_fkey"
+            columns: ["from_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "v_wallet_balance"
+            referencedColumns: ["wallet_id"]
+          },
+          {
+            foreignKeyName: "transfers_from_wallet_id_fkey"
+            columns: ["from_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "wallets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transfers_to_wallet_id_fkey"
+            columns: ["to_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "v_wallet_balance"
+            referencedColumns: ["wallet_id"]
+          },
+          {
+            foreignKeyName: "transfers_to_wallet_id_fkey"
+            columns: ["to_wallet_id"]
+            isOneToOne: false
             referencedRelation: "wallets"
             referencedColumns: ["id"]
           },
@@ -437,10 +593,44 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      v_wallet_balance: {
+        Row: {
+          saldo: number | null
+          user_id: string | null
+          wallet_id: string | null
+          wallet_nome: string | null
+          wallet_tipo: Database["public"]["Enums"]["wallet_type"] | null
+        }
+        Insert: {
+          saldo?: never
+          user_id?: string | null
+          wallet_id?: string | null
+          wallet_nome?: string | null
+          wallet_tipo?: Database["public"]["Enums"]["wallet_type"] | null
+        }
+        Update: {
+          saldo?: never
+          user_id?: string | null
+          wallet_id?: string | null
+          wallet_nome?: string | null
+          wallet_tipo?: Database["public"]["Enums"]["wallet_type"] | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
-      [_ in never]: never
+      close_card_statement: {
+        Args: { p_statement_id: string }
+        Returns: undefined
+      }
+      pay_card_statement: {
+        Args: {
+          p_payment_date: string
+          p_payment_wallet_id: string
+          p_statement_id: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       category_type:
@@ -450,6 +640,7 @@ export type Database = {
         | "divida"
         | "receita"
         | "despesa"
+      statement_status: "aberta" | "fechada" | "paga"
       transaction_status: "paga" | "pendente"
       transaction_type: "despesa" | "receita"
       wallet_type: "conta" | "cartao"
@@ -588,6 +779,7 @@ export const Constants = {
         "receita",
         "despesa",
       ],
+      statement_status: ["aberta", "fechada", "paga"],
       transaction_status: ["paga", "pendente"],
       transaction_type: ["despesa", "receita"],
       wallet_type: ["conta", "cartao"],

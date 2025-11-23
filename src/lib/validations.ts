@@ -132,3 +132,32 @@ export const userSettingsSchema = z.object({
     required_error: "Modo de orçamento é obrigatório"
   }),
 });
+
+export const transferSchema = z.object({
+  from_wallet_id: z.string().uuid('Carteira de origem inválida'),
+  to_wallet_id: z.string().uuid('Carteira de destino inválida'),
+  valor: z.number().min(0.01, 'Valor deve ser maior que zero'),
+  data: z.string().min(1, 'Data é obrigatória'),
+  descricao: z.string().max(200, 'Descrição muito longa').optional(),
+}).refine((data) => data.from_wallet_id !== data.to_wallet_id, {
+  message: 'Carteiras de origem e destino devem ser diferentes',
+  path: ['to_wallet_id'],
+});
+
+export const statementSchema = z.object({
+  wallet_id: z.string().uuid('Cartão inválido'),
+  abre: z.string().min(1, 'Data de abertura é obrigatória'),
+  fecha: z.string().min(1, 'Data de fechamento é obrigatória'),
+  vence: z.string().min(1, 'Data de vencimento é obrigatória'),
+}).refine((data) => new Date(data.abre) < new Date(data.fecha), {
+  message: 'Data de fechamento deve ser após abertura',
+  path: ['fecha'],
+}).refine((data) => new Date(data.fecha) < new Date(data.vence), {
+  message: 'Data de vencimento deve ser após fechamento',
+  path: ['vence'],
+});
+
+export const payStatementSchema = z.object({
+  payment_wallet_id: z.string().uuid('Conta de pagamento inválida'),
+  payment_date: z.string().min(1, 'Data de pagamento é obrigatória'),
+});
