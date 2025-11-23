@@ -13,6 +13,8 @@ import {
   DollarSign,
   Tag,
   Wallet,
+  LineChart,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +30,9 @@ const navigation = [
   { name: "Calendário", href: "/calendar", icon: Calendar },
   { name: "Orçamento", href: "/budget", icon: PieChart },
   { name: "Metas", href: "/goals", icon: Target },
+  { name: "Investimentos", href: "/investments", icon: LineChart },
   { name: "Relatórios", href: "/reports", icon: TrendingUp },
+  { name: "Configurações", href: "/settings", icon: Settings },
 ];
 
 export const AppLayout = ({ children }: AppLayoutProps) => {

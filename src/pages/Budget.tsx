@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useBudgets, type Budget as BudgetType } from '@/hooks/useBudgets';
 import { useCategories } from '@/hooks/useCategories';
+import { useUserSettings } from '@/hooks/useUserSettings';
 import { BudgetCard } from '@/components/budget/BudgetCard';
 import { BudgetForm } from '@/components/budget/BudgetForm';
+import { BudgetModeToggle } from '@/components/settings/BudgetModeToggle';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,8 +38,10 @@ const Budget = () => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [budgetToDelete, setBudgetToDelete] = useState<string | null>(null);
 
+  const { settings, updateSettings } = useUserSettings();
+  
   const { budgets, loading, createBudget, updateBudget, deleteBudget, totals } =
-    useBudgets(selectedYear, selectedMonth);
+    useBudgets(selectedYear, selectedMonth, settings?.budget_mode || 'pagas');
 
   const { categories } = useCategories('despesa');
 
@@ -142,38 +146,51 @@ const Budget = () => {
           ))}
         </div>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title="Total Orçado"
-            value={formatCurrency(totals.orcado)}
-            icon={<Wallet className="h-6 w-6" />}
-            variant="default"
-          />
-          <StatCard
-            title="Total Realizado"
-            value={formatCurrency(totals.realizado)}
-            icon={<TrendingDown className="h-6 w-6" />}
-            variant="danger"
-          />
-          <StatCard
-            title="Saldo"
-            value={formatCurrency(totals.saldo)}
-            icon={<TrendingUp className="h-6 w-6" />}
-            variant={totals.saldo >= 0 ? 'success' : 'danger'}
-          />
-          <StatCard
-            title="% Médio de Uso"
-            value={`${totals.percentual.toFixed(1)}%`}
-            icon={<PieChart className="h-6 w-6" />}
-            variant={
-              totals.percentual <= 70
-                ? 'success'
-                : totals.percentual <= 90
-                ? 'default'
-                : 'danger'
-            }
-          />
-        </div>
+        <>
+          <Card>
+            <CardContent className="pt-6">
+              {settings && (
+                <BudgetModeToggle
+                  value={settings.budget_mode}
+                  onChange={(mode) => updateSettings({ budget_mode: mode })}
+                />
+              )}
+            </CardContent>
+          </Card>
+          
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              title="Total Orçado"
+              value={formatCurrency(totals.orcado)}
+              icon={<Wallet className="h-6 w-6" />}
+              variant="default"
+            />
+            <StatCard
+              title="Total Realizado"
+              value={formatCurrency(totals.realizado)}
+              icon={<TrendingDown className="h-6 w-6" />}
+              variant="danger"
+            />
+            <StatCard
+              title="Saldo"
+              value={formatCurrency(totals.saldo)}
+              icon={<TrendingUp className="h-6 w-6" />}
+              variant={totals.saldo >= 0 ? 'success' : 'danger'}
+            />
+            <StatCard
+              title="% Médio de Uso"
+              value={`${totals.percentual.toFixed(1)}%`}
+              icon={<PieChart className="h-6 w-6" />}
+              variant={
+                totals.percentual <= 70
+                  ? 'success'
+                  : totals.percentual <= 90
+                  ? 'default'
+                  : 'danger'
+              }
+            />
+          </div>
+        </>
       )}
 
       {/* Budget Cards */}

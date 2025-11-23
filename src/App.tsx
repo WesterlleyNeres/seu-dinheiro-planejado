@@ -15,6 +15,8 @@ import Wallets from "./pages/Wallets";
 import Calendar from "./pages/Calendar";
 import Budget from "./pages/Budget";
 import Goals from "./pages/Goals";
+import Settings from "./pages/Settings";
+import Investments from "./pages/Investments";
 
 const queryClient = new QueryClient();
 
@@ -87,6 +89,26 @@ const App = () => (
                 <ProtectedRoute>
                   <AppLayout>
                     <Goals />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/investments"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <Investments />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <Settings />
                   </AppLayout>
                 </ProtectedRoute>
               }
