@@ -6,10 +6,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { formatCurrency } from '@/lib/currency';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Separator } from '@/components/ui/separator';
+import { useCategories } from '@/hooks/useCategories';
+import { supabase } from '@/lib/supabase';
+import { toast } from '@/hooks/use-toast';
 
 interface StatementDetailsProps {
   statement: CardStatement | null;
@@ -26,6 +36,8 @@ export const StatementDetails = ({
 }: StatementDetailsProps) => {
   const [transactions, setTransactions] = useState<StatementTransaction[]>([]);
   const { getStatementTransactions } = useStatements();
+  const { categories } = useCategories();
+  const expenseCategories = categories.filter(c => c.tipo === 'despesa');
 
   useEffect(() => {
     if (statement && open) {
@@ -81,15 +93,54 @@ export const StatementDetails = ({
                 {transactions.map((tx) => (
                   <div
                     key={tx.id}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                    className="flex items-center justify-between gap-4 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
                   >
                     <div className="flex-1">
                       <p className="font-medium">{tx.descricao}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {format(new Date(tx.data), "d 'de' MMMM", { locale: ptBR })}
-                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-sm text-muted-foreground">
+                          {format(new Date(tx.data), "d 'de' MMMM", { locale: ptBR })}
+                        </p>
+                        <Select
+                          value={tx.category_id}
+                          onValueChange={async (newCategoryId) => {
+                            try {
+                              const { error } = await supabase
+                                .from('transactions')
+                                .update({ category_id: newCategoryId })
+                                .eq('id', tx.id);
+                              
+                              if (error) throw error;
+                              
+                              toast({
+                                title: 'Categoria atualizada',
+                                description: 'A transação foi reclassificada com sucesso',
+                              });
+                              
+                              loadTransactions();
+                            } catch (err) {
+                              toast({
+                                title: 'Erro ao atualizar',
+                                description: 'Tente novamente',
+                                variant: 'destructive',
+                              });
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="w-[180px] h-7 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {expenseCategories.map((cat) => (
+                              <SelectItem key={cat.id} value={cat.id}>
+                                {cat.nome}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                    <p className="font-semibold text-destructive">
+                    <p className="font-semibold text-destructive whitespace-nowrap">
                       {formatCurrency(tx.valor)}
                     </p>
                   </div>

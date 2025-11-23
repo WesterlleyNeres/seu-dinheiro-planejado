@@ -171,13 +171,23 @@ export const useTransactions = (filters?: TransactionFilters) => {
       });
 
       loadTransactions();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating transaction:', error);
-      toast({
-        title: 'Erro ao atualizar lançamento',
-        description: 'Tente novamente mais tarde',
-        variant: 'destructive',
-      });
+      const msg = String(error?.message || error);
+      
+      if (msg.toLowerCase().includes('período') || msg.toLowerCase().includes('fechado')) {
+        toast({
+          title: 'Período Fechado',
+          description: 'Este mês está fechado. Vá em Orçamento para reabrí-lo.',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Erro ao atualizar lançamento',
+          description: 'Tente novamente ou verifique sua conexão.',
+          variant: 'destructive',
+        });
+      }
     }
   };
 
@@ -211,11 +221,21 @@ export const useTransactions = (filters?: TransactionFilters) => {
 
       if (hardError) {
         console.error('Error hard-deleting transaction:', hardError);
-        toast({
-          title: 'Erro ao excluir lançamento',
-          description: hardError.message || err?.message || 'Tente novamente mais tarde',
-          variant: 'destructive',
-        });
+        const msg = String(hardError?.message || err?.message || '');
+        
+        if (msg.toLowerCase().includes('período') || msg.toLowerCase().includes('fechado')) {
+          toast({
+            title: 'Período Fechado',
+            description: 'Este mês está fechado. Vá em Orçamento para reabrí-lo.',
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'Erro ao excluir lançamento',
+            description: 'Tente novamente ou verifique sua conexão.',
+            variant: 'destructive',
+          });
+        }
         return;
       }
 
