@@ -19,6 +19,7 @@ import Settings from "./pages/Settings";
 import Investments from "./pages/Investments";
 import Transfers from "./pages/Transfers";
 import Reports from "./pages/Reports";
+import Import from "./pages/Import";
 
 const queryClient = new QueryClient();
 

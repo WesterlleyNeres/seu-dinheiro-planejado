@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      alert_log: {
+        Row: {
+          alert_date: string
+          alert_type: string
+          id: string
+          sent_at: string | null
+          user_id: string
+        }
+        Insert: {
+          alert_date: string
+          alert_type: string
+          id?: string
+          sent_at?: string | null
+          user_id: string
+        }
+        Update: {
+          alert_date?: string
+          alert_type?: string
+          id?: string
+          sent_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      alert_settings: {
+        Row: {
+          alert_time: string | null
+          alert_types: Json | null
+          email_enabled: boolean | null
+          timezone: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          alert_time?: string | null
+          alert_types?: Json | null
+          email_enabled?: boolean | null
+          timezone?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          alert_time?: string | null
+          alert_types?: Json | null
+          email_enabled?: boolean | null
+          timezone?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       budgets: {
         Row: {
           ano: number
@@ -239,6 +290,66 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      import_history: {
+        Row: {
+          created_at: string | null
+          error_log: Json | null
+          filename: string
+          id: string
+          rows_imported: number
+          rows_skipped: number | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          error_log?: Json | null
+          filename: string
+          id?: string
+          rows_imported: number
+          rows_skipped?: number | null
+          status: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          error_log?: Json | null
+          filename?: string
+          id?: string
+          rows_imported?: number
+          rows_skipped?: number | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      import_presets: {
+        Row: {
+          column_mapping: Json
+          created_at: string | null
+          id: string
+          is_default: boolean | null
+          nome: string
+          user_id: string
+        }
+        Insert: {
+          column_mapping: Json
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          nome: string
+          user_id: string
+        }
+        Update: {
+          column_mapping?: Json
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          nome?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       investment_contribs: {
         Row: {
