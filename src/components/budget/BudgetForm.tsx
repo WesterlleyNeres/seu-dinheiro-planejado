@@ -59,6 +59,8 @@ export const BudgetForm = ({
       ano: currentYear,
       mes: currentMonth,
       limite_valor: 0,
+      rollover_policy: 'none',
+      rollover_cap: null,
     },
   });
 
@@ -69,6 +71,8 @@ export const BudgetForm = ({
         ano: budget.ano,
         mes: budget.mes,
         limite_valor: Number(budget.limite_valor),
+        rollover_policy: budget.rollover_policy || 'none',
+        rollover_cap: budget.rollover_cap ? Number(budget.rollover_cap) : null,
       });
     } else {
       form.reset({
@@ -76,6 +80,8 @@ export const BudgetForm = ({
         ano: currentYear,
         mes: currentMonth,
         limite_valor: 0,
+        rollover_policy: 'none',
+        rollover_cap: null,
       });
     }
   }, [budget, currentYear, currentMonth, form]);
@@ -89,6 +95,14 @@ export const BudgetForm = ({
   // Check which categories are already used for the selected month/year
   const selectedYear = form.watch('ano');
   const selectedMonth = form.watch('mes');
+  const selectedRolloverPolicy = form.watch('rollover_policy');
+
+  // Clear rollover_cap if policy changes from 'clamp' to another
+  useEffect(() => {
+    if (selectedRolloverPolicy !== 'clamp') {
+      form.setValue('rollover_cap', null);
+    }
+  }, [selectedRolloverPolicy, form]);
   
   const usedCategoryIds = existingBudgets
     .filter(b => 
@@ -222,6 +236,61 @@ export const BudgetForm = ({
                 </FormItem>
               )}
             />
+
+            <FormField
+              control={form.control}
+              name="rollover_policy"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Política de Rollover</FormLabel>
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a política" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">
+                        Nenhuma (Zerar orçamento a cada mês)
+                      </SelectItem>
+                      <SelectItem value="carry_over">
+                        Carregar Saldo (Transferir sobra/falta total)
+                      </SelectItem>
+                      <SelectItem value="clamp">
+                        Carregar com Limite (Transferir até um máximo)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {selectedRolloverPolicy === 'clamp' && (
+              <FormField
+                control={form.control}
+                name="rollover_cap"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Limite Máximo de Rollover</FormLabel>
+                    <FormControl>
+                      <CurrencyInput
+                        value={field.value || 0}
+                        onChange={field.onChange}
+                        placeholder="R$ 0,00"
+                      />
+                    </FormControl>
+                    <p className="text-sm text-muted-foreground">
+                      Valor máximo que pode ser transferido para o próximo mês
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <DialogFooter>
               <Button

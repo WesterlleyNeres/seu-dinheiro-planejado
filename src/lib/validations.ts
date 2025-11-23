@@ -74,6 +74,17 @@ export const budgetSchema = z.object({
   mes: z.number().min(1).max(12),
   category_id: z.string().uuid('Categoria inválida'),
   limite_valor: z.number().min(0.01, 'Valor deve ser maior que zero'),
+  rollover_policy: z.enum(['none', 'carry_over', 'clamp']).default('none'),
+  rollover_cap: z.number().positive('Limite deve ser positivo').optional().nullable(),
+}).refine((data) => {
+  // Se política é 'clamp', rollover_cap é obrigatório
+  if (data.rollover_policy === 'clamp') {
+    return data.rollover_cap !== null && data.rollover_cap !== undefined && data.rollover_cap > 0;
+  }
+  return true;
+}, {
+  message: "Defina o limite máximo de rollover",
+  path: ["rollover_cap"],
 });
 
 export const goalSchema = z.object({
