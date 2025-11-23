@@ -153,6 +153,74 @@ export type Database = {
           },
         ]
       }
+      investment_contribs: {
+        Row: {
+          created_at: string
+          data: string
+          id: string
+          investment_id: string
+          valor: number
+        }
+        Insert: {
+          created_at?: string
+          data: string
+          id?: string
+          investment_id: string
+          valor: number
+        }
+        Update: {
+          created_at?: string
+          data?: string
+          id?: string
+          investment_id?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "investment_contribs_investment_id_fkey"
+            columns: ["investment_id"]
+            isOneToOne: false
+            referencedRelation: "investments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      investments: {
+        Row: {
+          corretora: string | null
+          created_at: string
+          deleted_at: string | null
+          id: string
+          nome: string
+          observacoes: string | null
+          tipo: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          corretora?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          nome: string
+          observacoes?: string | null
+          tipo: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          corretora?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          nome?: string
+          observacoes?: string | null
+          tipo?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       payment_methods: {
         Row: {
           created_at: string
@@ -215,6 +283,7 @@ export type Database = {
           grupo_parcelamento: string | null
           id: string
           mes_referencia: string
+          mes_referencia_int: number | null
           natureza: string | null
           parcela_numero: number | null
           parcela_total: number | null
@@ -238,6 +307,7 @@ export type Database = {
           grupo_parcelamento?: string | null
           id?: string
           mes_referencia: string
+          mes_referencia_int?: number | null
           natureza?: string | null
           parcela_numero?: number | null
           parcela_total?: number | null
@@ -261,6 +331,7 @@ export type Database = {
           grupo_parcelamento?: string | null
           id?: string
           mes_referencia?: string
+          mes_referencia_int?: number | null
           natureza?: string | null
           parcela_numero?: number | null
           parcela_total?: number | null
@@ -298,6 +369,27 @@ export type Database = {
           },
         ]
       }
+      user_settings: {
+        Row: {
+          budget_mode: string | null
+          created_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          budget_mode?: string | null
+          created_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          budget_mode?: string | null
+          created_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       wallets: {
         Row: {
           ativo: boolean
@@ -308,6 +400,7 @@ export type Database = {
           id: string
           instituicao: string | null
           nome: string
+          saldo_inicial: number | null
           tipo: Database["public"]["Enums"]["wallet_type"]
           updated_at: string
           user_id: string
@@ -321,6 +414,7 @@ export type Database = {
           id?: string
           instituicao?: string | null
           nome: string
+          saldo_inicial?: number | null
           tipo: Database["public"]["Enums"]["wallet_type"]
           updated_at?: string
           user_id: string
@@ -334,6 +428,7 @@ export type Database = {
           id?: string
           instituicao?: string | null
           nome?: string
+          saldo_inicial?: number | null
           tipo?: Database["public"]["Enums"]["wallet_type"]
           updated_at?: string
           user_id?: string
