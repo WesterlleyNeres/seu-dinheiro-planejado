@@ -34,17 +34,21 @@ export const useCardLimits = () => {
 
       const limitsData: Record<string, CardLimitInfo> = {};
 
-      // Para cada cartão, calcular uso atual baseado em faturas abertas
+      // Para cada cartão, calcular uso atual baseado em transações pendentes
       for (const card of cards || []) {
-        const { data: statements, error: statementsError } = await supabase
-          .from('card_statements')
-          .select('total')
+        // Somar todas as transações de despesa pendentes no cartão
+        const { data: transactions, error: txError } = await supabase
+          .from('transactions')
+          .select('valor')
+          .eq('user_id', user.id)
           .eq('wallet_id', card.id)
-          .eq('status', 'aberta');
+          .eq('tipo', 'despesa')
+          .eq('status', 'pendente')
+          .is('deleted_at', null);
 
-        if (statementsError) throw statementsError;
+        if (txError) throw txError;
 
-        const valorUsado = statements?.reduce((sum, s) => sum + Number(s.total || 0), 0) || 0;
+        const valorUsado = transactions?.reduce((sum, tx) => sum + Number(tx.valor || 0), 0) || 0;
         const limiteTotal = Number(card.limite_credito || 0);
         const limiteDisponivel = Math.max(0, limiteTotal - valorUsado);
         const percentualUso = limiteTotal > 0 ? (valorUsado / limiteTotal) * 100 : 0;
