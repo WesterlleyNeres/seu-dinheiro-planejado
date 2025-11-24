@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { useAutoStatement } from './useAutoStatement';
 
 export interface Transaction {
   id: string;
@@ -49,6 +50,7 @@ export const useTransactions = (filters?: TransactionFilters) => {
   const { user } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const { ensureStatementExists, linkTransactionToStatement, unlinkTransactionFromStatement } = useAutoStatement();
 
   const loadTransactions = async (retryCount = 0) => {
     if (!user) return;
@@ -125,13 +127,35 @@ export const useTransactions = (filters?: TransactionFilters) => {
       // Remover campos que não existem na tabela
       const { isInstallment, installmentType, installmentCount, installmentValue, totalValue, ...transactionData } = data as any;
       
-      const { error } = await supabase.from('transactions').insert({
+      const { data: insertedData, error } = await supabase.from('transactions').insert({
         ...transactionData,
         user_id: user.id,
         mes_referencia: mesReferencia,
-      });
+      }).select('id, wallet_id, data, tipo').single();
 
       if (error) throw error;
+
+      // Se é despesa em cartão de crédito, vincular à fatura
+      if (insertedData && transactionData.wallet_id && transactionData.tipo === 'despesa') {
+        // Buscar tipo da carteira
+        const { data: wallet } = await supabase
+          .from('wallets')
+          .select('tipo')
+          .eq('id', transactionData.wallet_id)
+          .single();
+
+        if (wallet?.tipo === 'cartao') {
+          const statementId = await ensureStatementExists(
+            transactionData.wallet_id,
+            transactionData.data,
+            user.id
+          );
+
+          if (statementId) {
+            await linkTransactionToStatement(insertedData.id, statementId);
+          }
+        }
+      }
 
       toast({
         title: 'Lançamento criado',
@@ -205,6 +229,9 @@ export const useTransactions = (filters?: TransactionFilters) => {
     if (!user) return;
 
     try {
+      // Remover vínculo com fatura antes de deletar
+      await unlinkTransactionFromStatement(id);
+
       // Tentativa: soft delete
       const { error: softError } = await supabase
         .from('transactions')
@@ -333,11 +360,37 @@ export const useTransactions = (filters?: TransactionFilters) => {
         });
       }
 
-      const { error } = await supabase
+      const { data: insertedTransactions, error } = await supabase
         .from('transactions')
-        .insert(transactions);
+        .insert(transactions)
+        .select('id, wallet_id, data, tipo');
 
       if (error) throw error;
+
+      // Se é despesa em cartão de crédito, vincular cada parcela à sua fatura
+      if (insertedTransactions && baseData.wallet_id && baseData.tipo === 'despesa') {
+        // Buscar tipo da carteira
+        const { data: wallet } = await supabase
+          .from('wallets')
+          .select('tipo')
+          .eq('id', baseData.wallet_id)
+          .single();
+
+        if (wallet?.tipo === 'cartao') {
+          // Vincular cada parcela à sua respectiva fatura
+          for (const tx of insertedTransactions) {
+            const statementId = await ensureStatementExists(
+              baseData.wallet_id,
+              tx.data,
+              user.id
+            );
+
+            if (statementId) {
+              await linkTransactionToStatement(tx.id, statementId);
+            }
+          }
+        }
+      }
 
       toast({
         title: 'Parcelamento criado com sucesso',
