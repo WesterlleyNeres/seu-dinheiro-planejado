@@ -66,6 +66,7 @@ export const walletSchema = z.object({
   instituicao: z.string().optional(),
   saldo_inicial: z.number().optional().nullable(),
   limite_credito: z.number().min(0, 'Limite deve ser maior ou igual a zero').optional().nullable(),
+  limite_emergencia: z.number().min(0, 'Limite de emergência deve ser maior ou igual a zero').optional().nullable(),
   dia_fechamento: z.number().min(1).max(31).optional().nullable(),
   dia_vencimento: z.number().min(1).max(31).optional().nullable(),
   ativo: z.boolean().default(true),
