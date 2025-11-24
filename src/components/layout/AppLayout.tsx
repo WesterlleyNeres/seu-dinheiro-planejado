@@ -19,6 +19,7 @@ import {
   Settings,
   ArrowLeftRight,
   Upload,
+  HelpCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +39,7 @@ const navigation = [
   { name: "Investimentos", href: "/investments", icon: LineChart },
   { name: "Relatórios", href: "/reports", icon: TrendingUp },
   { name: "Importar", href: "/import", icon: Upload },
+  { name: "Ajuda (FAQ)", href: "/faq", icon: HelpCircle },
   { name: "Configurações", href: "/settings", icon: Settings },
 ];
 
