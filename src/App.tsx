@@ -21,6 +21,7 @@ import Investments from "./pages/Investments";
 import Transfers from "./pages/Transfers";
 import Reports from "./pages/Reports";
 import Import from "./pages/Import";
+import FAQ from "./pages/FAQ";
 
 const queryClient = new QueryClient();
 
@@ -172,6 +173,18 @@ const App = () => (
                   <ErrorBoundary>
                     <AppLayout>
                       <Import />
+                    </AppLayout>
+                  </ErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/faq"
+              element={
+                <ProtectedRoute>
+                  <ErrorBoundary>
+                    <AppLayout>
+                      <FAQ />
                     </AppLayout>
                   </ErrorBoundary>
                 </ProtectedRoute>
