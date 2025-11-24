@@ -7,6 +7,7 @@ import { useCategories } from '@/hooks/useCategories';
 import { useWallets } from '@/hooks/useWallets';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePeriods } from '@/hooks/usePeriods';
+import { useCardLimits } from '@/hooks/useCardLimits';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -43,7 +44,7 @@ import { formatCurrency } from '@/lib/currency';
 import { toast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, Unlock } from 'lucide-react';
+import { AlertCircle, Unlock, AlertTriangle } from 'lucide-react';
 import { validatePeriodForTransaction } from '@/lib/periodValidation';
 
 interface TransactionFormProps {
@@ -66,6 +67,7 @@ export const TransactionForm = ({
   const { wallets } = useWallets();
   const { user } = useAuth();
   const { reopenPeriod } = usePeriods();
+  const { getLimitInfo } = useCardLimits();
   const [periodValidation, setPeriodValidation] = useState<{
     isValid: boolean;
     message: string;
@@ -136,6 +138,8 @@ export const TransactionForm = ({
   const installmentValue = form.watch('installmentValue');
   const installmentCount = form.watch('installmentCount');
   const totalValue = form.watch('totalValue');
+  const walletWatch = form.watch('wallet_id');
+  const valorWatch = form.watch('valor');
 
   // Sincronizar campo 'valor' com cálculos de parcelamento
   useEffect(() => {
@@ -346,6 +350,30 @@ export const TransactionForm = ({
                 </FormItem>
               )}
             />
+
+            {/* Alerta de Limite de Cartão */}
+            {tipo === 'despesa' && walletWatch && valorWatch > 0 && (() => {
+              const limitInfo = getLimitInfo(walletWatch);
+              if (!limitInfo) return null;
+              
+              const novoTotal = limitInfo.valorUsado + Number(valorWatch || 0);
+              const novoPercentual = (novoTotal / limitInfo.limiteTotal) * 100;
+              
+              if (novoPercentual >= 95) {
+                return (
+                  <Alert variant="destructive" className="col-span-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Atenção: Limite do Cartão</AlertTitle>
+                    <AlertDescription>
+                      Esta compra levará seu cartão a <strong>{novoPercentual.toFixed(1)}%</strong> do limite total.
+                      <br />
+                      Disponível após esta compra: <strong>{formatCurrency(limitInfo.limiteDisponivel - valorWatch)}</strong>
+                    </AlertDescription>
+                  </Alert>
+                );
+              }
+              return null;
+            })()}
 
             {periodValidation && !periodValidation.isValid && (
               <Alert variant="destructive">

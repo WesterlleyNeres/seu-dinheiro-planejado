@@ -41,6 +41,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { useWallets, Wallet } from '@/hooks/useWallets';
 import { useTransfers } from '@/hooks/useTransfers';
+import { useCardLimits } from '@/hooks/useCardLimits';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { walletSchema } from '@/lib/validations';
@@ -48,6 +49,7 @@ import { Plus, Pencil, Trash2, Wallet as WalletIcon, CreditCard, Building } from
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/lib/currency';
 import { StatementsList } from '@/components/statements/StatementsList';
+import { CreditLimitCard } from '@/components/wallets/CreditLimitCard';
 
 export default function Wallets() {
   const [formOpen, setFormOpen] = useState(false);
@@ -58,6 +60,7 @@ export default function Wallets() {
 
   const { wallets, loading, createWallet, updateWallet, deleteWallet } = useWallets();
   const { getWalletBalances } = useTransfers();
+  const { limits, loading: limitsLoading } = useCardLimits();
 
   useEffect(() => {
     loadBalances();
@@ -79,6 +82,7 @@ export default function Wallets() {
       tipo: 'conta' as 'conta' | 'cartao',
       instituicao: '',
       saldo_inicial: undefined,
+      limite_credito: undefined,
       dia_fechamento: undefined,
       dia_vencimento: undefined,
       ativo: true,
@@ -112,6 +116,7 @@ export default function Wallets() {
       tipo: wallet.tipo,
       instituicao: wallet.instituicao || '',
       saldo_inicial: wallet.saldo_inicial || undefined,
+      limite_credito: wallet.limite_credito || undefined,
       dia_fechamento: wallet.dia_fechamento || undefined,
       dia_vencimento: wallet.dia_vencimento || undefined,
       ativo: wallet.ativo,
@@ -126,6 +131,7 @@ export default function Wallets() {
       tipo: 'conta',
       instituicao: '',
       saldo_inicial: undefined,
+      limite_credito: undefined,
       dia_fechamento: undefined,
       dia_vencimento: undefined,
       ativo: true,
@@ -265,10 +271,20 @@ export default function Wallets() {
                                 <p>Fechamento: dia {wallet.dia_fechamento}</p>
                               )}
                               {wallet.dia_vencimento && (
-                                <p>Vencimento: dia {wallet.dia_vencimento}</p>
-                              )}
-                            </div>
-                            <div className="flex gap-2">
+                      <p>Vencimento: dia {wallet.dia_vencimento}</p>
+                    )}
+                  </div>
+                  
+                  {wallet.limite_credito && limits[wallet.id] && (
+                    <CreditLimitCard
+                      limiteTotal={limits[wallet.id].limiteTotal}
+                      valorUsado={limits[wallet.id].valorUsado}
+                      limiteDisponivel={limits[wallet.id].limiteDisponivel}
+                      percentualUso={limits[wallet.id].percentualUso}
+                    />
+                  )}
+                  
+                  <div className="flex gap-2">
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -403,6 +419,30 @@ export default function Wallets() {
 
               {tipoWatch === 'cartao' && (
                 <>
+                  <FormField
+                    control={form.control}
+                    name="limite_credito"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Limite do Cartão (Opcional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="Ex: 5000.00"
+                            {...field}
+                            onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                          />
+                        </FormControl>
+                        <p className="text-xs text-muted-foreground">
+                          Informe o limite total disponível neste cartão de crédito
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
                   <FormField
                     control={form.control}
                     name="dia_fechamento"

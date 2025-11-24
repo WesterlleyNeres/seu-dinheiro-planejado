@@ -872,6 +872,7 @@ export type Database = {
           dia_vencimento: number | null
           id: string
           instituicao: string | null
+          limite_credito: number | null
           nome: string
           saldo_inicial: number | null
           tipo: Database["public"]["Enums"]["wallet_type"]
@@ -886,6 +887,7 @@ export type Database = {
           dia_vencimento?: number | null
           id?: string
           instituicao?: string | null
+          limite_credito?: number | null
           nome: string
           saldo_inicial?: number | null
           tipo: Database["public"]["Enums"]["wallet_type"]
@@ -900,6 +902,7 @@ export type Database = {
           dia_vencimento?: number | null
           id?: string
           instituicao?: string | null
+          limite_credito?: number | null
           nome?: string
           saldo_inicial?: number | null
           tipo?: Database["public"]["Enums"]["wallet_type"]
