@@ -9,6 +9,7 @@ export interface Wallet {
   tipo: 'conta' | 'cartao';
   instituicao?: string;
   saldo_inicial?: number;
+  limite_credito?: number;
   dia_fechamento?: number;
   dia_vencimento?: number;
   ativo: boolean;
