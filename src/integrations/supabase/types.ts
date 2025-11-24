@@ -966,20 +966,6 @@ export type Database = {
           wallet_nome: string | null
           wallet_tipo: Database["public"]["Enums"]["wallet_type"] | null
         }
-        Insert: {
-          saldo?: never
-          user_id?: string | null
-          wallet_id?: string | null
-          wallet_nome?: string | null
-          wallet_tipo?: Database["public"]["Enums"]["wallet_type"] | null
-        }
-        Update: {
-          saldo?: never
-          user_id?: string | null
-          wallet_id?: string | null
-          wallet_nome?: string | null
-          wallet_tipo?: Database["public"]["Enums"]["wallet_type"] | null
-        }
         Relationships: []
       }
     }
