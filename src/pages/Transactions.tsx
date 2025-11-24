@@ -287,13 +287,14 @@ export default function Transactions() {
                 <TableBody>
                   {sortedGroups.map((item, idx) =>
                     item.type === 'group' ? (
-                      <InstallmentGroupRow
-                        key={`group-${item.data.groupId}`}
-                        parcels={item.data.parcels}
-                        onEdit={handleEdit}
-                        onDelete={handleDeleteClick}
-                        onToggleStatus={toggleStatus}
-                      />
+                <InstallmentGroupRow
+                  key={`group-${item.data.groupId}`}
+                  parcels={item.data.parcels}
+                  onEdit={handleEdit}
+                  onDelete={handleDeleteClick}
+                  onDeleteDirect={deleteTransaction}
+                  onToggleStatus={toggleStatus}
+                />
                     ) : (
                       <TableRow key={item.data.id}>
                         <TableCell></TableCell>

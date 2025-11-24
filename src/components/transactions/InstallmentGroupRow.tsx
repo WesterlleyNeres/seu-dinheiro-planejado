@@ -28,6 +28,7 @@ interface InstallmentGroupRowProps {
   parcels: Transaction[];
   onEdit: (transaction: Transaction) => void;
   onDelete: (id: string) => void;
+  onDeleteDirect: (id: string) => Promise<void>;
   onToggleStatus: (id: string, currentStatus: string) => void;
 }
 
@@ -35,6 +36,7 @@ export const InstallmentGroupRow = ({
   parcels,
   onEdit,
   onDelete,
+  onDeleteDirect,
   onToggleStatus,
 }: InstallmentGroupRowProps) => {
   const [expanded, setExpanded] = useState(false);
@@ -52,7 +54,7 @@ export const InstallmentGroupRow = ({
     try {
       // Executar todas as exclusões em paralelo e aguardar completarem
       await Promise.all(
-        parcels.map((parcel) => onDelete(parcel.id))
+        parcels.map((parcel) => onDeleteDirect(parcel.id))
       );
       
       // Fechar dialog apenas APÓS todas as exclusões completarem
