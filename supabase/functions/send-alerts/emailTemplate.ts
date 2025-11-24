@@ -174,7 +174,7 @@ export const generateAlertEmail = (data: AlertData, userEmail: string): string =
         <div class="footer">
           <p>Configure seus alertas em: <a href="${Deno.env.get('APP_URL') || 'http://localhost:8080'}/settings" style="color: #667eea;">Configurações</a></p>
           <p style="margin-top: 10px; font-size: 0.85em; color: #999;">
-            Você está recebendo este email porque habilitou alertas diários no Seu Dinheiro Planejado.
+            Você está recebendo este email porque habilitou alertas diários no FRACTTO FLOW.
           </p>
         </div>
       </div>

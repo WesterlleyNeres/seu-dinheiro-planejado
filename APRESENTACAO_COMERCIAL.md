@@ -1,11 +1,12 @@
-# 💰 Seu Dinheiro Planejado
+# 💰 FRACTTO FLOW
 ## Apresentação Comercial - Versão 1.0
+### Suas finanças, peça por peça.
 
 ---
 
 ## 🎯 Visão Geral do Produto
 
-**Seu Dinheiro Planejado** é uma plataforma completa de gestão financeira pessoal que oferece controle total sobre receitas, despesas, investimentos e metas financeiras. Com uma interface intuitiva e recursos avançados, o sistema permite que usuários tomem decisões financeiras inteligentes baseadas em dados reais e projeções confiáveis.
+**FRACTTO FLOW** é uma plataforma completa de gestão financeira pessoal que oferece controle total sobre receitas, despesas, investimentos e metas financeiras. Com uma interface intuitiva e recursos avançados, o sistema permite que usuários tomem decisões financeiras inteligentes baseadas em dados reais e projeções confiáveis.
 
 ### 💡 Proposta de Valor
 
@@ -320,7 +321,7 @@ Email HTML formatado contendo:
 
 ### Comparativo com Concorrentes
 
-| Funcionalidade | Seu Dinheiro Planejado | Organizze | Mobills | GuiaBolso |
+| Funcionalidade | FRACTTO FLOW | Organizze | Mobills | GuiaBolso |
 |---|:---:|:---:|:---:|:---:|
 | Gestão de Faturas de Cartão (sem duplicação) | ✅ | ⚠️ | ⚠️ | ❌ |
 | Fechamento de Período (auditoria) | ✅ | ❌ | ❌ | ❌ |

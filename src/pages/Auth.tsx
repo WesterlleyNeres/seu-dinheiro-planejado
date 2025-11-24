@@ -84,14 +84,12 @@ const Auth = () => {
         {/* Left side - Branding */}
         <div className="hidden md:block space-y-6">
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
-              <DollarSign className="h-6 w-6 text-primary" />
-            </div>
-            <h1 className="text-3xl font-bold text-primary">Seu Dinheiro Planejado</h1>
+            <img src="/favicon.svg" alt="FRACTTO FLOW" className="h-12 w-12" />
+            <h1 className="text-3xl font-bold text-primary">FRACTTO FLOW</h1>
           </div>
           
           <p className="text-xl text-muted-foreground">
-            Controle total sobre suas finanças pessoais
+            Suas finanças, peça por peça
           </p>
 
           <div className="space-y-4 pt-4">

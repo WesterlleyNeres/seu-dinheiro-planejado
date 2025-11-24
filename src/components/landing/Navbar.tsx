@@ -19,10 +19,8 @@ export const Navbar = () => {
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-xl">$</span>
-            </div>
-            <span className="text-xl font-bold text-foreground">Seu Dinheiro Planejado</span>
+            <img src="/favicon.svg" alt="FRACTTO FLOW" className="h-8 w-8" />
+            <span className="text-xl font-bold text-foreground">FRACTTO FLOW</span>
           </div>
 
           {/* Desktop Navigation */}

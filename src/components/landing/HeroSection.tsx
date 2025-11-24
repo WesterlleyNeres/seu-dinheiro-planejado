@@ -20,18 +20,17 @@ export const HeroSection = () => {
           </div>
           
           <h1 className="text-4xl md:text-6xl font-bold text-foreground leading-tight">
-            Controle Total das Suas{" "}
-            <span className="text-primary">Finanças Pessoais</span>
+            <span className="text-primary">Suas finanças, peça por peça.</span>
           </h1>
           
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Planeje, acompanhe e conquiste seus objetivos financeiros com a plataforma mais completa do Brasil
+            Conecte, planeje e feche o mês. Controle total sobre receitas, despesas, orçamentos e metas financeiras.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
             <Link to="/auth">
               <Button size="lg" className="text-lg px-8 group">
-                Criar Conta Grátis
+                Começar no FLOW
                 <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
               </Button>
             </Link>

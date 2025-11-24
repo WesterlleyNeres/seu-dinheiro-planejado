@@ -1,4 +1,4 @@
-# Welcome to your Lovable project
+# FRACTTO FLOW - Suas Finanças, Peça por Peça
 
 ## Project info
 

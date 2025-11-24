@@ -71,7 +71,7 @@ const Settings = () => {
           <Separator />
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Sistema</span>
-            <span className="font-medium">Seu Dinheiro Planejado</span>
+            <span className="font-medium">FRACTTO FLOW</span>
           </div>
         </CardContent>
       </Card>
