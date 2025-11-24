@@ -78,6 +78,7 @@ export default function Wallets() {
       nome: '',
       tipo: 'conta' as 'conta' | 'cartao',
       instituicao: '',
+      saldo_inicial: undefined,
       dia_fechamento: undefined,
       dia_vencimento: undefined,
       ativo: true,
@@ -110,6 +111,7 @@ export default function Wallets() {
       nome: wallet.nome,
       tipo: wallet.tipo,
       instituicao: wallet.instituicao || '',
+      saldo_inicial: wallet.saldo_inicial || undefined,
       dia_fechamento: wallet.dia_fechamento || undefined,
       dia_vencimento: wallet.dia_vencimento || undefined,
       ativo: wallet.ativo,
@@ -123,6 +125,7 @@ export default function Wallets() {
       nome: '',
       tipo: 'conta',
       instituicao: '',
+      saldo_inicial: undefined,
       dia_fechamento: undefined,
       dia_vencimento: undefined,
       ativo: true,
@@ -371,6 +374,32 @@ export default function Wallets() {
                   </FormItem>
                 )}
               />
+
+              {tipoWatch === 'conta' && (
+                <FormField
+                  control={form.control}
+                  name="saldo_inicial"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Saldo Inicial (Opcional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="Ex: 1500.00"
+                          {...field}
+                          onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                        />
+                      </FormControl>
+                      <p className="text-xs text-muted-foreground">
+                        Informe o saldo que a conta possui hoje. Deixe em branco se for R$ 0,00.
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               {tipoWatch === 'cartao' && (
                 <>

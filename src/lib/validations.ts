@@ -64,6 +64,7 @@ export const walletSchema = z.object({
     required_error: 'Tipo é obrigatório',
   }),
   instituicao: z.string().optional(),
+  saldo_inicial: z.number().optional().nullable(),
   dia_fechamento: z.number().min(1).max(31).optional().nullable(),
   dia_vencimento: z.number().min(1).max(31).optional().nullable(),
   ativo: z.boolean().default(true),
