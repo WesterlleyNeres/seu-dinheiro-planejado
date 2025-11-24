@@ -873,6 +873,7 @@ export type Database = {
           id: string
           instituicao: string | null
           limite_credito: number | null
+          limite_emergencia: number | null
           nome: string
           saldo_inicial: number | null
           tipo: Database["public"]["Enums"]["wallet_type"]
@@ -888,6 +889,7 @@ export type Database = {
           id?: string
           instituicao?: string | null
           limite_credito?: number | null
+          limite_emergencia?: number | null
           nome: string
           saldo_inicial?: number | null
           tipo: Database["public"]["Enums"]["wallet_type"]
@@ -903,6 +905,7 @@ export type Database = {
           id?: string
           instituicao?: string | null
           limite_credito?: number | null
+          limite_emergencia?: number | null
           nome?: string
           saldo_inicial?: number | null
           tipo?: Database["public"]["Enums"]["wallet_type"]

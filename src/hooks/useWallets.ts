@@ -10,6 +10,7 @@ export interface Wallet {
   instituicao?: string;
   saldo_inicial?: number;
   limite_credito?: number;
+  limite_emergencia?: number;
   dia_fechamento?: number;
   dia_vencimento?: number;
   ativo: boolean;

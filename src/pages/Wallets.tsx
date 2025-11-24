@@ -50,6 +50,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/lib/currency';
 import { StatementsList } from '@/components/statements/StatementsList';
 import { CreditLimitCard } from '@/components/wallets/CreditLimitCard';
+import { EmergencyLimitAlert } from '@/components/wallets/EmergencyLimitAlert';
 
 export default function Wallets() {
   const [formOpen, setFormOpen] = useState(false);
@@ -83,6 +84,7 @@ export default function Wallets() {
       instituicao: '',
       saldo_inicial: undefined,
       limite_credito: undefined,
+      limite_emergencia: undefined,
       dia_fechamento: undefined,
       dia_vencimento: undefined,
       ativo: true,
@@ -117,6 +119,7 @@ export default function Wallets() {
       instituicao: wallet.instituicao || '',
       saldo_inicial: wallet.saldo_inicial || undefined,
       limite_credito: wallet.limite_credito || undefined,
+      limite_emergencia: wallet.limite_emergencia || undefined,
       dia_fechamento: wallet.dia_fechamento || undefined,
       dia_vencimento: wallet.dia_vencimento || undefined,
       ativo: wallet.ativo,
@@ -132,6 +135,7 @@ export default function Wallets() {
       instituicao: '',
       saldo_inicial: undefined,
       limite_credito: undefined,
+      limite_emergencia: undefined,
       dia_fechamento: undefined,
       dia_vencimento: undefined,
       ativo: true,
@@ -215,6 +219,20 @@ export default function Wallets() {
                                 {formatCurrency(walletBalances[wallet.id] || 0)}
                               </p>
                             </div>
+                            
+                            {wallet.limite_emergencia && walletBalances[wallet.id] < 0 && (
+                              <EmergencyLimitAlert
+                                saldoAtual={walletBalances[wallet.id]}
+                                limiteEmergencia={wallet.limite_emergencia}
+                              />
+                            )}
+                            
+                            {wallet.limite_emergencia && walletBalances[wallet.id] >= 0 && (
+                              <div className="text-xs text-muted-foreground">
+                                LIS disponível: {formatCurrency(wallet.limite_emergencia)}
+                              </div>
+                            )}
+                            
                             <div className="flex gap-2">
                               <Button
                                 variant="outline"
@@ -392,29 +410,54 @@ export default function Wallets() {
               />
 
               {tipoWatch === 'conta' && (
-                <FormField
-                  control={form.control}
-                  name="saldo_inicial"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Saldo Inicial (Opcional)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          placeholder="Ex: 1500.00"
-                          {...field}
-                          onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
-                        />
-                      </FormControl>
-                      <p className="text-xs text-muted-foreground">
-                        Informe o saldo que a conta possui hoje. Deixe em branco se for R$ 0,00.
-                      </p>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <>
+                  <FormField
+                    control={form.control}
+                    name="saldo_inicial"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Saldo Inicial (Opcional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="Ex: 1500.00"
+                            {...field}
+                            onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                          />
+                        </FormControl>
+                        <p className="text-xs text-muted-foreground">
+                          Informe o saldo que a conta possui hoje. Deixe em branco se for R$ 0,00.
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <FormField
+                    control={form.control}
+                    name="limite_emergencia"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Limite de Emergência - LIS (Opcional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="Ex: 1000.00"
+                            {...field}
+                            onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                          />
+                        </FormControl>
+                        <p className="text-xs text-muted-foreground">
+                          Cheque especial disponibilizado pelo banco para emergências
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </>
               )}
 
               {tipoWatch === 'cartao' && (
