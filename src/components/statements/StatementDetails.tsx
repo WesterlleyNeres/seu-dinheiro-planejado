@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { formatCurrency } from '@/lib/currency';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Separator } from '@/components/ui/separator';
 import { useCategories } from '@/hooks/useCategories';
@@ -65,19 +65,19 @@ export const StatementDetails = ({
             <div>
               <p className="text-sm text-muted-foreground">Abertura</p>
               <p className="font-medium">
-                {format(new Date(statement.abre), 'dd/MM/yyyy')}
+                {format(parseISO(statement.abre), 'dd/MM/yyyy')}
               </p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Fechamento</p>
               <p className="font-medium">
-                {format(new Date(statement.fecha), 'dd/MM/yyyy')}
+                {format(parseISO(statement.fecha), 'dd/MM/yyyy')}
               </p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Vencimento</p>
               <p className="font-medium">
-                {format(new Date(statement.vence), 'dd/MM/yyyy')}
+                {format(parseISO(statement.vence), 'dd/MM/yyyy')}
               </p>
             </div>
           </div>
@@ -99,7 +99,7 @@ export const StatementDetails = ({
                       <p className="font-medium">{tx.descricao}</p>
                       <div className="flex items-center gap-2 mt-1">
                         <p className="text-sm text-muted-foreground">
-                          {format(new Date(tx.data), "d 'de' MMMM", { locale: ptBR })}
+                          {format(parseISO(tx.data), "d 'de' MMMM", { locale: ptBR })}
                         </p>
                         <Select
                           value={tx.category_id}
