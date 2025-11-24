@@ -440,6 +440,36 @@ export type Database = {
           },
         ]
       }
+      leads: {
+        Row: {
+          created_at: string | null
+          email: string
+          id: string
+          mensagem: string | null
+          nome: string
+          origem: string | null
+          telefone: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          id?: string
+          mensagem?: string | null
+          nome: string
+          origem?: string | null
+          telefone?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          id?: string
+          mensagem?: string | null
+          nome?: string
+          origem?: string | null
+          telefone?: string | null
+        }
+        Relationships: []
+      }
       payment_methods: {
         Row: {
           created_at: string

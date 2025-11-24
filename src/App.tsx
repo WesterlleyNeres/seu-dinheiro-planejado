@@ -2,11 +2,12 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import Landing from "./pages/Landing";
 import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
@@ -23,6 +24,25 @@ import Reports from "./pages/Reports";
 import Import from "./pages/Import";
 import FAQ from "./pages/FAQ";
 
+// Component to redirect logged users from landing to dashboard
+const LandingOrDashboard = () => {
+  const { user, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+  
+  if (user) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  return <Landing />;
+};
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -33,19 +53,20 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
+            <Route path="/" element={<LandingOrDashboard />} />
             <Route path="/auth" element={<Auth />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <ErrorBoundary>
-                  <AppLayout>
-                    <Dashboard />
-                  </AppLayout>
-                </ErrorBoundary>
-              </ProtectedRoute>
-            }
-          />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <ErrorBoundary>
+                    <AppLayout>
+                      <Dashboard />
+                    </AppLayout>
+                  </ErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/transactions"
               element={
