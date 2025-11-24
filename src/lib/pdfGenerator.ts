@@ -79,7 +79,7 @@ export const generateMonthlyReport = (data: MonthlyReportData) => {
   const pageHeight = doc.internal.pageSize.height;
   doc.setFontSize(8);
   doc.setTextColor(150);
-  doc.text('Gerado por Seu Dinheiro Planejado vNext', 20, pageHeight - 10);
+  doc.text('Gerado por FRACTTO FLOW', 20, pageHeight - 10);
   
   // Save file
   doc.save(`relatorio-${data.period}.pdf`);

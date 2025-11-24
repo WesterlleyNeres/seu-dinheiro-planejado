@@ -10,13 +10,11 @@ export const Footer = () => {
           {/* Brand */}
           <div className="space-y-4">
             <div className="flex items-center space-x-2">
-              <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-xl">$</span>
-              </div>
-              <span className="text-lg font-bold text-foreground">Seu Dinheiro</span>
+              <img src="/favicon.svg" alt="FRACTTO FLOW" className="h-8 w-8" />
+              <span className="text-lg font-bold text-foreground">FRACTTO FLOW</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              A plataforma mais completa de gestão financeira pessoal do Brasil.
+              Suas finanças, peça por peça. A plataforma mais completa de gestão financeira pessoal.
             </p>
           </div>
 
@@ -105,7 +103,7 @@ export const Footer = () => {
         <div className="border-t border-border pt-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-sm text-muted-foreground">
-              © {currentYear} Seu Dinheiro Planejado. Todos os direitos reservados.
+              © {currentYear} FRACTTO FLOW. Todos os direitos reservados.
             </p>
             <div className="flex items-center gap-4">
               <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">

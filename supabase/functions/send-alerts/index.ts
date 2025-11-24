@@ -68,9 +68,9 @@ const handler = async (req: Request): Promise<Response> => {
       const emailHtml = generateAlertEmail(alertData, user.user.email);
       
       await resend.emails.send({
-        from: "Seu Dinheiro Planejado <onboarding@resend.dev>",
+        from: "FRACTTO FLOW <onboarding@resend.dev>",
         to: [user.user.email],
-        subject: "☀️ Seu Resumo Financeiro Diário [TESTE]",
+        subject: "☀️ Seu Resumo Financeiro - FRACTTO FLOW [TESTE]",
         html: emailHtml,
       });
 
@@ -134,9 +134,9 @@ const handler = async (req: Request): Promise<Response> => {
         const emailHtml = generateAlertEmail(alertData, user.user.email);
         
         await resend.emails.send({
-          from: "Seu Dinheiro Planejado <onboarding@resend.dev>",
+          from: "FRACTTO FLOW <onboarding@resend.dev>",
           to: [user.user.email],
-          subject: "☀️ Seu Resumo Financeiro Diário",
+          subject: "☀️ Seu Resumo Financeiro - FRACTTO FLOW",
           html: emailHtml,
         });
 

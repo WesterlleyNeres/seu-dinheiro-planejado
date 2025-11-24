@@ -63,12 +63,10 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
         <div className="flex h-full flex-col">
           {/* Logo */}
           <div className="flex h-16 items-center gap-3 border-b border-border px-6">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <DollarSign className="h-5 w-5 text-primary" />
-            </div>
+            <img src="/favicon.svg" alt="FRACTTO FLOW" className="h-10 w-10" />
             <div className="flex flex-col">
-              <span className="text-sm font-semibold leading-tight">Seu Dinheiro</span>
-              <span className="text-xs text-muted-foreground">Planejado</span>
+              <span className="text-sm font-semibold leading-tight">FRACTTO FLOW</span>
+              <span className="text-xs text-muted-foreground">Suas finanças, peça por peça</span>
             </div>
           </div>
 
