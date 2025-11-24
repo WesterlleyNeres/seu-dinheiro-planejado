@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Calendar, CreditCard, Eye } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface StatementCardProps {
@@ -67,11 +67,11 @@ export const StatementCard = ({
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
             <div className="flex items-center gap-1">
               <Calendar className="h-3 w-3" />
-              <span>Fecha: {format(new Date(statement.fecha), 'dd/MM/yyyy')}</span>
+              <span>Fecha: {format(parseISO(statement.fecha), 'dd/MM/yyyy')}</span>
             </div>
             <div className="flex items-center gap-1">
               <Calendar className="h-3 w-3" />
-              <span>Vence: {format(new Date(statement.vence), 'dd/MM/yyyy')}</span>
+              <span>Vence: {format(parseISO(statement.vence), 'dd/MM/yyyy')}</span>
             </div>
           </div>
 
