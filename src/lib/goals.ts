@@ -58,3 +58,18 @@ export const formatDaysRemaining = (days: number | null): string => {
   if (days === 1) return 'Expira amanhã';
   return `${days} dias restantes`;
 };
+
+export const calculateDailyContribution = (
+  restante: number,
+  diasRestantes: number | null
+): { diaria: number | null; mensal: number | null } => {
+  // Sem prazo, meta já atingida ou prazo expirado
+  if (diasRestantes === null || diasRestantes <= 0 || restante <= 0) {
+    return { diaria: null, mensal: null };
+  }
+  
+  const diaria = restante / diasRestantes;
+  const mensal = diaria * 30;
+  
+  return { diaria, mensal };
+};
