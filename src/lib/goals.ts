@@ -69,7 +69,8 @@ export const calculateDailyContribution = (
   }
   
   const diaria = restante / diasRestantes;
-  const mensal = diaria * 30;
+  // Se faltam menos de 30 dias, o valor mensal é o restante (cabe no mês)
+  const mensal = diasRestantes >= 30 ? diaria * 30 : restante;
   
   return { diaria, mensal };
 };
