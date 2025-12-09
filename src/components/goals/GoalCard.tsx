@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { formatCurrency } from '@/lib/currency';
-import { getGoalProgressColor, getGoalStatusBadge, formatDaysRemaining, calculateGoalStatus, calculateDailyContribution } from '@/lib/goals';
+import { getGoalProgressColor, getGoalStatusBadge, formatDaysRemaining, calculateGoalStatus, calculateDailyContribution, calculatePace, getPaceIndicator } from '@/lib/goals';
 import { Pencil, Trash2, Plus, ChevronDown, ChevronUp, X, Target } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -44,6 +44,8 @@ export const GoalCard = ({
   const status = calculateGoalStatus(goal.valor_meta, goal.economizado || 0, goal.prazo);
   const statusBadge = getGoalStatusBadge(status);
   const contribuicaoSugerida = calculateDailyContribution(goal.restante || 0, goal.diasRestantes || null);
+  const pace = calculatePace(goal.valor_meta, goal.economizado || 0, goal.prazo, goal.created_at);
+  const paceIndicator = getPaceIndicator(pace);
 
   const handleDeleteContribution = (contribId: string) => {
     setContribToDelete(contribId);
@@ -155,6 +157,25 @@ export const GoalCard = ({
                   <span className="text-muted-foreground text-xs">Por mês</span>
                   <span className="font-semibold">{formatCurrency(contribuicaoSugerida.mensal!)}</span>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {pace && paceIndicator && (
+            <div className={`p-3 rounded-lg ${paceIndicator.bgColor} border space-y-2`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{paceIndicator.icon}</span>
+                  <span className={`font-medium ${paceIndicator.color}`}>
+                    {paceIndicator.label}
+                  </span>
+                </div>
+                <span className={`text-sm font-bold ${paceIndicator.color}`}>
+                  {pace.differencePercent > 0 ? '+' : ''}{pace.differencePercent}%
+                </span>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Esperado: {pace.expectedPercent}% | Real: {pace.actualPercent}%
               </div>
             </div>
           )}
