@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { formatCurrency } from '@/lib/currency';
-import { getGoalProgressColor, getGoalStatusBadge, formatDaysRemaining, calculateGoalStatus } from '@/lib/goals';
-import { Pencil, Trash2, Plus, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { getGoalProgressColor, getGoalStatusBadge, formatDaysRemaining, calculateGoalStatus, calculateDailyContribution } from '@/lib/goals';
+import { Pencil, Trash2, Plus, ChevronDown, ChevronUp, X, Target } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -43,6 +43,7 @@ export const GoalCard = ({
   const progressColor = getGoalProgressColor(percentual);
   const status = calculateGoalStatus(goal.valor_meta, goal.economizado || 0, goal.prazo);
   const statusBadge = getGoalStatusBadge(status);
+  const contribuicaoSugerida = calculateDailyContribution(goal.restante || 0, goal.diasRestantes || null);
 
   const handleDeleteContribution = (contribId: string) => {
     setContribToDelete(contribId);
@@ -136,6 +137,25 @@ export const GoalCard = ({
                 {format(new Date(goal.prazo), "dd/MM/yyyy", { locale: ptBR })}
                 {' '}({formatDaysRemaining(goal.diasRestantes || null)})
               </span>
+            </div>
+          )}
+
+          {contribuicaoSugerida.diaria !== null && (
+            <div className="p-3 rounded-lg bg-primary/5 border border-primary/10 space-y-1.5">
+              <div className="flex items-center gap-1.5 text-sm font-medium text-primary">
+                <Target className="h-4 w-4" />
+                <span>Contribuição Sugerida</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground text-xs">Por dia</span>
+                  <span className="font-semibold">{formatCurrency(contribuicaoSugerida.diaria)}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-muted-foreground text-xs">Por mês</span>
+                  <span className="font-semibold">{formatCurrency(contribuicaoSugerida.mensal!)}</span>
+                </div>
+              </div>
             </div>
           )}
 
