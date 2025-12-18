@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { useAutoStatement } from './useAutoStatement';
 
 export interface Transaction {
@@ -122,7 +122,7 @@ export const useTransactions = (filters?: TransactionFilters) => {
     if (!user) return;
 
     try {
-      const mesReferencia = format(new Date(data.data), 'yyyy-MM');
+      const mesReferencia = format(parseISO(data.data), 'yyyy-MM');
       
       // Remover campos que não existem na tabela
       const { isInstallment, installmentType, installmentCount, installmentValue, totalValue, ...transactionData } = data as any;
@@ -189,7 +189,7 @@ export const useTransactions = (filters?: TransactionFilters) => {
       const { isInstallment, installmentType, installmentCount, installmentValue, totalValue, ...transactionData } = data as any;
       
       if (transactionData.data) {
-        transactionData.mes_referencia = format(new Date(transactionData.data), 'yyyy-MM');
+        transactionData.mes_referencia = format(parseISO(transactionData.data), 'yyyy-MM');
       }
 
       const { error } = await supabase

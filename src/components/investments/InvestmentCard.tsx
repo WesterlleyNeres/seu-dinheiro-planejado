@@ -4,7 +4,7 @@ import { Edit, Plus, Trash2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
 import { Investment } from '@/hooks/useInvestments';
 import { Badge } from '@/components/ui/badge';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface InvestmentCardProps {
@@ -121,7 +121,7 @@ export const InvestmentCard = ({
                   className="flex justify-between items-center text-sm"
                 >
                   <span className="text-muted-foreground">
-                    {format(new Date(contrib.data), 'dd/MM/yyyy', { locale: ptBR })}
+                    {format(parseISO(contrib.data), 'dd/MM/yyyy', { locale: ptBR })}
                   </span>
                   <span className="font-medium">
                     {formatCurrency(Number(contrib.valor))}
