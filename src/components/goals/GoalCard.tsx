@@ -7,7 +7,7 @@ import { Progress } from '@/components/ui/progress';
 import { formatCurrency } from '@/lib/currency';
 import { getGoalProgressColor, getGoalStatusBadge, formatDaysRemaining, calculateGoalStatus, calculateDailyContribution, calculatePace, getPaceIndicator } from '@/lib/goals';
 import { Pencil, Trash2, Plus, ChevronDown, ChevronUp, X, Target } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   AlertDialog,
@@ -136,7 +136,7 @@ export const GoalCard = ({
             <div className="flex items-center justify-between text-sm pt-2 border-t">
               <span className="text-muted-foreground">Prazo:</span>
               <span className="text-sm">
-                {format(new Date(goal.prazo), "dd/MM/yyyy", { locale: ptBR })}
+                {format(parseISO(goal.prazo), "dd/MM/yyyy", { locale: ptBR })}
                 {' '}({formatDaysRemaining(goal.diasRestantes || null)})
               </span>
             </div>
@@ -185,7 +185,7 @@ export const GoalCard = ({
               <span className="text-muted-foreground">Última contrib.:</span>
               <span className="text-sm">
                 {formatCurrency(Number(goal.ultimaContribuicao.valor))} em{' '}
-                {format(new Date(goal.ultimaContribuicao.data), "dd/MM/yyyy", { locale: ptBR })}
+                {format(parseISO(goal.ultimaContribuicao.data), "dd/MM/yyyy", { locale: ptBR })}
               </span>
             </div>
           )}
@@ -217,7 +217,7 @@ export const GoalCard = ({
                     >
                       <div className="flex items-center gap-2">
                         <span className="text-muted-foreground">
-                          {format(new Date(contrib.data), "dd/MM/yyyy", { locale: ptBR })}
+                          {format(parseISO(contrib.data), "dd/MM/yyyy", { locale: ptBR })}
                         </span>
                         <span className="font-medium">
                           {formatCurrency(Number(contrib.valor))}

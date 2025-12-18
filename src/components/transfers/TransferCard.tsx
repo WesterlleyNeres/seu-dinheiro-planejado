@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, Trash2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useWallets } from '@/hooks/useWallets';
 
@@ -35,7 +35,7 @@ export const TransferCard = ({ transfer, onDelete }: TransferCardProps) => {
                   {formatCurrency(transfer.valor)}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {format(new Date(transfer.data), "d 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                  {format(parseISO(transfer.data), "d 'de' MMMM 'de' yyyy", { locale: ptBR })}
                 </p>
               </div>
             </div>

@@ -35,7 +35,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { format, addMonths } from 'date-fns';
+import { format, addMonths, parseISO } from 'date-fns';
 import { PaymentMethodSelect } from '@/components/forms/PaymentMethodSelect';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
@@ -609,9 +609,9 @@ export const TransactionForm = ({
 
                   {form.watch('installmentCount') && form.watch('data') && (
                     <div className="text-xs text-muted-foreground bg-blue-50 dark:bg-blue-950 p-2 rounded-lg">
-                      <p>📅 Vencimento a partir de <strong>{format(new Date(form.watch('data')), 'dd/MM/yyyy')}</strong></p>
+                      <p>📅 Vencimento a partir de <strong>{format(parseISO(form.watch('data')), 'dd/MM/yyyy')}</strong></p>
                       <p className="mt-0.5">Última parcela: <strong>{format(
-                        addMonths(new Date(form.watch('data')), (form.watch('installmentCount') || 1) - 1),
+                        addMonths(parseISO(form.watch('data')), (form.watch('installmentCount') || 1) - 1),
                         'dd/MM/yyyy'
                       )}</strong></p>
                     </div>
