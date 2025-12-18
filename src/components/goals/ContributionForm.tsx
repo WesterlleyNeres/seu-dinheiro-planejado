@@ -22,7 +22,7 @@ import { Button } from '@/components/ui/button';
 import { CurrencyInput } from '@/components/forms/CurrencyInput';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -112,7 +112,7 @@ export const ContributionForm = ({
                           )}
                         >
                           {field.value ? (
-                            format(new Date(field.value), 'dd/MM/yyyy', { locale: ptBR })
+                            format(parseISO(field.value), 'dd/MM/yyyy', { locale: ptBR })
                           ) : (
                             <span>Selecione a data</span>
                           )}
@@ -123,7 +123,7 @@ export const ContributionForm = ({
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar
                         mode="single"
-                        selected={field.value ? new Date(field.value) : undefined}
+                        selected={field.value ? parseISO(field.value) : undefined}
                         onSelect={(date) => {
                           field.onChange(date ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'));
                         }}
