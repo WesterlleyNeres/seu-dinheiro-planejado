@@ -1,5 +1,6 @@
 import { ReactNode, useEffect } from "react";
 import { JarvisSidebar } from "@/components/jarvis/JarvisSidebar";
+import { TenantSwitcher } from "@/components/tenant/TenantSwitcher";
 import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -37,13 +38,16 @@ export const JarvisLayout = ({ children }: JarvisLayoutProps) => {
       <div className="flex-1 pl-16">
         {/* Header */}
         <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-sm">
-          <div className="px-6 py-4">
-            <h1 className="text-lg font-medium text-foreground">
-              {greeting()}, <span className="text-primary">{userName}</span>
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {format(new Date(), "EEEE, d 'de' MMMM", { locale: ptBR })}
-            </p>
+          <div className="px-6 py-4 flex items-center justify-between">
+            <div>
+              <h1 className="text-lg font-medium text-foreground">
+                {greeting()}, <span className="text-primary">{userName}</span>
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                {format(new Date(), "EEEE, d 'de' MMMM", { locale: ptBR })}
+              </p>
+            </div>
+            <TenantSwitcher variant="header" />
           </div>
         </header>
 

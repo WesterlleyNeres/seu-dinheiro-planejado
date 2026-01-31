@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { QuickPeriodActions } from "@/components/periods/QuickPeriodActions";
+import { TenantSwitcher } from "@/components/tenant/TenantSwitcher";
 import { usePeriods } from "@/hooks/usePeriods";
 import {
   LayoutDashboard,
@@ -12,7 +13,6 @@ import {
   Target,
   TrendingUp,
   LogOut,
-  DollarSign,
   Tag,
   Wallet,
   LineChart,
@@ -79,6 +79,11 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
               <span className="text-sm font-semibold leading-tight">FRACTTO FLOW</span>
               <span className="text-xs text-muted-foreground">Suas finanças, peça por peça</span>
             </div>
+          </div>
+
+          {/* Tenant Switcher */}
+          <div className="border-b border-border px-4 py-2">
+            <TenantSwitcher variant="sidebar" />
           </div>
 
           {/* Quick Period Actions */}
