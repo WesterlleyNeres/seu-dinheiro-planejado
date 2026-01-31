@@ -20,6 +20,10 @@ import {
   ArrowLeftRight,
   Upload,
   HelpCircle,
+  Brain,
+  CheckSquare,
+  CalendarDays,
+  Repeat,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +32,7 @@ interface AppLayoutProps {
 }
 
 const navigation = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Lançamentos", href: "/transactions", icon: Receipt },
   { name: "Categorias", href: "/categories", icon: Tag },
   { name: "Carteiras", href: "/wallets", icon: Wallet },
@@ -41,6 +45,13 @@ const navigation = [
   { name: "Importar", href: "/import", icon: Upload },
   { name: "Ajuda (FAQ)", href: "/faq", icon: HelpCircle },
   { name: "Configurações", href: "/settings", icon: Settings },
+];
+
+const jarvisNavigation = [
+  { name: "JARVIS", href: "/jarvis", icon: Brain },
+  { name: "Tarefas", href: "/jarvis/tasks", icon: CheckSquare },
+  { name: "Agenda", href: "/jarvis/calendar", icon: CalendarDays },
+  { name: "Hábitos", href: "/jarvis/habits", icon: Repeat },
 ];
 
 export const AppLayout = ({ children }: AppLayoutProps) => {
@@ -81,7 +92,39 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 space-y-1 p-4">
+          <nav className="flex-1 space-y-1 p-4 overflow-y-auto">
+            {/* JARVIS Section */}
+            <div className="mb-4">
+              <p className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Assistente
+              </p>
+              {jarvisNavigation.map((item) => {
+                const isActive = location.pathname === item.href;
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    )}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    {item.name}
+                  </Link>
+                );
+              })}
+            </div>
+
+            {/* Divider */}
+            <div className="border-t border-border my-3" />
+
+            {/* Finanças Section */}
+            <p className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Finanças
+            </p>
             {navigation.map((item) => {
               const isActive = location.pathname === item.href;
               return (
@@ -89,13 +132,13 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
                   key={item.name}
                   to={item.href}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                     isActive
                       ? "bg-primary text-primary-foreground"
                       : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   )}
                 >
-                  <item.icon className="h-5 w-5" />
+                  <item.icon className="h-4 w-4" />
                   {item.name}
                 </Link>
               );

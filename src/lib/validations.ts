@@ -204,3 +204,33 @@ export const recurringTransactionSchema = z.object({
   message: 'Data de término deve ser após data de início',
   path: ['data_fim'],
 });
+
+// ==========================================
+// JARVIS SCHEMAS
+// ==========================================
+
+export const jarvisTaskSchema = z.object({
+  title: z.string().min(1, 'Título é obrigatório').max(200),
+  description: z.string().max(1000).optional(),
+  priority: z.enum(['low', 'medium', 'high']).default('medium'),
+  due_at: z.string().optional().nullable(),
+  tags: z.array(z.string()).default([]),
+});
+
+export const jarvisEventSchema = z.object({
+  title: z.string().min(1, 'Título é obrigatório').max(200),
+  description: z.string().max(1000).optional(),
+  location: z.string().max(200).optional(),
+  start_at: z.string().min(1, 'Data de início é obrigatória'),
+  end_at: z.string().optional().nullable(),
+  all_day: z.boolean().default(false),
+  priority: z.enum(['low', 'medium', 'high']).default('medium'),
+});
+
+export const jarvisHabitSchema = z.object({
+  title: z.string().min(1, 'Título é obrigatório').max(100),
+  cadence: z.enum(['daily', 'weekly', 'monthly']).default('weekly'),
+  times_per_cadence: z.number().min(1).max(30).default(3),
+  target_type: z.enum(['count', 'duration']).default('count'),
+  target_value: z.number().min(1).default(1),
+});
