@@ -1,284 +1,266 @@
 
-# Plano: Implementar Fluxo de Bootstrap Multi-Tenant
+# Plano: Criar Estrutura de App com Layout Fixo
 
-## Visão Geral
+## Visao Geral
 
-Aprimorar o sistema multi-tenant para:
-- Suportar usuários com múltiplos workspaces
-- Criar tenant automático com nome personalizado
-- Permitir troca de tenant ativa sem logout
-- Persistir seleção entre sessões
+Unificar a estrutura do app com:
+- **Sidebar fixa** para navegacao principal
+- **Topbar unificada** com Tenant Switcher e avatar
+- **Skeleton loading** durante carregamento do tenant
+- **Consistencia** entre layouts JARVIS e Financas
 
 ---
 
-## Arquitetura da Solução
+## Analise do Estado Atual
+
+| Componente | Existe | Observacao |
+|------------|--------|------------|
+| TenantContext | Sim | Completo com switchTenant e invalidateQueries |
+| TenantSwitcher | Sim | Funciona como dropdown |
+| AppLayout | Sim | Sidebar + conteudo, sem topbar separada |
+| JarvisLayout | Sim | Sidebar iconica + header com saudacao |
+| Avatar UI | Sim | Componente Radix disponivel |
+| Skeleton | Sim | Componente basico disponivel |
+
+---
+
+## Arquitetura Proposta
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           Fluxo de Autenticação                          │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│   Login → AuthContext.user → TenantContext.fetchUserTenants()           │
-│                                   │                                      │
-│                                   ▼                                      │
-│                    ┌──────────────────────────────┐                     │
-│                    │  Usuário tem memberships?    │                     │
-│                    └──────────────────────────────┘                     │
-│                              │                                          │
-│               ┌──────────────┴──────────────┐                          │
-│               │                             │                           │
-│               ▼ Sim                         ▼ Não                       │
-│   ┌───────────────────────┐    ┌───────────────────────────────────┐   │
-│   │ Carregar todos os     │    │ Criar tenant:                     │   │
-│   │ tenants via JOIN      │    │ name = "Pessoal - {firstName}"    │   │
-│   └───────────────────────┘    │ created_by = auth.uid()           │   │
-│               │                │ + tenant_member role='owner'       │   │
-│               ▼                └───────────────────────────────────┘   │
-│   ┌───────────────────────┐                     │                       │
-│   │ Restaurar último      │                     │                       │
-│   │ tenant do localStorage│◄────────────────────┘                       │
-│   │ ou usar o primeiro    │                                             │
-│   └───────────────────────┘                                             │
-│               │                                                          │
-│               ▼                                                          │
-│   ┌───────────────────────────────────────────────────────────────┐    │
-│   │                    TenantContext.activeTenant                  │    │
-│   │                    TenantContext.allTenants[]                  │    │
-│   │                    TenantContext.switchTenant(id)              │    │
-│   └───────────────────────────────────────────────────────────────┘    │
-│               │                                                          │
-│               ▼                                                          │
-│   ┌───────────────────────────────────────────────────────────────┐    │
-│   │  Se allTenants.length > 1 → Exibir TenantSwitcher no header   │    │
-│   └───────────────────────────────────────────────────────────────┘    │
-│                                                                          │
-└─────────────────────────────────────────────────────────────────────────┘
++------------------------------------------------------------------+
+|                           TOPBAR (h-14)                          |
+|  [Menu] [Logo/Breadcrumb]                   [Tenant] [Avatar]    |
++----------+-------------------------------------------------------+
+|          |                                                       |
+|  SIDEBAR |                   CONTEUDO                            |
+|  (w-64)  |                                                       |
+|          |                                                       |
+|  - Home  |                                                       |
+|  - Tasks |                                                       |
+|  - Agenda|                                                       |
+|  - ...   |                                                       |
+|          |                                                       |
++----------+-------------------------------------------------------+
 ```
 
 ---
 
-## Parte 1: Atualizar TenantContext.tsx
+## Parte 1: Criar Componente Topbar
 
-### 1.1 Novo Estado
+### Novo arquivo: `src/components/layout/Topbar.tsx`
+
+Conteudo:
+- **Lado esquerdo**: Logo ou titulo da pagina atual
+- **Lado direito**: TenantSwitcher + Avatar do usuario com menu
+- Menu do avatar: Ver perfil, Configuracoes, Sair
 
 ```typescript
-interface TenantContextType {
-  // Estado atual
-  tenant: Tenant | null;           // Tenant ativo
-  tenantId: string | null;         // ID do tenant ativo
-  membership: TenantMember | null; // Membership ativa
-  loading: boolean;
-  error: string | null;
+interface TopbarProps {
+  title?: string;
+  showLogo?: boolean;
+}
+
+export const Topbar = ({ title, showLogo = false }: TopbarProps) => {
+  const { user, signOut } = useAuth();
+  const { loading: tenantLoading } = useTenant();
   
-  // Novos campos
-  allTenants: Tenant[];            // Todos os tenants do usuário
-  allMemberships: TenantMember[];  // Todas as memberships
-  switchTenant: (tenantId: string) => void;  // Trocar tenant
-  refetch: () => Promise<void>;
-}
-```
-
-### 1.2 Nova Lógica de Bootstrap
-
-```typescript
-const fetchUserTenants = async () => {
-  if (!user) {
-    resetState();
-    return;
-  }
-
-  // 1. Buscar TODAS as memberships do usuário
-  const { data: memberships } = await supabase
-    .from("tenant_members")
-    .select("*, tenants(*)")
-    .eq("user_id", user.id);
-
-  if (memberships && memberships.length > 0) {
-    // 2. Extrair tenants das memberships
-    const tenants = memberships.map(m => m.tenants);
-    
-    // 3. Restaurar último tenant do localStorage ou usar primeiro
-    const savedTenantId = localStorage.getItem(`ff_active_tenant_${user.id}`);
-    const activeTenant = tenants.find(t => t.id === savedTenantId) || tenants[0];
-    
-    setAllTenants(tenants);
-    setAllMemberships(memberships);
-    setActiveTenant(activeTenant);
-  } else {
-    // 4. Criar novo tenant com nome personalizado
-    const firstName = extractFirstName(user);
-    const tenantName = `Pessoal - ${firstName}`;
-    
-    const { data: newTenant } = await supabase
-      .from("tenants")
-      .insert({ name: tenantName, created_by: user.id })
-      .select()
-      .single();
-    
-    // 5. Adicionar como owner
-    await supabase
-      .from("tenant_members")
-      .insert({ tenant_id: newTenant.id, user_id: user.id, role: "owner" });
-    
-    setAllTenants([newTenant]);
-    setActiveTenant(newTenant);
-  }
-};
-
-// Helper para extrair primeiro nome
-const extractFirstName = (user: User): string => {
-  const fullName = user.user_metadata?.full_name;
-  if (fullName) return fullName.split(" ")[0];
-  return user.email?.split("@")[0] || "Usuário";
-};
-```
-
-### 1.3 Função switchTenant
-
-```typescript
-const switchTenant = (tenantId: string) => {
-  const newTenant = allTenants.find(t => t.id === tenantId);
-  if (newTenant && user) {
-    setTenant(newTenant);
-    setMembership(allMemberships.find(m => m.tenant_id === tenantId) || null);
-    localStorage.setItem(`ff_active_tenant_${user.id}`, tenantId);
-    
-    // Invalidar queries do React Query para recarregar dados
-    queryClient.invalidateQueries();
-  }
-};
-```
-
----
-
-## Parte 2: Criar Componente TenantSwitcher
-
-### 2.1 Novo Arquivo: `src/components/tenant/TenantSwitcher.tsx`
-
-```typescript
-// Dropdown que mostra todos os tenants disponíveis
-// Só renderiza se houver mais de 1 tenant
-// Integra com TenantContext.switchTenant()
-
-interface TenantSwitcherProps {
-  variant?: "header" | "sidebar"; // Estilos diferentes por contexto
-}
-```
-
-### 2.2 Estrutura do Componente
-
-```text
-┌────────────────────────────────────┐
-│  📦 Pessoal - West            ▼   │  ← Botão dropdown
-└────────────────────────────────────┘
-           │
-           ▼
-┌────────────────────────────────────┐
-│ ✓ Pessoal - West                   │  ← Item ativo (checkmark)
-│   Casa - Família Silva             │  ← Outro tenant
-│   ─────────────────────────────    │
-│   + Criar novo espaço              │  ← Ação futura (opcional)
-└────────────────────────────────────┘
-```
-
-### 2.3 Código Base
-
-```typescript
-export const TenantSwitcher = ({ variant = "header" }: TenantSwitcherProps) => {
-  const { tenant, allTenants, switchTenant, loading } = useTenant();
-
-  // Não renderizar se só tiver 1 tenant
-  if (allTenants.length <= 1) return null;
-
+  // Extrair iniciais do nome ou email
+  const initials = getInitials(user?.email || "");
+  
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="gap-2">
-          <Building2 className="h-4 w-4" />
-          <span className="truncate max-w-[150px]">{tenant?.name}</span>
-          <ChevronDown className="h-4 w-4 opacity-50" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56">
-        <DropdownMenuLabel>Seus espaços</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {allTenants.map((t) => (
-          <DropdownMenuItem
-            key={t.id}
-            onClick={() => switchTenant(t.id)}
-            className="gap-2"
-          >
-            {t.id === tenant?.id && <Check className="h-4 w-4" />}
-            <span className={t.id !== tenant?.id ? "ml-6" : ""}>
-              {t.name}
-            </span>
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <header className="h-14 border-b border-border bg-background/95 backdrop-blur">
+      <div className="flex h-full items-center justify-between px-4">
+        {/* Lado esquerdo */}
+        <div className="flex items-center gap-3">
+          {showLogo && <Logo />}
+          {title && <h1 className="text-lg font-semibold">{title}</h1>}
+        </div>
+        
+        {/* Lado direito */}
+        <div className="flex items-center gap-3">
+          <TenantSwitcher variant="header" />
+          
+          {/* Avatar com menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="rounded-full">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback>{initials}</AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>{user?.email}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link to="/settings">Configuracoes</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={signOut}>
+                Sair
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    </header>
   );
 };
 ```
 
 ---
 
-## Parte 3: Integrar TenantSwitcher nos Layouts
+## Parte 2: Criar Componente Sidebar Unificada
 
-### 3.1 Atualizar JarvisLayout.tsx
+### Novo arquivo: `src/components/layout/Sidebar.tsx`
 
-Adicionar TenantSwitcher no header ao lado da saudação:
+Sidebar reutilizavel com secoes:
+- **JARVIS** (Assistente)
+- **Financas**
 
-```typescript
-<header className="...">
-  <div className="flex items-center justify-between">
-    <div>
-      <h1>{greeting()}, {userName}</h1>
-      <p>{formatDate()}</p>
-    </div>
-    
-    {/* Novo: Tenant Switcher */}
-    <TenantSwitcher variant="header" />
-  </div>
-</header>
-```
-
-### 3.2 Atualizar AppLayout.tsx
-
-Adicionar no topo da sidebar, abaixo do logo:
+Props:
+- `variant`: "full" (desktop) | "mobile" (drawer)
+- `collapsed`: boolean para modo mini
 
 ```typescript
-{/* Logo */}
-<div className="...">...</div>
-
-{/* Novo: Tenant Switcher */}
-<div className="border-b border-border px-4 py-2">
-  <TenantSwitcher variant="sidebar" />
-</div>
-
-{/* Quick Period Actions */}
-<div className="...">...</div>
+const sidebarNavigation = {
+  jarvis: [
+    { name: "Home", href: "/jarvis", icon: Brain },
+    { name: "Tarefas", href: "/jarvis/tasks", icon: CheckSquare },
+    { name: "Agenda", href: "/jarvis/calendar", icon: CalendarDays },
+    { name: "Habitos", href: "/jarvis/habits", icon: Repeat },
+    { name: "Lembretes", href: "/jarvis/reminders", icon: Bell },
+  ],
+  finances: [
+    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    // ... demais itens
+  ],
+  settings: [
+    { name: "Configuracoes", href: "/settings", icon: Settings },
+  ],
+};
 ```
 
 ---
 
-## Parte 4: Integrar com React Query
+## Parte 3: Criar Componente TenantLoadingFallback
 
-### 4.1 Adicionar queryClient ao TenantContext
+### Novo arquivo: `src/components/tenant/TenantLoadingFallback.tsx`
 
-O contexto precisa invalidar todas as queries quando trocar de tenant:
+Skeleton animado exibido enquanto tenant carrega:
 
 ```typescript
-import { useQueryClient } from "@tanstack/react-query";
-
-export const TenantProvider = ({ children }: { children: ReactNode }) => {
-  const queryClient = useQueryClient();
-  
-  const switchTenant = (tenantId: string) => {
-    // ... lógica de troca
+export const TenantLoadingFallback = () => (
+  <div className="flex h-screen">
+    {/* Sidebar skeleton */}
+    <aside className="w-64 border-r border-border p-4 space-y-4">
+      <Skeleton className="h-10 w-full" />
+      <Skeleton className="h-8 w-3/4" />
+      <Skeleton className="h-8 w-3/4" />
+      <Skeleton className="h-8 w-3/4" />
+    </aside>
     
-    // Invalidar todas as queries para recarregar dados do novo tenant
-    queryClient.invalidateQueries();
-  };
+    {/* Content skeleton */}
+    <main className="flex-1 p-8 space-y-4">
+      <Skeleton className="h-8 w-1/3" />
+      <Skeleton className="h-40 w-full" />
+      <Skeleton className="h-40 w-full" />
+    </main>
+  </div>
+);
+```
+
+---
+
+## Parte 4: Criar Layout Principal Unificado
+
+### Novo arquivo: `src/components/layout/MainLayout.tsx`
+
+Layout principal que combina Topbar + Sidebar + Conteudo:
+
+```typescript
+interface MainLayoutProps {
+  children: ReactNode;
+  title?: string;
+}
+
+export const MainLayout = ({ children, title }: MainLayoutProps) => {
+  const { loading: tenantLoading } = useTenant();
+  
+  // Fallback skeleton se tenant ainda nao carregou
+  if (tenantLoading) {
+    return <TenantLoadingFallback />;
+  }
+  
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Topbar fixa */}
+      <Topbar title={title} />
+      
+      <div className="flex">
+        {/* Sidebar fixa */}
+        <Sidebar />
+        
+        {/* Conteudo principal */}
+        <main className="flex-1 pl-64 pt-14">
+          <div className="p-6">
+            {children}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+};
+```
+
+---
+
+## Parte 5: Atualizar TenantSwitcher
+
+### Modificar: `src/components/tenant/TenantSwitcher.tsx`
+
+Melhorias:
+- Mostrar loading skeleton enquanto carrega
+- Sempre renderizar (mesmo com 1 tenant) para manter consistencia visual
+- Adicionar icone de check animado
+
+```typescript
+// Antes: if (allTenants.length <= 1) return null;
+// Depois: Sempre mostrar, mas sem dropdown se for unico
+
+if (allTenants.length === 1) {
+  return (
+    <div className="flex items-center gap-2 px-2 text-sm">
+      <Building2 className="h-4 w-4" />
+      <span className="truncate">{tenant?.name}</span>
+    </div>
+  );
+}
+```
+
+---
+
+## Parte 6: Adicionar Funcao de Iniciais
+
+### Modificar: `src/lib/jarvis-helpers.ts`
+
+Adicionar helper para extrair iniciais do nome/email:
+
+```typescript
+export const getInitials = (name: string): string => {
+  if (!name) return "?";
+  
+  // Se for email, usar primeira letra do local part
+  if (name.includes("@")) {
+    return name.split("@")[0].charAt(0).toUpperCase();
+  }
+  
+  // Se for nome completo, usar primeiras duas iniciais
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+  }
+  
+  return name.charAt(0).toUpperCase();
 };
 ```
 
@@ -286,43 +268,60 @@ export const TenantProvider = ({ children }: { children: ReactNode }) => {
 
 ## Resumo de Arquivos
 
-### Criar (1 arquivo novo)
+### Criar (3 arquivos)
 
-| Arquivo | Descrição |
+| Arquivo | Descricao |
 |---------|-----------|
-| `src/components/tenant/TenantSwitcher.tsx` | Dropdown para alternar entre tenants |
+| `src/components/layout/Topbar.tsx` | Barra superior com tenant switcher e avatar |
+| `src/components/layout/Sidebar.tsx` | Sidebar unificada com secoes JARVIS/Financas |
+| `src/components/tenant/TenantLoadingFallback.tsx` | Skeleton durante carregamento |
 
 ### Modificar (3 arquivos)
 
-| Arquivo | Alteração |
+| Arquivo | Alteracao |
 |---------|-----------|
-| `src/contexts/TenantContext.tsx` | Suporte a múltiplos tenants, switchTenant, localStorage |
-| `src/components/layout/JarvisLayout.tsx` | Adicionar TenantSwitcher no header |
-| `src/components/layout/AppLayout.tsx` | Adicionar TenantSwitcher na sidebar |
+| `src/components/tenant/TenantSwitcher.tsx` | Sempre exibir, skeleton durante loading |
+| `src/components/layout/AppLayout.tsx` | Usar novos componentes Topbar/Sidebar |
+| `src/lib/jarvis-helpers.ts` | Adicionar getInitials() |
 
 ---
 
-## Validação de RLS
+## Fluxo de Carregamento
 
-A implementação respeita RLS porque:
-1. Todas as queries já filtram por `tenant_id` via hooks existentes
-2. `tenant_members` tem policy que só retorna memberships do usuário autenticado
-3. `tenants` só pode ser lido se o usuário for membro
-4. O `switchTenant` só permite trocar para tenants da lista `allTenants`
-
----
-
-## Fluxo de Teste
-
-1. **Usuário novo**: Login → Tenant "Pessoal - {nome}" criado automaticamente
-2. **Usuário existente (1 tenant)**: Login → Carrega tenant → Sem switcher visível
-3. **Usuário com múltiplos tenants**: Login → Carrega todos → Switcher aparece → Troca funciona
-4. **Persistência**: Fechar aba → Reabrir → Último tenant selecionado restaurado
+1. Usuario acessa rota protegida
+2. TenantContext inicia fetch de memberships
+3. **TenantLoadingFallback** exibido com skeletons animados
+4. Tenant carrega -> Layout completo renderiza
+5. Usuario troca tenant -> `queryClient.invalidateQueries()` -> dados recarregam
 
 ---
 
-## Próximos Passos (Pós-Implementação)
+## Requisitos Tecnicos Atendidos
 
-- Implementar convite de membros via email
-- Criar tela de gerenciamento de membros do tenant
-- Adicionar roles (admin, editor, viewer) com permissões granulares
+| Requisito | Solucao |
+|-----------|---------|
+| Supabase client (auth + database) | TenantContext usa supabase.from() |
+| Ao trocar tenant, recarregar listas | switchTenant() chama queryClient.invalidateQueries() |
+| Fallback skeleton | TenantLoadingFallback com Skeleton animado |
+| Sidebar com links especificos | Sidebar.tsx com secoes JARVIS/Financas |
+| Topbar com Tenant Switcher | Topbar.tsx integra TenantSwitcher |
+| Avatar do usuario | Avatar com fallback de iniciais |
+
+---
+
+## Navegacao Final
+
+**Secao JARVIS (Assistente):**
+- Home -> /jarvis
+- Tarefas -> /jarvis/tasks
+- Agenda -> /jarvis/calendar
+- Habitos -> /jarvis/habits
+- Lembretes -> /jarvis/reminders
+
+**Secao Financas:**
+- Dashboard -> /dashboard
+- Lancamentos -> /transactions
+- (demais itens existentes)
+
+**Configuracoes:**
+- Configuracoes -> /settings
