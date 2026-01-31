@@ -1,285 +1,476 @@
 
-# Plano: Implementar Pagina Tasks com Filtros por Periodo
+# Plano: Reestruturar Pagina Agenda com Visao Semanal Agrupada
 
 ## Visao Geral
 
-Reestruturar a pagina de tarefas para usar filtros temporais (Hoje, Semana, Todas, Concluidas) em vez de filtros por status, mantendo a estetica Nectar e adicionando atualizacoes otimistas.
+Transformar a pagina de Agenda para exibir eventos dos proximos 7 dias agrupados por data, com formulario de criacao rapida e badges de source.
 
 ---
 
-## Analise do Estado Atual
+## Estado Atual vs Novo
 
-| Componente | Status | Observacao |
-|------------|--------|------------|
-| JarvisTasks.tsx | Existe | Tabs por status (open/in_progress/done) |
-| useJarvisTasks.ts | Existe | CRUD completo, RPC ff_complete_task |
-| TaskCardNectar.tsx | Existe | Card completo com prioridade, tags, due_at |
-| TaskForm.tsx | Existe | Formulario de edicao completo |
-| QuickAddInput.tsx | Existe | Input rapido funcional |
+| Aspecto | Atual | Novo |
+|---------|-------|------|
+| Visualizacao | Calendario mensal | Lista semanal agrupada por dia |
+| Agrupamento | Por dia selecionado | Automatico por data |
+| Criacao rapida | Botao abre form | Input inline + form completo |
+| Badges de source | Nao implementado | manual/google/whatsapp |
+| Navegacao | Mes anterior/proximo | Proximos 7 dias fixos |
 
 ---
 
-## Arquitetura da Nova Filtragem
+## Arquitetura da Nova Pagina
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                              TABS TEMPORAIS                              │
+│                              HEADER                                      │
+│  [Icon] Agenda                                        [+ Compromisso]   │
+│         X eventos esta semana                                           │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
-│   ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌──────────────┐              │
-│   │  Hoje   │  │ Semana  │  │  Todas  │  │  Concluidas  │              │
-│   └─────────┘  └─────────┘  └─────────┘  └──────────────┘              │
-│       │            │            │              │                        │
-│       ▼            ▼            ▼              ▼                        │
-│   due_at <=    due_at <=    status !=     status ==                    │
-│   hoje EOD     domingo       'done'         'done'                      │
-│   OU null      da semana                                               │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │  [Input] Adicionar compromisso rapido...              [Salvar]  │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                          │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │  Hoje, 31 de janeiro                                  3 eventos │    │
+│  ├─────────────────────────────────────────────────────────────────┤    │
+│  │  ┌─────────────────────────────────────────────────────────┐    │    │
+│  │  │ 09:00  Reuniao de equipe                   [Google] [...] │  │    │
+│  │  └─────────────────────────────────────────────────────────────┘ │   │
+│  │  ┌─────────────────────────────────────────────────────────────┐ │   │
+│  │  │ 14:30  Call com cliente                       [App] [...] │   │   │
+│  │  └─────────────────────────────────────────────────────────────┘ │   │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                          │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │  Amanha, 1 de fevereiro                              1 evento  │    │
+│  ├─────────────────────────────────────────────────────────────────┤    │
+│  │  ┌─────────────────────────────────────────────────────────────┐ │   │
+│  │  │ Dia inteiro  Aniversario                       [App] [...] │  │   │
+│  │  └─────────────────────────────────────────────────────────────┘ │   │
+│  └─────────────────────────────────────────────────────────────────┘    │
 │                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Parte 1: Atualizar Hook useJarvisTasks
+## Parte 1: Atualizar Hook useJarvisEvents
 
-### Modificar: `src/hooks/useJarvisTasks.ts`
+### Modificar: `src/hooks/useJarvisEvents.ts`
 
-#### 1.1 Adicionar Filtros Computados
-
-```typescript
-// Helpers de data
-const startOfToday = () => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
-
-const endOfToday = () => {
-  const d = new Date();
-  d.setHours(23, 59, 59, 999);
-  return d;
-};
-
-const endOfWeek = () => {
-  const d = new Date();
-  const day = d.getDay();
-  const diff = 7 - day; // dias ate domingo
-  d.setDate(d.getDate() + diff);
-  d.setHours(23, 59, 59, 999);
-  return d;
-};
-
-// Novos computed fields
-const todayTasks = tasks.filter(t => {
-  if (t.status === 'done') return false;
-  if (!t.due_at) return true; // sem prazo = hoje
-  const due = new Date(t.due_at);
-  return due <= endOfToday();
-});
-
-const weekTasks = tasks.filter(t => {
-  if (t.status === 'done') return false;
-  if (!t.due_at) return false; // sem prazo nao aparece aqui
-  const due = new Date(t.due_at);
-  return due <= endOfWeek() && due > endOfToday();
-});
-
-const allOpenTasks = tasks.filter(t => t.status !== 'done');
-const completedTasks = tasks.filter(t => t.status === 'done');
-```
-
-#### 1.2 Adicionar Atualizacao Otimista
+Adicionar funcao para agrupar eventos por dia:
 
 ```typescript
-const completeTask = useMutation({
-  mutationFn: async (taskId: string) => {
-    const { error } = await supabase.rpc("ff_complete_task", { p_task_id: taskId });
-    if (error) throw error;
-  },
-  // NOVO: Optimistic update
-  onMutate: async (taskId) => {
-    // Cancelar queries em andamento
-    await queryClient.cancelQueries({ queryKey });
-    
-    // Snapshot do estado anterior
-    const previousTasks = queryClient.getQueryData(queryKey);
-    
-    // Atualizar cache otimisticamente
-    queryClient.setQueryData(queryKey, (old: JarvisTask[]) =>
-      old.map(task =>
-        task.id === taskId
-          ? { ...task, status: 'done', completed_at: new Date().toISOString() }
-          : task
-      )
+// Novo helper: agrupar eventos por data
+const groupEventsByDate = (events: JarvisEvent[]) => {
+  const groups: Record<string, JarvisEvent[]> = {};
+  
+  events.forEach(event => {
+    const dateKey = format(parseISO(event.start_at), "yyyy-MM-dd");
+    if (!groups[dateKey]) {
+      groups[dateKey] = [];
+    }
+    groups[dateKey].push(event);
+  });
+  
+  // Ordenar eventos dentro de cada dia por horario
+  Object.keys(groups).forEach(key => {
+    groups[key].sort((a, b) => 
+      new Date(a.start_at).getTime() - new Date(b.start_at).getTime()
     );
+  });
+  
+  return groups;
+};
+
+// Retornar no hook
+return {
+  // ... existentes
+  getWeekEvents: () => getUpcomingEvents(7),
+  groupedEvents: groupEventsByDate(getUpcomingEvents(7)),
+};
+```
+
+---
+
+## Parte 2: Criar Componente EventCardMinimal
+
+### Novo arquivo: `src/components/jarvis/EventCardMinimal.tsx`
+
+Card minimalista para a lista semanal:
+
+```typescript
+interface EventCardMinimalProps {
+  event: JarvisEvent;
+  onEdit: (event: JarvisEvent) => void;
+  onDelete: (id: string) => void;
+}
+
+export const EventCardMinimal = ({ event, onEdit, onDelete }: EventCardMinimalProps) => {
+  const startDate = parseISO(event.start_at);
+  
+  // Determinar badge de source
+  const getSourceBadge = () => {
+    if (event.google_event_id) {
+      return { label: "Google", className: "bg-blue-500/10 text-blue-600" };
+    }
+    if (event.source === "google") {
+      return { label: "Google", className: "bg-blue-500/10 text-blue-600" };
+    }
+    return { label: "App", className: "bg-primary/10 text-primary" };
+  };
+  
+  const sourceBadge = getSourceBadge();
+  
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-lg bg-card border hover:border-primary/30 transition-all group">
+      {/* Horario */}
+      <div className="w-14 flex-shrink-0 text-center">
+        {event.all_day ? (
+          <span className="text-xs text-muted-foreground">Dia todo</span>
+        ) : (
+          <span className="text-sm font-medium">{format(startDate, "HH:mm")}</span>
+        )}
+      </div>
+      
+      {/* Divider vertical */}
+      <div className="w-0.5 h-8 bg-border" />
+      
+      {/* Conteudo */}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate">{event.title}</p>
+        {event.location && (
+          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+            <MapPin className="h-3 w-3" />
+            {event.location}
+          </p>
+        )}
+      </div>
+      
+      {/* Badge de source */}
+      <Badge variant="secondary" className={cn("text-xs", sourceBadge.className)}>
+        {sourceBadge.label}
+      </Badge>
+      
+      {/* Menu */}
+      <DropdownMenu>
+        ...
+      </DropdownMenu>
+    </div>
+  );
+};
+```
+
+---
+
+## Parte 3: Criar Componente DayEventGroup
+
+### Novo arquivo: `src/components/jarvis/DayEventGroup.tsx`
+
+Agrupador de eventos por dia:
+
+```typescript
+interface DayEventGroupProps {
+  date: Date;
+  events: JarvisEvent[];
+  onEdit: (event: JarvisEvent) => void;
+  onDelete: (id: string) => void;
+}
+
+export const DayEventGroup = ({ date, events, onEdit, onDelete }: DayEventGroupProps) => {
+  const isToday = isSameDay(date, new Date());
+  const isTomorrow = isSameDay(date, addDays(new Date(), 1));
+  
+  const getDateLabel = () => {
+    if (isToday) return "Hoje";
+    if (isTomorrow) return "Amanha";
+    return format(date, "EEEE", { locale: ptBR }); // Ex: "quarta-feira"
+  };
+  
+  return (
+    <Card className="border-border/50">
+      <CardHeader className="py-3 px-4 flex flex-row items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className={cn(
+            "text-sm font-medium capitalize",
+            isToday && "text-primary"
+          )}>
+            {getDateLabel()}
+          </span>
+          <span className="text-sm text-muted-foreground">
+            {format(date, ", d 'de' MMMM", { locale: ptBR })}
+          </span>
+        </div>
+        <Badge variant="outline" className="text-xs">
+          {events.length} {events.length === 1 ? "evento" : "eventos"}
+        </Badge>
+      </CardHeader>
+      <CardContent className="p-2 space-y-2">
+        {events.map(event => (
+          <EventCardMinimal
+            key={event.id}
+            event={event}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
+        ))}
+      </CardContent>
+    </Card>
+  );
+};
+```
+
+---
+
+## Parte 4: Criar Componente QuickEventInput
+
+### Novo arquivo: `src/components/jarvis/QuickEventInput.tsx`
+
+Input inline para criacao rapida de eventos:
+
+```typescript
+interface QuickEventInputProps {
+  onAdd: (data: { title: string; start_at: string; all_day: boolean }) => void;
+  isLoading?: boolean;
+}
+
+export const QuickEventInput = ({ onAdd, isLoading }: QuickEventInputProps) => {
+  const [title, setTitle] = useState("");
+  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [time, setTime] = useState("09:00");
+  const [allDay, setAllDay] = useState(false);
+  
+  const handleSubmit = () => {
+    if (!title.trim()) return;
     
-    return { previousTasks };
-  },
-  onError: (err, taskId, context) => {
-    // Rollback em caso de erro
-    queryClient.setQueryData(queryKey, context?.previousTasks);
-    toast({ title: "Erro ao concluir tarefa", variant: "destructive" });
-  },
-  onSettled: () => {
-    queryClient.invalidateQueries({ queryKey });
-  },
-  onSuccess: () => {
-    toast({ title: "Tarefa concluida! 🎉" });
-  },
-});
+    const start_at = allDay 
+      ? `${date}T00:00:00` 
+      : `${date}T${time}:00`;
+    
+    onAdd({ title: title.trim(), start_at, all_day: allDay });
+    setTitle("");
+  };
+  
+  return (
+    <Card className="bg-muted/30 border-dashed">
+      <CardContent className="p-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* Titulo */}
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Titulo do compromisso..."
+            className="flex-1"
+            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+          />
+          
+          {/* Data */}
+          <Input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="w-40"
+          />
+          
+          {/* Hora (se nao for dia inteiro) */}
+          {!allDay && (
+            <Input
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              className="w-28"
+            />
+          )}
+          
+          {/* Toggle dia inteiro */}
+          <div className="flex items-center gap-2">
+            <Switch checked={allDay} onCheckedChange={setAllDay} />
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              Dia inteiro
+            </span>
+          </div>
+          
+          {/* Botao salvar */}
+          <Button onClick={handleSubmit} disabled={!title.trim() || isLoading}>
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
 ```
 
 ---
 
-## Parte 2: Atualizar Pagina JarvisTasks
+## Parte 5: Reestruturar Pagina JarvisCalendar
 
-### Modificar: `src/pages/JarvisTasks.tsx`
+### Modificar: `src/pages/JarvisCalendar.tsx`
 
-#### 2.1 Novas Tabs
-
-```typescript
-<Tabs defaultValue="today" className="w-full">
-  <TabsList className="grid w-full max-w-lg grid-cols-4 bg-muted/50">
-    <TabsTrigger value="today" className="flex items-center gap-1.5">
-      <Sun className="h-3.5 w-3.5" />
-      <span>Hoje</span>
-      <span className="text-xs opacity-70">({todayTasks.length})</span>
-    </TabsTrigger>
-    <TabsTrigger value="week" className="flex items-center gap-1.5">
-      <Calendar className="h-3.5 w-3.5" />
-      <span>Semana</span>
-      <span className="text-xs opacity-70">({weekTasks.length})</span>
-    </TabsTrigger>
-    <TabsTrigger value="all" className="flex items-center gap-1.5">
-      <ListTodo className="h-3.5 w-3.5" />
-      <span>Todas</span>
-      <span className="text-xs opacity-70">({allOpenTasks.length})</span>
-    </TabsTrigger>
-    <TabsTrigger value="done" className="flex items-center gap-1.5">
-      <CheckCircle className="h-3.5 w-3.5" />
-      <span>Feitas</span>
-      <span className="text-xs opacity-70">({completedTasks.length})</span>
-    </TabsTrigger>
-  </TabsList>
-  
-  <TabsContent value="today">
-    {todayTasks.map(task => <TaskCardNectar ... />)}
-  </TabsContent>
-  
-  <TabsContent value="week">
-    {weekTasks.map(task => <TaskCardNectar ... />)}
-  </TabsContent>
-  
-  <TabsContent value="all">
-    {allOpenTasks.map(task => <TaskCardNectar ... />)}
-  </TabsContent>
-  
-  <TabsContent value="done">
-    {completedTasks.map(task => <TaskCardNectar ... />)}
-  </TabsContent>
-</Tabs>
-```
-
-#### 2.2 Estados Vazios Personalizados
-
-Cada tab tera uma mensagem vazia especifica:
-- Hoje: "Nenhuma tarefa para hoje. Aproveite o dia!"
-- Semana: "Sem tarefas para esta semana"
-- Todas: "Nenhuma tarefa pendente. Parabens!"
-- Feitas: "Nenhuma tarefa concluida ainda"
-
----
-
-## Parte 3: Melhorar TaskCardNectar
-
-### Modificar: `src/components/jarvis/TaskCardNectar.tsx`
-
-#### 3.1 Adicionar Indicador de Status
+Nova estrutura focada em visao semanal:
 
 ```typescript
-{/* Status badge para tarefas concluidas */}
-{task.status === 'done' && (
-  <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
-    <Check className="h-3 w-3 mr-1" />
-    Concluida
-  </Badge>
-)}
-```
+const JarvisCalendar = () => {
+  const { loading: tenantLoading } = useTenant();
+  const { events, isLoading, createEvent, updateEvent, deleteEvent, getUpcomingEvents } = useJarvisEvents();
 
-#### 3.2 Melhorar Formatacao de Data
-
-```typescript
-// Destacar tarefas atrasadas
-const isOverdue = task.due_at && new Date(task.due_at) < new Date() && task.status !== 'done';
-
-{task.due_at && (
-  <span className={cn(
-    "text-xs flex items-center gap-1",
-    isOverdue ? "text-destructive font-medium" : "text-muted-foreground"
-  )}>
-    <Calendar className="h-3 w-3" />
-    {isOverdue && "Atrasado: "}
-    {format(parseISO(task.due_at), "dd MMM 'as' HH:mm", { locale: ptBR })}
-  </span>
-)}
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<JarvisEvent | null>(null);
+  
+  // Eventos dos proximos 7 dias agrupados
+  const weekEvents = getUpcomingEvents(7);
+  const groupedEvents = useMemo(() => {
+    const groups: Record<string, JarvisEvent[]> = {};
+    
+    weekEvents.forEach(event => {
+      const dateKey = format(parseISO(event.start_at), "yyyy-MM-dd");
+      if (!groups[dateKey]) groups[dateKey] = [];
+      groups[dateKey].push(event);
+    });
+    
+    // Ordenar por horario dentro de cada dia
+    Object.keys(groups).forEach(key => {
+      groups[key].sort((a, b) => 
+        new Date(a.start_at).getTime() - new Date(b.start_at).getTime()
+      );
+    });
+    
+    return groups;
+  }, [weekEvents]);
+  
+  // Ordenar datas
+  const sortedDates = Object.keys(groupedEvents).sort();
+  
+  const handleQuickAdd = (data: { title: string; start_at: string; all_day: boolean }) => {
+    createEvent.mutate(data);
+  };
+  
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-accent/10 flex items-center justify-center">
+            <Calendar className="h-5 w-5 text-accent" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold">Agenda</h1>
+            <p className="text-sm text-muted-foreground">
+              {weekEvents.length} eventos nos proximos 7 dias
+            </p>
+          </div>
+        </div>
+        <Button onClick={() => setFormOpen(true)}>
+          <Plus className="h-4 w-4 mr-1" />
+          Compromisso
+        </Button>
+      </div>
+      
+      {/* Quick Add */}
+      <QuickEventInput onAdd={handleQuickAdd} isLoading={createEvent.isPending} />
+      
+      {/* Lista agrupada por dia */}
+      {sortedDates.length === 0 ? (
+        <EmptyState />
+      ) : (
+        <div className="space-y-4">
+          {sortedDates.map(dateKey => (
+            <DayEventGroup
+              key={dateKey}
+              date={parseISO(dateKey)}
+              events={groupedEvents[dateKey]}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
+          ))}
+        </div>
+      )}
+      
+      {/* Form Dialog */}
+      <EventForm ... />
+    </div>
+  );
+};
 ```
 
 ---
 
 ## Resumo de Arquivos
 
-### Modificar (3 arquivos)
+### Criar (3 arquivos)
+
+| Arquivo | Descricao |
+|---------|-----------|
+| `src/components/jarvis/EventCardMinimal.tsx` | Card minimalista com badge de source |
+| `src/components/jarvis/DayEventGroup.tsx` | Agrupador de eventos por dia |
+| `src/components/jarvis/QuickEventInput.tsx` | Input inline para criacao rapida |
+
+### Modificar (2 arquivos)
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/hooks/useJarvisTasks.ts` | Filtros temporais + optimistic updates |
-| `src/pages/JarvisTasks.tsx` | Tabs Hoje/Semana/Todas/Concluidas |
-| `src/components/jarvis/TaskCardNectar.tsx` | Status badge + destaque atrasados |
+| `src/hooks/useJarvisEvents.ts` | Adicionar helper getUpcomingEvents |
+| `src/pages/JarvisCalendar.tsx` | Nova UI com visao semanal |
 
 ---
 
-## Logica de Filtragem Detalhada
+## Badges de Source
 
-| Tab | Filtro | Ordenacao |
-|-----|--------|-----------|
-| Hoje | `status != 'done' AND (due_at <= fim_do_dia OR due_at IS NULL)` | priority DESC, due_at ASC |
-| Semana | `status != 'done' AND due_at > fim_do_dia AND due_at <= fim_da_semana` | due_at ASC |
-| Todas | `status != 'done'` | created_at DESC |
-| Feitas | `status == 'done'` | completed_at DESC |
+| Condicao | Badge | Cor |
+|----------|-------|-----|
+| `google_event_id` existe | "Google" | Azul |
+| `source === 'google'` | "Google" | Azul |
+| `source === 'manual'` | "App" | Primary |
+| Futuro: WhatsApp | "WhatsApp" | Verde |
 
 ---
 
-## Fluxo de Conclusao Otimista
+## Campos Exibidos no Card Minimal
 
-```text
-1. Usuario clica no checkbox
-2. UI atualiza INSTANTANEAMENTE (card some da lista)
-3. Request RPC ff_complete_task dispara em background
-4. Se sucesso: toast "Tarefa concluida!"
-5. Se erro: rollback automatico + toast de erro
+| Campo | Localizacao | Formato |
+|-------|-------------|---------|
+| Horario | Coluna esquerda | "HH:mm" ou "Dia todo" |
+| title | Centro | Texto truncado |
+| location | Centro (subtitulo) | Com icone MapPin |
+| source | Badge direita | "Google" / "App" |
+
+---
+
+## Estado Vazio Personalizado
+
+Quando nao houver eventos nos proximos 7 dias:
+
+```typescript
+<div className="py-16 text-center">
+  <Calendar className="h-12 w-12 mx-auto text-muted-foreground/30 mb-4" />
+  <h3 className="text-lg font-medium mb-1">Semana livre!</h3>
+  <p className="text-sm text-muted-foreground mb-4">
+    Nenhum compromisso nos proximos 7 dias
+  </p>
+  <Button variant="outline" onClick={() => setFormOpen(true)}>
+    <Plus className="h-4 w-4 mr-1" />
+    Agendar compromisso
+  </Button>
+</div>
 ```
 
 ---
 
-## Campos Exibidos no Card
+## Fluxo de Criacao Rapida
 
-| Campo | Localizacao | Formato |
-|-------|-------------|---------|
-| title | Titulo principal | Texto, risca se done |
-| description | Subtitulo | Texto truncado 2 linhas |
-| due_at | Badge/meta | "dd MMM as HH:mm" ou "Atrasado: ..." |
-| priority | Badge colorido | Alta (vermelho), Media (amarelo), Baixa (cinza) |
-| tags | Chips secundarios | Badge variant="secondary" |
-| status | Badge (se done) | "Concluida" com check icon |
+1. Usuario digita titulo no input
+2. Seleciona data (default: hoje)
+3. Seleciona horario OU marca "Dia inteiro"
+4. Clica no botao ou pressiona Enter
+5. Evento criado com source="manual", status="scheduled"
+6. Lista atualiza automaticamente
 
 ---
 
-## Acoes Disponiveis
+## Ordenacao
 
-| Acao | Trigger | Comportamento |
-|------|---------|---------------|
-| Concluir | Clique no checkbox | RPC + otimista |
-| Editar | Menu "..." > Editar | Abre TaskForm com dados |
-| Excluir | Menu "..." > Excluir | Confirmacao + delete |
-| Criar rapida | QuickAddInput | priority=medium, tags=[] |
-| Criar completa | Botao "Nova Tarefa" | Abre TaskForm vazio |
+- **Dias**: cronologica (hoje -> proximos dias)
+- **Eventos dentro do dia**: por `start_at` ASC
+- Eventos "Dia inteiro" aparecem primeiro (00:00)
