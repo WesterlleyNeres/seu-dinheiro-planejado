@@ -1,271 +1,162 @@
 
-# Plano: Redesign UI JARVIS - Estilo Néctar (Dark Mode)
+# Plano: Validar e Corrigir Backend JARVIS + Gerar Helpers Frontend
 
-## Visão Geral
+## Status Atual - Análise Completa
 
-Redesenhar completamente a UI do módulo JARVIS com visual inspirado no Néctar:
-- **Dark mode by default** com gradientes sutis azul/ciano
-- **Design minimalista** com cards flutuantes
-- **Interações de 1 clique** para completar tarefas/hábitos
-- **Sidebar icônica** compacta (estilo Néctar)
-- **Suporte multi-tenant** (West + esposa) já funcional
+### Tabelas JARVIS - Todas Existem
+| Tabela | Status | RLS | Triggers updated_at |
+|--------|--------|-----|---------------------|
+| `tenants` | Existe | Somente SELECT | Sim (`set_updated_at`) |
+| `tenant_members` | Existe | SELECT + mutate_admin | Não tem updated_at |
+| `profiles` | Existe | SELECT/INSERT/UPDATE | Sim |
+| `ff_tasks` | Existe | Completo (CRUD) | Sim |
+| `ff_events` | Existe | Completo (CRUD) | Sim |
+| `ff_habits` | Existe | Completo (CRUD) | Sim |
+| `ff_habit_logs` | Existe | Completo (CRUD) | Não aplicável |
+| `ff_reminders` | Existe | Completo (CRUD) | Sim |
+| `ff_memory_items` | Existe | SELECT/INSERT/DELETE | Não tem |
+| `ff_integrations_google` | Existe | SELECT/INSERT/UPDATE | Sim |
+
+### RPC `ff_complete_task` - Já Existe
+```sql
+CREATE OR REPLACE FUNCTION public.ff_complete_task(p_task_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER
+-- Marca status='done', completed_at=now(), respeitando tenant membership
+```
+
+### Problema Crítico Identificado
+As tabelas `tenants` e `tenant_members` não possuem policies INSERT para usuários autenticados criarem seu primeiro tenant. Isso causa erro quando `TenantContext.tsx` tenta criar "Meu Espaço JARVIS" para novos usuários.
 
 ---
 
-## Análise do Design Néctar
+## Parte 1: Migration SQL - Correções Necessárias
 
-Baseado no screenshot capturado:
+### 1.1 Adicionar Policy INSERT para `tenants`
+Permitir que qualquer usuário autenticado crie um tenant (sendo o `created_by`):
+```sql
+CREATE POLICY "tenants_insert_own" ON public.tenants
+FOR INSERT WITH CHECK (auth.uid() = created_by);
+```
 
-| Característica | Néctar | FRACTTO FLOW (Atual) |
-|----------------|--------|----------------------|
-| Tema | Dark (azul profundo) | Light/Dark parcial |
-| Sidebar | Ícones compactos, minimalista | Lista expandida |
-| Cards | Flutuantes, bordas sutis | Cards padrão shadcn |
-| Ações | 1-click checkboxes | Menus dropdown |
-| Cores | Gradiente azul/ciano | Verde esmeralda |
+### 1.2 Adicionar Policy INSERT para `tenant_members` (bootstrap)
+Permitir que o criador do tenant se adicione como primeiro membro:
+```sql
+CREATE POLICY "tenant_members_insert_first" ON public.tenant_members
+FOR INSERT WITH CHECK (
+  auth.uid() = user_id 
+  AND role = 'owner'
+  AND NOT EXISTS (
+    SELECT 1 FROM tenant_members 
+    WHERE tenant_members.tenant_id = tenant_id
+  )
+);
+```
+
+### 1.3 Adicionar Policy UPDATE para `ff_memory_items`
+Faltante na configuração atual:
+```sql
+CREATE POLICY "ff_memory_update_tenant" ON public.ff_memory_items
+FOR UPDATE USING (tenant_id IN (
+  SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid()
+));
+```
+
+### 1.4 Adicionar Trigger `updated_at` para `ff_memory_items`
+```sql
+CREATE TRIGGER ff_memory_items_set_updated_at
+BEFORE UPDATE ON public.ff_memory_items
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+```
 
 ---
 
-## Parte 1: Sistema de Cores (Dark Mode)
+## Parte 2: Frontend - Melhorias nos Hooks
 
-### Atualizar `src/index.css`
+### 2.1 Criar Helper `useJarvisMemory.ts`
+Hook para CRUD de memory items (ainda não existe):
+```typescript
+// src/hooks/useJarvisMemory.ts
+- createMemoryItem(kind, content, metadata)
+- deleteMemoryItem(id)
+- searchMemory(query)
+- Filtrar por tenant_id via contexto
+```
 
-Criar nova paleta "jarvis" inspirada no Néctar:
+### 2.2 Criar Type Helper `src/lib/jarvis-helpers.ts`
+Funções utilitárias para o módulo JARVIS:
+```typescript
+// Formatação de prioridade
+export const priorityColor = (p: Priority) => ...
 
-```css
-.jarvis-theme {
-  --background: 220 40% 6%;      /* Azul profundo quase preto */
-  --foreground: 210 20% 95%;
-  --card: 220 35% 10%;           /* Cards sutilmente mais claros */
-  --card-foreground: 210 20% 95%;
-  --primary: 192 95% 55%;        /* Ciano vibrante */
-  --primary-foreground: 220 40% 6%;
-  --accent: 200 80% 60%;         /* Azul accent */
-  --muted: 220 30% 15%;
-  --muted-foreground: 210 15% 60%;
-  --border: 220 30% 18%;
+// Formatação de status
+export const statusLabel = (s: TaskStatus) => ...
+
+// Verificação de membership
+export const hasRole = (member: TenantMember, roles: string[]) => ...
+
+// Formatar data relativa
+export const formatRelativeDate = (date: string) => ...
+```
+
+### 2.3 Adicionar RPC Helper no `useJarvisTasks.ts`
+Melhorar o hook existente para expor typing correto do RPC:
+```typescript
+// Typing para o RPC já existe nos types.ts:
+// ff_complete_task: { Args: { p_task_id: string }; Returns: undefined }
+```
+
+---
+
+## Parte 3: Atualizar Types
+
+### 3.1 Complementar `src/types/jarvis.ts`
+Adicionar interfaces de Memory que faltam:
+```typescript
+export interface JarvisMemoryItem {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  kind: string;
+  title?: string | null;
+  content: string;
+  metadata: Record<string, unknown>;
+  source: string;
+  created_at: string;
 }
+
+// Type helpers
+export type TaskStatus = 'open' | 'in_progress' | 'done';
+export type TaskPriority = 'low' | 'medium' | 'high';
+export type HabitCadence = 'daily' | 'weekly' | 'monthly';
+export type ReminderChannel = 'whatsapp' | 'email' | 'push';
 ```
 
 ---
 
-## Parte 2: Novo Layout JARVIS
+## Resumo de Alterações
 
-### 2.1 Criar `JarvisLayout.tsx`
+### Migration SQL (1 arquivo)
+Criar migration com:
+- Policy INSERT para `tenants` (criador pode inserir)
+- Policy INSERT para `tenant_members` (bootstrap do primeiro membro)
+- Policy UPDATE para `ff_memory_items`
+- Trigger updated_at para `ff_memory_items`
 
-Layout dedicado para o módulo JARVIS com:
-- **Sidebar icônica** (60px) com tooltip nos ícones
-- **Área principal** com padding generoso
-- **Header minimal** com saudação contextual
-- **Animações sutis** de entrada
-
-```text
-┌──────┬──────────────────────────────────────┐
-│ 🧠   │  Olá, West. Hoje é sexta-feira.     │
-│ ✓    │  ─────────────────────────────────  │
-│ 📅   │                                      │
-│ 🔄   │  [Cards de conteúdo aqui]           │
-│ 🔔   │                                      │
-│ ⚙️   │                                      │
-└──────┴──────────────────────────────────────┘
-```
-
-### 2.2 Componente `JarvisSidebar.tsx`
-
-```typescript
-const jarvisNav = [
-  { icon: Brain, label: "Início", href: "/jarvis" },
-  { icon: CheckSquare, label: "Tarefas", href: "/jarvis/tasks" },
-  { icon: CalendarDays, label: "Agenda", href: "/jarvis/calendar" },
-  { icon: Repeat, label: "Hábitos", href: "/jarvis/habits" },
-  { icon: Bell, label: "Lembretes", href: "/jarvis/reminders" },
-  { icon: Settings, label: "Configurações", href: "/jarvis/settings" },
-];
-```
+### Frontend (3 arquivos)
+| Arquivo | Ação |
+|---------|------|
+| `src/hooks/useJarvisMemory.ts` | Criar - CRUD para memory items |
+| `src/lib/jarvis-helpers.ts` | Criar - Funções utilitárias |
+| `src/types/jarvis.ts` | Atualizar - Adicionar JarvisMemoryItem |
 
 ---
 
-## Parte 3: Páginas JARVIS Redesenhadas
+## Validação Final
 
-### 3.1 Home (`JarvisDashboard.tsx`)
-
-**Novo design:**
-- Saudação contextual com nome do usuário
-- Cards resumo com animação de contagem
-- Lista "O que fazer hoje" em checklist
-- Seção "Próximos eventos" estilo timeline
-
-```text
-┌─────────────────────────────────────────────┐
-│  Olá, West 👋                               │
-│  Sexta-feira, 31 de Janeiro                 │
-├─────────────────────────────────────────────┤
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐       │
-│  │ 5       │ │ 2       │ │ 3/7     │       │
-│  │ tarefas │ │ eventos │ │ hábitos │       │
-│  └─────────┘ └─────────┘ └─────────┘       │
-├─────────────────────────────────────────────┤
-│  ✅ O que fazer hoje                        │
-│  ─────────────────────────────────────────  │
-│  ☐ Finalizar relatório          alta  📅   │
-│  ☐ Ligar para médico           média  ⏰   │
-│  ☑ Revisar código (concluída)              │
-└─────────────────────────────────────────────┘
-```
-
-### 3.2 Tarefas (`JarvisTasks.tsx`)
-
-**Novo design:**
-- Input de criação rápida no topo
-- Lista com checkbox à esquerda (1-click)
-- Badge de prioridade colorido
-- Animação de riscar ao completar
-
-### 3.3 Hábitos (`JarvisHabits.tsx`)
-
-**Novo design:**
-- Grid de hábitos com círculo de progresso
-- Botão de check grande e destacado
-- Streak counter com emoji de fogo
-- Visualização semanal (7 bolinhas)
-
-### 3.4 Lembretes (`JarvisReminders.tsx`) - **NOVA PÁGINA**
-
-Criar página completa de lembretes:
-- Lista cronológica
-- Badge de canal (WhatsApp/Email/Push)
-- Ação de dismiss com swipe
-
-### 3.5 Configurações JARVIS (`JarvisSettings.tsx`) - **NOVA PÁGINA**
-
-- Toggle de tema
-- Configuração de horário de lembretes
-- Conexão Google Calendar (placeholder)
-- Gerenciamento de tenant members
-
----
-
-## Parte 4: Componentes UI Redesenhados
-
-### 4.1 `TaskCardNectar.tsx`
-
-```typescript
-// Novo design com checkbox proeminente
-- Checkbox circular grande (24px)
-- Título com fade ao completar
-- Micro-animação de check
-- Swipe para deletar (mobile)
-```
-
-### 4.2 `HabitCardNectar.tsx`
-
-```typescript
-// Design com progresso circular
-- Círculo SVG de progresso
-- Botão de check central
-- Streak badge
-- Dias da semana (●●●○○○○)
-```
-
-### 4.3 `ReminderCard.tsx`
-
-```typescript
-// Card de lembrete
-- Ícone de canal (WhatsApp/bell)
-- Horário destacado
-- Botão dismiss
-```
-
-### 4.4 `QuickAddInput.tsx`
-
-```typescript
-// Input de adição rápida estilo Néctar
-- Placeholder "O que você precisa fazer?"
-- Submit com Enter ou botão
-- Parsing inteligente de data ("amanhã às 14h")
-```
-
----
-
-## Parte 5: Rotas e Navegação
-
-### Adicionar novas rotas em `App.tsx`:
-
-```typescript
-// Novas rotas JARVIS
-<Route path="/jarvis/reminders" element={<JarvisReminders />} />
-<Route path="/jarvis/settings" element={<JarvisSettings />} />
-```
-
-### Atualizar `AppLayout.tsx`:
-
-Criar toggle entre "modo finanças" e "modo JARVIS":
-- Layout atual para finanças
-- `JarvisLayout` para rotas `/jarvis/*`
-
----
-
-## Parte 6: Dark Mode Toggle
-
-### Implementar com next-themes (já instalado):
-
-```typescript
-// ThemeProvider no App.tsx
-<ThemeProvider attribute="class" defaultTheme="dark">
-  ...
-</ThemeProvider>
-
-// Toggle no JarvisSettings
-<Switch onCheckedChange={toggleTheme} />
-```
-
----
-
-## Resumo de Arquivos
-
-### Criar (8 arquivos)
-
-| Arquivo | Descrição |
-|---------|-----------|
-| `src/components/layout/JarvisLayout.tsx` | Layout exclusivo JARVIS |
-| `src/components/jarvis/JarvisSidebar.tsx` | Sidebar icônica |
-| `src/components/jarvis/TaskCardNectar.tsx` | Card de tarefa redesenhado |
-| `src/components/jarvis/HabitCardNectar.tsx` | Card de hábito com progresso circular |
-| `src/components/jarvis/ReminderCard.tsx` | Card de lembrete |
-| `src/components/jarvis/QuickAddInput.tsx` | Input de adição rápida |
-| `src/pages/JarvisReminders.tsx` | Página de lembretes |
-| `src/pages/JarvisSettings.tsx` | Configurações JARVIS |
-
-### Modificar (6 arquivos)
-
-| Arquivo | Alteração |
-|---------|-----------|
-| `src/index.css` | Adicionar tema jarvis dark |
-| `src/App.tsx` | Adicionar ThemeProvider + novas rotas |
-| `src/pages/JarvisDashboard.tsx` | Redesign completo |
-| `src/pages/JarvisTasks.tsx` | Redesign com novo card |
-| `src/pages/JarvisHabits.tsx` | Redesign com círculo de progresso |
-| `src/pages/JarvisCalendar.tsx` | Ajustes de tema |
-
----
-
-## Ordem de Implementação
-
-1. **Tema Dark Mode** - CSS variables + ThemeProvider
-2. **JarvisLayout + Sidebar** - Novo layout dedicado
-3. **Componentes UI** - Cards redesenhados
-4. **Dashboard** - Redesign da home
-5. **Páginas** - Tasks, Habits, Calendar atualizadas
-6. **Novas páginas** - Reminders + Settings
-7. **Rotas** - Integração final
-
----
-
-## Diferenças vs Néctar (Originalidade)
-
-Para não plagiar, o FRACTTO FLOW terá:
-- Paleta verde/esmeralda como accent secundário (identidade própria)
-- Integração nativa com módulo de finanças
-- Toggle entre "modo finanças" e "modo assistente"
-- Branding FRACTTO FLOW mantido
-- Estética inspirada, não copiada
+Após implementação, o sistema terá:
+- Todas as 10 tabelas JARVIS com RLS completo
+- Políticas permitem criação de tenant para novos usuários
+- Triggers `updated_at` em todas tabelas aplicáveis
+- RPC `ff_complete_task` funcionando com validação de membership
+- Hooks TypeScript para todas as entidades
+- Types tipados para consumo seguro das tabelas
