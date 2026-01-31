@@ -1,327 +1,285 @@
 
-# Plano: Criar Estrutura de App com Layout Fixo
+# Plano: Implementar Pagina Tasks com Filtros por Periodo
 
 ## Visao Geral
 
-Unificar a estrutura do app com:
-- **Sidebar fixa** para navegacao principal
-- **Topbar unificada** com Tenant Switcher e avatar
-- **Skeleton loading** durante carregamento do tenant
-- **Consistencia** entre layouts JARVIS e Financas
+Reestruturar a pagina de tarefas para usar filtros temporais (Hoje, Semana, Todas, Concluidas) em vez de filtros por status, mantendo a estetica Nectar e adicionando atualizacoes otimistas.
 
 ---
 
 ## Analise do Estado Atual
 
-| Componente | Existe | Observacao |
+| Componente | Status | Observacao |
 |------------|--------|------------|
-| TenantContext | Sim | Completo com switchTenant e invalidateQueries |
-| TenantSwitcher | Sim | Funciona como dropdown |
-| AppLayout | Sim | Sidebar + conteudo, sem topbar separada |
-| JarvisLayout | Sim | Sidebar iconica + header com saudacao |
-| Avatar UI | Sim | Componente Radix disponivel |
-| Skeleton | Sim | Componente basico disponivel |
+| JarvisTasks.tsx | Existe | Tabs por status (open/in_progress/done) |
+| useJarvisTasks.ts | Existe | CRUD completo, RPC ff_complete_task |
+| TaskCardNectar.tsx | Existe | Card completo com prioridade, tags, due_at |
+| TaskForm.tsx | Existe | Formulario de edicao completo |
+| QuickAddInput.tsx | Existe | Input rapido funcional |
 
 ---
 
-## Arquitetura Proposta
+## Arquitetura da Nova Filtragem
 
 ```text
-+------------------------------------------------------------------+
-|                           TOPBAR (h-14)                          |
-|  [Menu] [Logo/Breadcrumb]                   [Tenant] [Avatar]    |
-+----------+-------------------------------------------------------+
-|          |                                                       |
-|  SIDEBAR |                   CONTEUDO                            |
-|  (w-64)  |                                                       |
-|          |                                                       |
-|  - Home  |                                                       |
-|  - Tasks |                                                       |
-|  - Agenda|                                                       |
-|  - ...   |                                                       |
-|          |                                                       |
-+----------+-------------------------------------------------------+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                              TABS TEMPORAIS                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌──────────────┐              │
+│   │  Hoje   │  │ Semana  │  │  Todas  │  │  Concluidas  │              │
+│   └─────────┘  └─────────┘  └─────────┘  └──────────────┘              │
+│       │            │            │              │                        │
+│       ▼            ▼            ▼              ▼                        │
+│   due_at <=    due_at <=    status !=     status ==                    │
+│   hoje EOD     domingo       'done'         'done'                      │
+│   OU null      da semana                                               │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Parte 1: Criar Componente Topbar
+## Parte 1: Atualizar Hook useJarvisTasks
 
-### Novo arquivo: `src/components/layout/Topbar.tsx`
+### Modificar: `src/hooks/useJarvisTasks.ts`
 
-Conteudo:
-- **Lado esquerdo**: Logo ou titulo da pagina atual
-- **Lado direito**: TenantSwitcher + Avatar do usuario com menu
-- Menu do avatar: Ver perfil, Configuracoes, Sair
+#### 1.1 Adicionar Filtros Computados
 
 ```typescript
-interface TopbarProps {
-  title?: string;
-  showLogo?: boolean;
-}
-
-export const Topbar = ({ title, showLogo = false }: TopbarProps) => {
-  const { user, signOut } = useAuth();
-  const { loading: tenantLoading } = useTenant();
-  
-  // Extrair iniciais do nome ou email
-  const initials = getInitials(user?.email || "");
-  
-  return (
-    <header className="h-14 border-b border-border bg-background/95 backdrop-blur">
-      <div className="flex h-full items-center justify-between px-4">
-        {/* Lado esquerdo */}
-        <div className="flex items-center gap-3">
-          {showLogo && <Logo />}
-          {title && <h1 className="text-lg font-semibold">{title}</h1>}
-        </div>
-        
-        {/* Lado direito */}
-        <div className="flex items-center gap-3">
-          <TenantSwitcher variant="header" />
-          
-          {/* Avatar com menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback>{initials}</AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>{user?.email}</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link to="/settings">Configuracoes</Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={signOut}>
-                Sair
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-    </header>
-  );
+// Helpers de data
+const startOfToday = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
 };
-```
 
----
-
-## Parte 2: Criar Componente Sidebar Unificada
-
-### Novo arquivo: `src/components/layout/Sidebar.tsx`
-
-Sidebar reutilizavel com secoes:
-- **JARVIS** (Assistente)
-- **Financas**
-
-Props:
-- `variant`: "full" (desktop) | "mobile" (drawer)
-- `collapsed`: boolean para modo mini
-
-```typescript
-const sidebarNavigation = {
-  jarvis: [
-    { name: "Home", href: "/jarvis", icon: Brain },
-    { name: "Tarefas", href: "/jarvis/tasks", icon: CheckSquare },
-    { name: "Agenda", href: "/jarvis/calendar", icon: CalendarDays },
-    { name: "Habitos", href: "/jarvis/habits", icon: Repeat },
-    { name: "Lembretes", href: "/jarvis/reminders", icon: Bell },
-  ],
-  finances: [
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    // ... demais itens
-  ],
-  settings: [
-    { name: "Configuracoes", href: "/settings", icon: Settings },
-  ],
+const endOfToday = () => {
+  const d = new Date();
+  d.setHours(23, 59, 59, 999);
+  return d;
 };
+
+const endOfWeek = () => {
+  const d = new Date();
+  const day = d.getDay();
+  const diff = 7 - day; // dias ate domingo
+  d.setDate(d.getDate() + diff);
+  d.setHours(23, 59, 59, 999);
+  return d;
+};
+
+// Novos computed fields
+const todayTasks = tasks.filter(t => {
+  if (t.status === 'done') return false;
+  if (!t.due_at) return true; // sem prazo = hoje
+  const due = new Date(t.due_at);
+  return due <= endOfToday();
+});
+
+const weekTasks = tasks.filter(t => {
+  if (t.status === 'done') return false;
+  if (!t.due_at) return false; // sem prazo nao aparece aqui
+  const due = new Date(t.due_at);
+  return due <= endOfWeek() && due > endOfToday();
+});
+
+const allOpenTasks = tasks.filter(t => t.status !== 'done');
+const completedTasks = tasks.filter(t => t.status === 'done');
 ```
 
----
-
-## Parte 3: Criar Componente TenantLoadingFallback
-
-### Novo arquivo: `src/components/tenant/TenantLoadingFallback.tsx`
-
-Skeleton animado exibido enquanto tenant carrega:
+#### 1.2 Adicionar Atualizacao Otimista
 
 ```typescript
-export const TenantLoadingFallback = () => (
-  <div className="flex h-screen">
-    {/* Sidebar skeleton */}
-    <aside className="w-64 border-r border-border p-4 space-y-4">
-      <Skeleton className="h-10 w-full" />
-      <Skeleton className="h-8 w-3/4" />
-      <Skeleton className="h-8 w-3/4" />
-      <Skeleton className="h-8 w-3/4" />
-    </aside>
+const completeTask = useMutation({
+  mutationFn: async (taskId: string) => {
+    const { error } = await supabase.rpc("ff_complete_task", { p_task_id: taskId });
+    if (error) throw error;
+  },
+  // NOVO: Optimistic update
+  onMutate: async (taskId) => {
+    // Cancelar queries em andamento
+    await queryClient.cancelQueries({ queryKey });
     
-    {/* Content skeleton */}
-    <main className="flex-1 p-8 space-y-4">
-      <Skeleton className="h-8 w-1/3" />
-      <Skeleton className="h-40 w-full" />
-      <Skeleton className="h-40 w-full" />
-    </main>
-  </div>
-);
+    // Snapshot do estado anterior
+    const previousTasks = queryClient.getQueryData(queryKey);
+    
+    // Atualizar cache otimisticamente
+    queryClient.setQueryData(queryKey, (old: JarvisTask[]) =>
+      old.map(task =>
+        task.id === taskId
+          ? { ...task, status: 'done', completed_at: new Date().toISOString() }
+          : task
+      )
+    );
+    
+    return { previousTasks };
+  },
+  onError: (err, taskId, context) => {
+    // Rollback em caso de erro
+    queryClient.setQueryData(queryKey, context?.previousTasks);
+    toast({ title: "Erro ao concluir tarefa", variant: "destructive" });
+  },
+  onSettled: () => {
+    queryClient.invalidateQueries({ queryKey });
+  },
+  onSuccess: () => {
+    toast({ title: "Tarefa concluida! 🎉" });
+  },
+});
 ```
 
 ---
 
-## Parte 4: Criar Layout Principal Unificado
+## Parte 2: Atualizar Pagina JarvisTasks
 
-### Novo arquivo: `src/components/layout/MainLayout.tsx`
+### Modificar: `src/pages/JarvisTasks.tsx`
 
-Layout principal que combina Topbar + Sidebar + Conteudo:
+#### 2.1 Novas Tabs
 
 ```typescript
-interface MainLayoutProps {
-  children: ReactNode;
-  title?: string;
-}
-
-export const MainLayout = ({ children, title }: MainLayoutProps) => {
-  const { loading: tenantLoading } = useTenant();
+<Tabs defaultValue="today" className="w-full">
+  <TabsList className="grid w-full max-w-lg grid-cols-4 bg-muted/50">
+    <TabsTrigger value="today" className="flex items-center gap-1.5">
+      <Sun className="h-3.5 w-3.5" />
+      <span>Hoje</span>
+      <span className="text-xs opacity-70">({todayTasks.length})</span>
+    </TabsTrigger>
+    <TabsTrigger value="week" className="flex items-center gap-1.5">
+      <Calendar className="h-3.5 w-3.5" />
+      <span>Semana</span>
+      <span className="text-xs opacity-70">({weekTasks.length})</span>
+    </TabsTrigger>
+    <TabsTrigger value="all" className="flex items-center gap-1.5">
+      <ListTodo className="h-3.5 w-3.5" />
+      <span>Todas</span>
+      <span className="text-xs opacity-70">({allOpenTasks.length})</span>
+    </TabsTrigger>
+    <TabsTrigger value="done" className="flex items-center gap-1.5">
+      <CheckCircle className="h-3.5 w-3.5" />
+      <span>Feitas</span>
+      <span className="text-xs opacity-70">({completedTasks.length})</span>
+    </TabsTrigger>
+  </TabsList>
   
-  // Fallback skeleton se tenant ainda nao carregou
-  if (tenantLoading) {
-    return <TenantLoadingFallback />;
-  }
+  <TabsContent value="today">
+    {todayTasks.map(task => <TaskCardNectar ... />)}
+  </TabsContent>
   
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Topbar fixa */}
-      <Topbar title={title} />
-      
-      <div className="flex">
-        {/* Sidebar fixa */}
-        <Sidebar />
-        
-        {/* Conteudo principal */}
-        <main className="flex-1 pl-64 pt-14">
-          <div className="p-6">
-            {children}
-          </div>
-        </main>
-      </div>
-    </div>
-  );
-};
+  <TabsContent value="week">
+    {weekTasks.map(task => <TaskCardNectar ... />)}
+  </TabsContent>
+  
+  <TabsContent value="all">
+    {allOpenTasks.map(task => <TaskCardNectar ... />)}
+  </TabsContent>
+  
+  <TabsContent value="done">
+    {completedTasks.map(task => <TaskCardNectar ... />)}
+  </TabsContent>
+</Tabs>
 ```
+
+#### 2.2 Estados Vazios Personalizados
+
+Cada tab tera uma mensagem vazia especifica:
+- Hoje: "Nenhuma tarefa para hoje. Aproveite o dia!"
+- Semana: "Sem tarefas para esta semana"
+- Todas: "Nenhuma tarefa pendente. Parabens!"
+- Feitas: "Nenhuma tarefa concluida ainda"
 
 ---
 
-## Parte 5: Atualizar TenantSwitcher
+## Parte 3: Melhorar TaskCardNectar
 
-### Modificar: `src/components/tenant/TenantSwitcher.tsx`
+### Modificar: `src/components/jarvis/TaskCardNectar.tsx`
 
-Melhorias:
-- Mostrar loading skeleton enquanto carrega
-- Sempre renderizar (mesmo com 1 tenant) para manter consistencia visual
-- Adicionar icone de check animado
+#### 3.1 Adicionar Indicador de Status
 
 ```typescript
-// Antes: if (allTenants.length <= 1) return null;
-// Depois: Sempre mostrar, mas sem dropdown se for unico
-
-if (allTenants.length === 1) {
-  return (
-    <div className="flex items-center gap-2 px-2 text-sm">
-      <Building2 className="h-4 w-4" />
-      <span className="truncate">{tenant?.name}</span>
-    </div>
-  );
-}
+{/* Status badge para tarefas concluidas */}
+{task.status === 'done' && (
+  <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
+    <Check className="h-3 w-3 mr-1" />
+    Concluida
+  </Badge>
+)}
 ```
 
----
-
-## Parte 6: Adicionar Funcao de Iniciais
-
-### Modificar: `src/lib/jarvis-helpers.ts`
-
-Adicionar helper para extrair iniciais do nome/email:
+#### 3.2 Melhorar Formatacao de Data
 
 ```typescript
-export const getInitials = (name: string): string => {
-  if (!name) return "?";
-  
-  // Se for email, usar primeira letra do local part
-  if (name.includes("@")) {
-    return name.split("@")[0].charAt(0).toUpperCase();
-  }
-  
-  // Se for nome completo, usar primeiras duas iniciais
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) {
-    return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
-  }
-  
-  return name.charAt(0).toUpperCase();
-};
+// Destacar tarefas atrasadas
+const isOverdue = task.due_at && new Date(task.due_at) < new Date() && task.status !== 'done';
+
+{task.due_at && (
+  <span className={cn(
+    "text-xs flex items-center gap-1",
+    isOverdue ? "text-destructive font-medium" : "text-muted-foreground"
+  )}>
+    <Calendar className="h-3 w-3" />
+    {isOverdue && "Atrasado: "}
+    {format(parseISO(task.due_at), "dd MMM 'as' HH:mm", { locale: ptBR })}
+  </span>
+)}
 ```
 
 ---
 
 ## Resumo de Arquivos
 
-### Criar (3 arquivos)
-
-| Arquivo | Descricao |
-|---------|-----------|
-| `src/components/layout/Topbar.tsx` | Barra superior com tenant switcher e avatar |
-| `src/components/layout/Sidebar.tsx` | Sidebar unificada com secoes JARVIS/Financas |
-| `src/components/tenant/TenantLoadingFallback.tsx` | Skeleton durante carregamento |
-
 ### Modificar (3 arquivos)
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/components/tenant/TenantSwitcher.tsx` | Sempre exibir, skeleton durante loading |
-| `src/components/layout/AppLayout.tsx` | Usar novos componentes Topbar/Sidebar |
-| `src/lib/jarvis-helpers.ts` | Adicionar getInitials() |
+| `src/hooks/useJarvisTasks.ts` | Filtros temporais + optimistic updates |
+| `src/pages/JarvisTasks.tsx` | Tabs Hoje/Semana/Todas/Concluidas |
+| `src/components/jarvis/TaskCardNectar.tsx` | Status badge + destaque atrasados |
 
 ---
 
-## Fluxo de Carregamento
+## Logica de Filtragem Detalhada
 
-1. Usuario acessa rota protegida
-2. TenantContext inicia fetch de memberships
-3. **TenantLoadingFallback** exibido com skeletons animados
-4. Tenant carrega -> Layout completo renderiza
-5. Usuario troca tenant -> `queryClient.invalidateQueries()` -> dados recarregam
-
----
-
-## Requisitos Tecnicos Atendidos
-
-| Requisito | Solucao |
-|-----------|---------|
-| Supabase client (auth + database) | TenantContext usa supabase.from() |
-| Ao trocar tenant, recarregar listas | switchTenant() chama queryClient.invalidateQueries() |
-| Fallback skeleton | TenantLoadingFallback com Skeleton animado |
-| Sidebar com links especificos | Sidebar.tsx com secoes JARVIS/Financas |
-| Topbar com Tenant Switcher | Topbar.tsx integra TenantSwitcher |
-| Avatar do usuario | Avatar com fallback de iniciais |
+| Tab | Filtro | Ordenacao |
+|-----|--------|-----------|
+| Hoje | `status != 'done' AND (due_at <= fim_do_dia OR due_at IS NULL)` | priority DESC, due_at ASC |
+| Semana | `status != 'done' AND due_at > fim_do_dia AND due_at <= fim_da_semana` | due_at ASC |
+| Todas | `status != 'done'` | created_at DESC |
+| Feitas | `status == 'done'` | completed_at DESC |
 
 ---
 
-## Navegacao Final
+## Fluxo de Conclusao Otimista
 
-**Secao JARVIS (Assistente):**
-- Home -> /jarvis
-- Tarefas -> /jarvis/tasks
-- Agenda -> /jarvis/calendar
-- Habitos -> /jarvis/habits
-- Lembretes -> /jarvis/reminders
+```text
+1. Usuario clica no checkbox
+2. UI atualiza INSTANTANEAMENTE (card some da lista)
+3. Request RPC ff_complete_task dispara em background
+4. Se sucesso: toast "Tarefa concluida!"
+5. Se erro: rollback automatico + toast de erro
+```
 
-**Secao Financas:**
-- Dashboard -> /dashboard
-- Lancamentos -> /transactions
-- (demais itens existentes)
+---
 
-**Configuracoes:**
-- Configuracoes -> /settings
+## Campos Exibidos no Card
+
+| Campo | Localizacao | Formato |
+|-------|-------------|---------|
+| title | Titulo principal | Texto, risca se done |
+| description | Subtitulo | Texto truncado 2 linhas |
+| due_at | Badge/meta | "dd MMM as HH:mm" ou "Atrasado: ..." |
+| priority | Badge colorido | Alta (vermelho), Media (amarelo), Baixa (cinza) |
+| tags | Chips secundarios | Badge variant="secondary" |
+| status | Badge (se done) | "Concluida" com check icon |
+
+---
+
+## Acoes Disponiveis
+
+| Acao | Trigger | Comportamento |
+|------|---------|---------------|
+| Concluir | Clique no checkbox | RPC + otimista |
+| Editar | Menu "..." > Editar | Abre TaskForm com dados |
+| Excluir | Menu "..." > Excluir | Confirmacao + delete |
+| Criar rapida | QuickAddInput | priority=medium, tags=[] |
+| Criar completa | Botao "Nova Tarefa" | Abre TaskForm vazio |
