@@ -82,6 +82,7 @@ export interface JarvisMemoryItem {
   metadata: Record<string, unknown>;
   source: string;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface Tenant {
@@ -99,3 +100,11 @@ export interface TenantMember {
   role: 'owner' | 'admin' | 'member';
   created_at: string;
 }
+
+// Type helpers
+export type TaskStatus = 'open' | 'in_progress' | 'done';
+export type TaskPriority = 'low' | 'medium' | 'high';
+export type HabitCadence = 'daily' | 'weekly' | 'monthly';
+export type ReminderChannel = 'whatsapp' | 'email' | 'push';
+export type ReminderStatus = 'pending' | 'sent' | 'dismissed';
+export type EventStatus = 'scheduled' | 'cancelled' | 'completed';
