@@ -65,6 +65,33 @@ export const useJarvisReminders = () => {
     },
   });
 
+  const updateStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: 'pending' | 'sent' | 'dismissed' | 'canceled' }) => {
+      const { data, error } = await supabase
+        .from("ff_reminders")
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as JarvisReminder;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey });
+      const messages = {
+        sent: "Lembrete marcado como enviado",
+        dismissed: "Lembrete descartado",
+        canceled: "Lembrete cancelado",
+        pending: "Lembrete reativado",
+      };
+      toast({ title: messages[variables.status] });
+    },
+    onError: (error) => {
+      toast({ title: "Erro ao atualizar lembrete", description: error.message, variant: "destructive" });
+    },
+  });
+
   const dismissReminder = useMutation({
     mutationFn: async (id: string) => {
       const { data, error } = await supabase
@@ -109,10 +136,12 @@ export const useJarvisReminders = () => {
     isLoading,
     error,
     createReminder,
+    updateStatus,
     dismissReminder,
     deleteReminder,
     // Computed
     pendingReminders: reminders.filter(r => r.status === "pending"),
     sentReminders: reminders.filter(r => r.status === "sent"),
+    canceledReminders: reminders.filter(r => r.status === "canceled"),
   };
 };

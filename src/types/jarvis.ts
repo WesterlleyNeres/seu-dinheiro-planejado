@@ -67,7 +67,7 @@ export interface JarvisReminder {
   title: string;
   remind_at: string;
   channel: 'whatsapp' | 'email' | 'push';
-  status: 'pending' | 'sent' | 'dismissed';
+  status: 'pending' | 'sent' | 'dismissed' | 'canceled';
   created_at: string;
   updated_at: string;
 }
@@ -106,5 +106,5 @@ export type TaskStatus = 'open' | 'in_progress' | 'done';
 export type TaskPriority = 'low' | 'medium' | 'high';
 export type HabitCadence = 'daily' | 'weekly' | 'monthly';
 export type ReminderChannel = 'whatsapp' | 'email' | 'push';
-export type ReminderStatus = 'pending' | 'sent' | 'dismissed';
+export type ReminderStatus = 'pending' | 'sent' | 'dismissed' | 'canceled';
 export type EventStatus = 'scheduled' | 'cancelled' | 'completed';
