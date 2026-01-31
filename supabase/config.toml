@@ -17,3 +17,9 @@ verify_jwt = false
 
 [functions.get-vapid-public-key]
 verify_jwt = false
+
+[functions.ff-whatsapp-verify]
+verify_jwt = false
+
+[functions.ff-whatsapp-ingest]
+verify_jwt = false

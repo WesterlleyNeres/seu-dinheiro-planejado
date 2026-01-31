@@ -9,6 +9,7 @@ import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGoogleIntegration } from "@/hooks/useGoogleIntegration";
 import { usePushSubscription } from "@/hooks/usePushSubscription";
+import WhatsAppSection from "@/components/jarvis/settings/WhatsAppSection";
 import { 
   Settings, Moon, Calendar as CalendarIcon, Users, LogOut, 
   Info, Link2, Unlink, Bell, BellRing, BellOff, Loader2, AlertTriangle, CheckCircle2
@@ -269,6 +270,9 @@ const JarvisSettings = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* WhatsApp Integration */}
+      <WhatsAppSection />
 
       {/* Integrations */}
       <Card>
