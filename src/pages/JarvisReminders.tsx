@@ -24,7 +24,7 @@ import {
 
 const JarvisReminders = () => {
   const { loading: tenantLoading } = useTenant();
-  const { reminders, isLoading, createReminder, dismissReminder, deleteReminder } = useJarvisReminders();
+  const { reminders, isLoading, createReminder, updateStatus, dismissReminder, deleteReminder } = useJarvisReminders();
 
   const [formOpen, setFormOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -49,6 +49,14 @@ const JarvisReminders = () => {
 
   const handleDismiss = (id: string) => {
     dismissReminder.mutate(id);
+  };
+
+  const handleMarkAsSent = (id: string) => {
+    updateStatus.mutate({ id, status: "sent" });
+  };
+
+  const handleCancel = (id: string) => {
+    updateStatus.mutate({ id, status: "canceled" });
   };
 
   const handleDelete = (id: string) => {
@@ -117,6 +125,8 @@ const JarvisReminders = () => {
                   reminder={reminder}
                   onDismiss={handleDismiss}
                   onDelete={handleDelete}
+                  onMarkAsSent={handleMarkAsSent}
+                  onCancel={handleCancel}
                 />
               ))
             )}
