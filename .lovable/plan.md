@@ -1,288 +1,306 @@
 
-# Plano: Criar Documentação Técnica Completa do Sistema FRACTTO FLOW
+# Plano: Implementar Módulo JARVIS no FRACTTO FLOW
 
-## Objetivo
-Criar um arquivo `DOCUMENTATION.md` contendo documentação técnica completa do sistema, incluindo arquitetura frontend/backend, banco de dados, integrações, e todos os detalhes técnicos para desenvolvedores e stakeholders.
+## Contexto Atual
+
+Analisando o banco de dados, as tabelas JARVIS **ja existem**:
+- `tenants` (name, created_by)
+- `tenant_members` (tenant_id, user_id, role)
+- `ff_tasks` (title, description, status, priority, due_at, tags)
+- `ff_events` (title, description, start_at, end_at, location, priority, status)
+- `ff_habits` (title, cadence, times_per_cadence, target_type, target_value)
+- `ff_habit_logs` (habit_id, log_date, value)
+- `ff_reminders` (title, remind_at, channel, status)
+- `ff_memory_items` (kind, title, content, metadata, source)
+- `ff_integrations_google` (email, access_token, refresh_token, expiry, scope)
+
+Todas as tabelas possuem `tenant_id` e RLS ativado com policies baseadas em `tenant_members`.
 
 ---
 
-## Estrutura da Documentação
+## Parte 1: Backend (Supabase)
 
-### 1. Visão Geral do Sistema
-- Nome: FRACTTO FLOW - "Suas Finanças, Peça por Peça"
-- Versão: 1.0.0 (Produção)
-- Propósito: Plataforma completa de gestão financeira pessoal
-- URL Produção: https://fracttoflow.lovable.app
+### 1.1 Criar Função RPC `ff_complete_task`
 
-### 2. Stack Tecnológico
+```sql
+CREATE OR REPLACE FUNCTION public.ff_complete_task(p_task_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE public.ff_tasks
+  SET status = 'done',
+      completed_at = now(),
+      updated_at = now()
+  WHERE id = p_task_id
+    AND tenant_id IN (
+      SELECT tenant_id FROM public.tenant_members 
+      WHERE user_id = auth.uid()
+    );
+END;
+$$;
+```
 
-#### Frontend
-- **Framework**: React 18.3.1 + TypeScript
-- **Build Tool**: Vite
-- **Estilização**: Tailwind CSS + shadcn/ui
-- **Gerenciamento de Estado**: TanStack Query (React Query)
-- **Roteamento**: React Router DOM 6.30.1
-- **Validação**: Zod + React Hook Form
-- **Gráficos**: Recharts 2.15.4
-- **PDF**: jsPDF + jspdf-autotable
-- **Datas**: date-fns 4.1.0
+### 1.2 Adicionar Policies de DELETE (faltantes)
 
-#### Backend (Lovable Cloud / Supabase)
-- **Banco de Dados**: PostgreSQL 15+
-- **Autenticação**: Supabase Auth
-- **Edge Functions**: Deno Runtime
-- **Automação**: pg_cron para jobs agendados
+Tabelas que precisam de policy DELETE:
+- `ff_habits`
+- `ff_events`
+- `ff_habit_logs`
+- `ff_reminders`
 
-### 3. Estrutura de Diretórios
+---
+
+## Parte 2: Frontend - Estrutura
+
+### 2.1 Novo Contexto: `TenantContext.tsx`
+
+Gerencia o tenant ativo do usuário:
+- Busca tenant_members do usuário logado
+- Expõe `tenantId` para os hooks consumirem
+- Cria tenant automaticamente se usuário não tiver
+
+### 2.2 Novos Hooks (seguindo padrão existente)
+
+| Hook | Tabela | Operações |
+|------|--------|-----------|
+| `useTenant.ts` | tenants, tenant_members | Gerenciar tenant do usuário |
+| `useJarvisTasks.ts` | ff_tasks | CRUD + completeTask |
+| `useJarvisEvents.ts` | ff_events | CRUD |
+| `useJarvisHabits.ts` | ff_habits, ff_habit_logs | CRUD + logHabit |
+| `useJarvisReminders.ts` | ff_reminders | CRUD |
+| `useJarvisMemory.ts` | ff_memory_items | CRUD |
+
+### 2.3 Novas Páginas
+
+| Página | Rota | Descrição |
+|--------|------|-----------|
+| `JarvisDashboard.tsx` | `/jarvis` | Dashboard principal do JARVIS |
+| `JarvisTasks.tsx` | `/jarvis/tasks` | Gerenciamento de tarefas |
+| `JarvisCalendar.tsx` | `/jarvis/calendar` | Agenda/Eventos |
+| `JarvisHabits.tsx` | `/jarvis/habits` | Rastreamento de hábitos |
+
+### 2.4 Novos Componentes
 
 ```text
-src/
-├── App.tsx                      # Roteamento principal
-├── main.tsx                     # Entry point
-├── index.css                    # Estilos globais
-├── components/
-│   ├── ui/                      # shadcn/ui components (50+)
-│   ├── budget/                  # Componentes de orçamento
-│   ├── calendar/                # Calendário financeiro
-│   ├── dashboard/               # Cards do dashboard
-│   ├── faq/                     # Sistema de FAQ
-│   ├── forms/                   # Inputs customizados
-│   ├── goals/                   # Metas financeiras
-│   ├── import/                  # Importação CSV
-│   ├── investments/             # Investimentos
-│   ├── landing/                 # Landing page
-│   ├── layout/                  # AppLayout, Sidebar
-│   ├── periods/                 # Controle de períodos
-│   ├── recurring/               # Transações recorrentes
-│   ├── reports/                 # Gráficos e relatórios
-│   ├── settings/                # Configurações
-│   ├── statements/              # Faturas de cartão
-│   ├── transactions/            # Lançamentos
-│   ├── transfers/               # Transferências
-│   └── wallets/                 # Carteiras/Limites
-├── contexts/
-│   └── AuthContext.tsx          # Autenticação global
-├── hooks/                       # 20+ custom hooks
-│   ├── useTransactions.ts
-│   ├── useBudgets.ts
-│   ├── useWallets.ts
-│   ├── useGoals.ts
-│   ├── useInvestments.ts
-│   ├── useRecurringTransactions.ts
-│   ├── useStatements.ts
-│   ├── usePeriods.ts
-│   ├── useReports.ts
-│   ├── useImporter.ts
-│   └── ...
-├── lib/
-│   ├── currency.ts              # Formatação BRL
-│   ├── date.ts                  # Utilitários de data
-│   ├── validations.ts           # Schemas Zod
-│   ├── csvParser.ts             # Parser CSV
-│   ├── categoryMatcher.ts       # Fuzzy matching
-│   ├── deduplication.ts         # Fingerprint MD5
-│   ├── pdfGenerator.ts          # Exportação PDF
-│   └── ...
-├── pages/                       # 14 páginas
-│   ├── Landing.tsx
-│   ├── Auth.tsx
-│   ├── Dashboard.tsx
-│   ├── Transactions.tsx
-│   ├── Categories.tsx
-│   ├── Wallets.tsx
-│   ├── Transfers.tsx
-│   ├── Calendar.tsx
-│   ├── Budget.tsx
-│   ├── Goals.tsx
-│   ├── Investments.tsx
-│   ├── Reports.tsx
-│   ├── Import.tsx
-│   ├── FAQ.tsx
-│   ├── Settings.tsx
-│   └── NotFound.tsx
-└── integrations/
-    └── supabase/
-        ├── client.ts            # Cliente Supabase
-        └── types.ts             # Tipos auto-gerados
+src/components/jarvis/
+├── TaskCard.tsx           # Card de tarefa individual
+├── TaskForm.tsx           # Formulário de criação/edição
+├── TaskList.tsx           # Lista de tarefas
+├── EventCard.tsx          # Card de evento
+├── EventForm.tsx          # Formulário de evento
+├── HabitCard.tsx          # Card de hábito com progresso
+├── HabitLogButton.tsx     # Botão de marcar hábito
+├── ReminderCard.tsx       # Card de lembrete
+├── JarvisNav.tsx          # Navegação do módulo
+└── QuickComplete.tsx      # Botão rápido de completar
 ```
 
-### 4. Schema do Banco de Dados (27 migrations)
+### 2.5 Atualizar Navegação
 
-#### Tabelas Principais
+Adicionar seção JARVIS no `AppLayout.tsx`:
 
-| Tabela | Descrição | RLS |
-|--------|-----------|-----|
-| `profiles` | Perfis de usuário (full_name) | Sim |
-| `transactions` | Lançamentos financeiros | Sim |
-| `categories` | Categorias (despesa/receita/investimento/divida) | Sim |
-| `wallets` | Carteiras (conta corrente/cartão de crédito) | Sim |
-| `budgets` | Orçamentos mensais por categoria | Sim |
-| `goals` | Metas financeiras | Sim |
-| `goals_contribs` | Contribuições para metas | Sim |
-| `investments` | Investimentos (RF/RV/Fundo/Outros) | Sim |
-| `investment_contribs` | Aportes em investimentos | Sim |
-| `transfers` | Transferências entre carteiras | Sim |
-| `recurring_transactions` | Transações recorrentes | Sim |
-| `recurring_transaction_history` | Histórico de geração | Sim |
-| `card_statements` | Faturas de cartão de crédito | Sim |
-| `card_statement_lines` | Linhas da fatura (transações) | Sim |
-| `periods` | Controle de períodos (aberto/fechado) | Sim |
-| `payment_methods` | Formas de pagamento | Sim |
-| `user_settings` | Configurações do usuário | Sim |
-| `alert_settings` | Configurações de alertas | Sim |
-| `alert_log` | Log de alertas enviados | Sim |
-| `import_history` | Histórico de importações | Sim |
-| `import_presets` | Presets de mapeamento CSV | Sim |
-| `leads` | Contatos da landing page | Sim (INSERT only) |
-
-#### Views Materializadas
-
-| View | Descrição |
-|------|-----------|
-| `v_wallet_balance` | Saldo real-time de carteiras |
-| `v_monthly_summary` | Resumo mensal por tipo |
-| `v_category_spending` | Gastos por categoria |
-| `v_balance_evolution` | Evolução de saldo |
-
-#### Funções PostgreSQL
-
-| Função | Descrição |
-|--------|-----------|
-| `fechar_mensal(user_id, year, month)` | Fecha período financeiro |
-| `reabrir_mensal(user_id, year, month)` | Reabre período |
-| `aplicar_rollover(user_id, year, month)` | Transfere saldo de orçamento |
-| `process_recurring_transactions()` | Processa recorrências pendentes |
-| `close_card_statement(statement_id)` | Fecha fatura de cartão |
-| `pay_card_statement(...)` | Paga fatura de cartão |
-| `calculate_next_occurrence(...)` | Calcula próxima data recorrente |
-| `realizado_categoria(...)` | Calcula gasto realizado |
-
-#### Triggers
-
-- `sync_mes_referencia` - Sincroniza mes_referencia_int automaticamente
-- `generate_fingerprint` - Gera fingerprint MD5 para deduplicação
-
-#### Índices de Performance
-
-- `transactions(user_id, mes_referencia_int)` - Consultas de orçamento
-- `budgets(user_id, ano, mes, category_id)` - Orçamentos únicos
-- `wallets(user_id, tipo, ativo)` - Filtro de carteiras
-- `transfers(user_id, data)` - Histórico de transferências
-- `ux_transactions_fingerprint` - Deduplicação (partial unique)
-
-### 5. Edge Functions
-
-#### `send-alerts`
-- **Trigger**: Diário às 07:30 BRT (10:30 UTC)
-- **Função**: Envia resumo financeiro por email
-- **Integração**: Resend API
-- **Alertas**:
-  - Contas a vencer (7-30 dias)
-  - Orçamentos > 80%
-  - Faturas vencendo em 7 dias
-  - Metas com prazo próximo
-
-#### `generate-social-image`
-- **Função**: Gera imagem OG para compartilhamento social
-- **JWT**: Não requer (público)
-
-### 6. Fluxos de Negócio
-
-#### Transações
-1. Simples (receita/despesa única)
-2. Parceladas (grupo_parcelamento, parcela_numero/total)
-3. Recorrentes (geração automática via pg_cron)
-
-#### Cartão de Crédito
-1. Configurar cartão (dia_fechamento, dia_vencimento, limite_credito)
-2. Transações vinculadas automaticamente à fatura
-3. Fechar fatura (status: aberta → fechada)
-4. Pagar fatura (gera transferência, status: fechada → paga)
-
-#### Orçamentos
-1. Criar limite mensal por categoria
-2. Budget mode: pagas vs pagas_e_pendentes
-3. Rollover policies: none/carry_over/clamp
-4. Fechamento de período bloqueia edições
-
-#### Importação CSV
-1. Upload arquivo
-2. Detecção automática de colunas
-3. Presets por banco (Nubank, Inter, Itaú)
-4. Fuzzy matching de categorias
-5. Fingerprint MD5 para deduplicação
-6. Preview e confirmação
-
-### 7. Segurança
-
-#### Row Level Security (RLS)
-- Todas as tabelas com RLS ativado
-- Política base: `user_id = auth.uid()`
-- Views com RLS via tabelas subjacentes
-- Soft delete: `deleted_at IS NULL`
-
-#### Proteções Adicionais
-- Fingerprint para evitar duplicatas
-- Período fechado bloqueia modificações
-- Leads: INSERT público, SELECT restrito a service_role
-- Leaked Password Protection (via dashboard)
-
-### 8. Padrões de Desenvolvimento
-
-#### Timezone
-- Fixo em `America/Sao_Paulo`
-- Usar `parseISO()` do date-fns (não `new Date(string)`)
-
-#### Moeda
 ```typescript
-new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+{ name: "JARVIS", href: "/jarvis", icon: Brain },
+{ name: "Tarefas", href: "/jarvis/tasks", icon: CheckSquare },
+{ name: "Agenda", href: "/jarvis/calendar", icon: CalendarDays },
+{ name: "Hábitos", href: "/jarvis/habits", icon: Repeat },
 ```
-
-#### Validação
-- Zod schemas em `src/lib/validations.ts`
-- React Hook Form + @hookform/resolvers
-
-#### Toast Notifications
-- sonner para notificações
-- Mensagens amigáveis para erros de período fechado
-
-### 9. Arquivos de Configuração
-
-| Arquivo | Descrição |
-|---------|-----------|
-| `vite.config.ts` | Configuração Vite |
-| `tailwind.config.ts` | Configuração Tailwind |
-| `tsconfig.json` | TypeScript config |
-| `supabase/config.toml` | Configuração Edge Functions |
-| `components.json` | shadcn/ui config |
-
-### 10. Documentos de Apoio Existentes
-
-- `README.md` - Visão geral e setup
-- `OPERATIONS.md` - Procedimentos operacionais
-- `JORNADA_CLIENTE.md` - Jornada do usuário
-- `APRESENTACAO_COMERCIAL.md` - Apresentação comercial
 
 ---
 
-## Implementação
+## Parte 3: Validações Zod
 
-### Arquivo a Criar
-- `DOCUMENTATION.md` - Documentação técnica completa (~800-1000 linhas)
+Adicionar em `src/lib/validations.ts`:
 
-### Conteúdo Incluído
-1. Cabeçalho com badges e versão
-2. Sumário navegável
-3. Diagramas ER em Mermaid
-4. Tabelas de referência
-5. Exemplos de código
-6. Guia de contribuição
-7. Troubleshooting comum
+```typescript
+export const jarvisTaskSchema = z.object({
+  title: z.string().min(1, 'Título é obrigatório').max(200),
+  description: z.string().max(1000).optional(),
+  priority: z.enum(['low', 'medium', 'high']).default('medium'),
+  due_at: z.string().optional().nullable(),
+  tags: z.array(z.string()).default([]),
+});
 
-### Seções Técnicas Detalhadas
-- Schema completo de cada tabela
-- Relacionamentos FK
-- Políticas RLS por tabela
-- Funções PostgreSQL com assinaturas
-- Hooks com retornos tipados
-- Edge Functions com payloads
+export const jarvisEventSchema = z.object({
+  title: z.string().min(1, 'Título é obrigatório').max(200),
+  description: z.string().max(1000).optional(),
+  location: z.string().max(200).optional(),
+  start_at: z.string().min(1, 'Data de início é obrigatória'),
+  end_at: z.string().optional().nullable(),
+  all_day: z.boolean().default(false),
+  priority: z.enum(['low', 'medium', 'high']).default('medium'),
+});
+
+export const jarvisHabitSchema = z.object({
+  title: z.string().min(1, 'Título é obrigatório').max(100),
+  cadence: z.enum(['daily', 'weekly', 'monthly']).default('weekly'),
+  times_per_cadence: z.number().min(1).max(30).default(3),
+  target_type: z.enum(['count', 'duration']).default('count'),
+  target_value: z.number().min(1).default(1),
+});
+```
+
+---
+
+## Parte 4: Tipos TypeScript
+
+Criar `src/types/jarvis.ts`:
+
+```typescript
+export interface JarvisTask {
+  id: string;
+  tenant_id: string;
+  created_by: string;
+  title: string;
+  description?: string;
+  status: 'open' | 'in_progress' | 'done';
+  priority: 'low' | 'medium' | 'high';
+  due_at?: string;
+  completed_at?: string;
+  tags: string[];
+  source: 'manual' | 'whatsapp';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JarvisEvent {
+  id: string;
+  tenant_id: string;
+  created_by: string;
+  title: string;
+  description?: string;
+  location?: string;
+  start_at: string;
+  end_at?: string;
+  all_day: boolean;
+  priority: 'low' | 'medium' | 'high';
+  status: 'scheduled' | 'cancelled' | 'completed';
+  google_calendar_id?: string;
+  google_event_id?: string;
+  source: 'manual' | 'google';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JarvisHabit {
+  id: string;
+  tenant_id: string;
+  created_by: string;
+  title: string;
+  cadence: 'daily' | 'weekly' | 'monthly';
+  times_per_cadence: number;
+  target_type: 'count' | 'duration';
+  target_value: number;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+  // Calculated fields
+  currentStreak?: number;
+  completionsThisPeriod?: number;
+}
+
+export interface JarvisHabitLog {
+  id: string;
+  tenant_id: string;
+  habit_id: string;
+  user_id: string;
+  log_date: string;
+  value: number;
+  created_at: string;
+}
+
+export interface JarvisReminder {
+  id: string;
+  tenant_id: string;
+  created_by: string;
+  title: string;
+  remind_at: string;
+  channel: 'whatsapp' | 'email' | 'push';
+  status: 'pending' | 'sent' | 'dismissed';
+  created_at: string;
+  updated_at: string;
+}
+```
+
+---
+
+## Parte 5: Rotas
+
+Adicionar em `App.tsx`:
+
+```typescript
+import JarvisDashboard from "./pages/JarvisDashboard";
+import JarvisTasks from "./pages/JarvisTasks";
+import JarvisCalendar from "./pages/JarvisCalendar";
+import JarvisHabits from "./pages/JarvisHabits";
+
+// Rotas JARVIS
+<Route path="/jarvis" element={<ProtectedRoute><AppLayout><JarvisDashboard /></AppLayout></ProtectedRoute>} />
+<Route path="/jarvis/tasks" element={<ProtectedRoute><AppLayout><JarvisTasks /></AppLayout></ProtectedRoute>} />
+<Route path="/jarvis/calendar" element={<ProtectedRoute><AppLayout><JarvisCalendar /></AppLayout></ProtectedRoute>} />
+<Route path="/jarvis/habits" element={<ProtectedRoute><AppLayout><JarvisHabits /></AppLayout></ProtectedRoute>} />
+```
+
+---
+
+## Resumo de Arquivos
+
+### Criar (17 arquivos)
+
+| Arquivo | Tipo |
+|---------|------|
+| `src/contexts/TenantContext.tsx` | Contexto |
+| `src/hooks/useTenant.ts` | Hook |
+| `src/hooks/useJarvisTasks.ts` | Hook |
+| `src/hooks/useJarvisEvents.ts` | Hook |
+| `src/hooks/useJarvisHabits.ts` | Hook |
+| `src/hooks/useJarvisReminders.ts` | Hook |
+| `src/types/jarvis.ts` | Tipos |
+| `src/pages/JarvisDashboard.tsx` | Página |
+| `src/pages/JarvisTasks.tsx` | Página |
+| `src/pages/JarvisCalendar.tsx` | Página |
+| `src/pages/JarvisHabits.tsx` | Página |
+| `src/components/jarvis/TaskCard.tsx` | Componente |
+| `src/components/jarvis/TaskForm.tsx` | Componente |
+| `src/components/jarvis/EventCard.tsx` | Componente |
+| `src/components/jarvis/EventForm.tsx` | Componente |
+| `src/components/jarvis/HabitCard.tsx` | Componente |
+| `src/components/jarvis/HabitLogButton.tsx` | Componente |
+
+### Modificar (3 arquivos)
+
+| Arquivo | Alteração |
+|---------|-----------|
+| `src/App.tsx` | Adicionar rotas JARVIS + TenantProvider |
+| `src/components/layout/AppLayout.tsx` | Adicionar navegação JARVIS |
+| `src/lib/validations.ts` | Adicionar schemas JARVIS |
+
+### Migration SQL (1)
+
+Criar função `ff_complete_task` e policies de DELETE faltantes.
+
+---
+
+## Fluxo de Tenant
+
+1. Usuário faz login
+2. `TenantContext` busca `tenant_members` do usuário
+3. Se não tiver tenant:
+   - Cria novo tenant com nome "Meu Espaço"
+   - Adiciona usuário como `owner`
+4. Hooks JARVIS usam `tenantId` do contexto para queries
+
+---
+
+## Ordem de Implementação
+
+1. Migration SQL (função RPC + policies)
+2. Tipos TypeScript (`jarvis.ts`)
+3. Contexto de Tenant
+4. Hooks de dados
+5. Componentes de UI
+6. Páginas
+7. Atualizar navegação e rotas
+8. Adicionar validações Zod
