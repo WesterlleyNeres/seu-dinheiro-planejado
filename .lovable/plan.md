@@ -1,187 +1,314 @@
 
 
-# Plano de Implementacao - Pagina JarvisMemory
+# Plano de Implementacao - Filtros Avancados para JarvisTasks
 
 ## Resumo
 
-Implementar a pagina de Memoria do JARVIS (`/jarvis/memory`) com listagem, filtros, busca e acoes sobre itens de memoria, seguindo o estilo visual Nectar (dark mode, cards minimalistas).
+Adicionar busca por texto, filtros por prioridade e tags, opcoes de ordenacao, e sincronizacao com query params na URL para a pagina de tarefas do JARVIS.
 
 ---
 
-## Arquivos a Criar/Modificar
+## Arquivos a Modificar
 
 | Arquivo | Acao | Descricao |
 |---------|------|-----------|
-| `src/pages/JarvisMemory.tsx` | Criar | Pagina principal de memorias |
-| `src/components/jarvis/MemoryCard.tsx` | Criar | Card individual de memoria (estilo Nectar) |
-| `src/components/jarvis/MemoryForm.tsx` | Criar | Dialog para criar nova memoria |
-| `src/components/jarvis/JarvisSidebar.tsx` | Modificar | Adicionar link "Memoria" |
-| `src/App.tsx` | Modificar | Adicionar rota `/jarvis/memory` |
+| `src/pages/JarvisTasks.tsx` | Modificar | Adicionar filtros, busca, ordenacao e integracao com URL |
+| `src/components/jarvis/TaskFilters.tsx` | Criar | Componente dedicado para filtros (busca, prioridade, tags, ordenacao) |
+| `src/hooks/useJarvisTasks.ts` | Modificar | Adicionar funcao para extrair todas as tags unicas |
 
 ---
 
 ## Detalhamento Tecnico
 
-### 1. Componente MemoryCard (`src/components/jarvis/MemoryCard.tsx`)
+### 1. Hook useJarvisTasks - Adicionar extracao de tags unicas
 
-Card minimalista inspirado no `TaskCardNectar`:
+Adicionar computed property para coletar todas as tags usadas nas tarefas:
 
-```text
-+------------------------------------------+
-| [kind badge]                    [menu ⋮] |
-| Titulo (ou primeiras palavras)           |
-| Trecho do conteudo (line-clamp-2)...     |
-| [data formatada]     [copiar] [ver mais] |
-+------------------------------------------+
-```
-
-Funcionalidades:
-- Badge colorido por `kind` (profile=roxo, preference=azul, decision=amarelo, project=verde, note=cinza, message=ciano)
-- Botao "Copiar" usando `navigator.clipboard.writeText()`
-- Botao "Ver mais" abre dialog com conteudo completo
-- Menu dropdown com opcao "Excluir"
-- Skeleton loading durante carregamento
-
-### 2. Pagina JarvisMemory (`src/pages/JarvisMemory.tsx`)
-
-Estrutura:
-```text
-+------------------------------------------+
-| [icone] Memoria                          |
-|         X itens salvos      [+ Nova]     |
-+------------------------------------------+
-| [Dropdown Kind ▼]  [🔍 Buscar...      ]  |
-+------------------------------------------+
-| [MemoryCard] [MemoryCard] [MemoryCard]   |
-| ...grid responsivo...                    |
-+------------------------------------------+
-```
-
-Filtros:
-- Dropdown por `kind` com opcoes: Todos, Perfil, Preferencia, Decisao, Projeto, Nota, Mensagem
-- Input de busca com debounce de 300ms (usa `searchMemory()` do hook)
-
-Estados:
-- Loading: grid de 6 Skeletons
-- Empty: icone + mensagem "Nenhuma memoria salva"
-- Filtered empty: "Nenhum resultado para os filtros aplicados"
-
-### 3. Formulario de Criacao (`src/components/jarvis/MemoryForm.tsx`)
-
-Dialog com campos:
-- `kind`: Select com opcoes predefinidas
-- `title`: Input opcional
-- `content`: Textarea (obrigatorio)
-- `source`: Hidden, default "manual"
-
-### 4. Modificacao no Sidebar (`JarvisSidebar.tsx`)
-
-Adicionar item na lista `jarvisNav`:
 ```typescript
-{ icon: Brain, label: "Memoria", href: "/jarvis/memory" }
+const allTags = useMemo(() => {
+  const tagSet = new Set<string>();
+  tasks.forEach(t => t.tags.forEach(tag => tagSet.add(tag)));
+  return Array.from(tagSet).sort();
+}, [tasks]);
 ```
-Usar icone `Lightbulb` ou `BookOpen` do lucide-react para diferenciar de "Inicio".
 
-### 5. Rota no App.tsx
+Retornar `allTags` junto com os outros dados do hook.
 
-Adicionar apos `/jarvis/settings`:
-```tsx
-<Route
-  path="/jarvis/memory"
-  element={
-    <ProtectedRoute>
-      <ErrorBoundary>
-        <JarvisLayout>
-          <JarvisMemory />
-        </JarvisLayout>
-      </ErrorBoundary>
-    </ProtectedRoute>
+---
+
+### 2. Componente TaskFilters (novo arquivo)
+
+Criar `src/components/jarvis/TaskFilters.tsx` com:
+
+```text
++-----------------------------------------------------------------------+
+| [🔍 Buscar tarefas...               ] [Prioridade ▼] [Tags ▼] [⇅ Ord] |
++-----------------------------------------------------------------------+
+```
+
+Props:
+- `searchQuery` / `onSearchChange` - busca por texto
+- `priorityFilter` / `onPriorityChange` - filtro por prioridade (all/low/medium/high)
+- `selectedTags` / `onTagsChange` - array de tags selecionadas
+- `sortBy` / `onSortChange` - campo de ordenacao (due_at/created_at)
+- `availableTags` - lista de tags disponiveis para multi-select
+
+Componentes internos:
+- Input com icone de busca e debounce interno (300ms)
+- Select para prioridade (Todas, Baixa, Media, Alta)
+- Popover com Checkboxes para tags (multi-select com chips)
+- Toggle ou Select para ordenacao (Por prazo / Por criacao)
+
+---
+
+### 3. Sincronizacao com URL Query Params
+
+Usar `useSearchParams` do react-router-dom para:
+- Ler filtros iniciais da URL ao montar componente
+- Atualizar URL quando filtros mudam (sem reload)
+
+Parametros da URL:
+- `q` - texto de busca
+- `priority` - low/medium/high
+- `tags` - tags separadas por virgula (ex: "trabalho,pessoal")
+- `sort` - due_at ou created_at
+- `tab` - aba temporal atual (today/week/all/done)
+
+Exemplo de URL completa:
+```
+/jarvis/tasks?q=reuniao&priority=high&tags=trabalho,urgente&sort=due_at&tab=today
+```
+
+---
+
+### 4. Logica de Filtragem na Pagina
+
+Manter os filtros temporais existentes (Hoje/Semana/Todas/Feitas) e aplicar filtros adicionais sobre o resultado:
+
+```typescript
+const filteredTasks = useMemo(() => {
+  // 1. Pegar base conforme tab selecionada
+  let base = tab === 'today' ? todayTasks
+           : tab === 'week' ? weekTasks
+           : tab === 'done' ? completedTasks
+           : allOpenTasks;
+  
+  // 2. Busca por texto (title + description)
+  if (debouncedSearch) {
+    const query = debouncedSearch.toLowerCase();
+    base = base.filter(t => 
+      t.title.toLowerCase().includes(query) ||
+      (t.description?.toLowerCase().includes(query))
+    );
   }
-/>
+  
+  // 3. Filtro por prioridade
+  if (priorityFilter !== 'all') {
+    base = base.filter(t => t.priority === priorityFilter);
+  }
+  
+  // 4. Filtro por tags (AND logic - tarefa deve ter todas as tags)
+  if (selectedTags.length > 0) {
+    base = base.filter(t => 
+      selectedTags.every(tag => t.tags.includes(tag))
+    );
+  }
+  
+  // 5. Ordenacao
+  return [...base].sort((a, b) => {
+    if (sortBy === 'due_at') {
+      // Tarefas sem prazo vao pro final
+      if (!a.due_at && !b.due_at) return 0;
+      if (!a.due_at) return 1;
+      if (!b.due_at) return -1;
+      return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
+    } else {
+      // created_at desc (mais recentes primeiro)
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    }
+  });
+}, [tab, todayTasks, weekTasks, allOpenTasks, completedTasks, 
+    debouncedSearch, priorityFilter, selectedTags, sortBy]);
 ```
 
 ---
 
-## Mapeamento de Kinds (Cores e Labels)
+### 5. Debounce para Busca
 
-| kind | Label PT | Cor Badge |
-|------|----------|-----------|
-| profile | Perfil | `bg-purple-500/20 text-purple-400` |
-| preference | Preferencia | `bg-blue-500/20 text-blue-400` |
-| decision | Decisao | `bg-yellow-500/20 text-yellow-400` |
-| project | Projeto | `bg-green-500/20 text-green-400` |
-| note | Nota | `bg-muted text-muted-foreground` |
-| message | Mensagem | `bg-cyan-500/20 text-cyan-400` |
-
----
-
-## Logica de Debounce para Busca
+Implementar debounce de 300ms similar ao JarvisMemory:
 
 ```typescript
-const [searchQuery, setSearchQuery] = useState("");
-const [debouncedQuery, setDebouncedQuery] = useState("");
+const [searchQuery, setSearchQuery] = useState(initialSearch);
+const [debouncedSearch, setDebouncedSearch] = useState(initialSearch);
 
 useEffect(() => {
   const timer = setTimeout(() => {
-    setDebouncedQuery(searchQuery);
+    setDebouncedSearch(searchQuery);
   }, 300);
   return () => clearTimeout(timer);
 }, [searchQuery]);
 
-const filteredItems = useMemo(() => {
-  let items = debouncedQuery 
-    ? searchMemory(debouncedQuery) 
-    : memoryItems;
-  
-  if (kindFilter !== "all") {
-    items = items.filter(i => i.kind === kindFilter);
+// Atualizar URL quando debouncedSearch mudar
+useEffect(() => {
+  setSearchParams(prev => {
+    if (debouncedSearch) prev.set('q', debouncedSearch);
+    else prev.delete('q');
+    return prev;
+  });
+}, [debouncedSearch]);
+```
+
+---
+
+### 6. Layout Visual da Pagina Atualizada
+
+```text
++----------------------------------------------------------+
+| [icone] Tarefas                                          |
+|         X pendentes                        [+ Nova]      |
++----------------------------------------------------------+
+| [Adicionar tarefa rapida...                           +] |
++----------------------------------------------------------+
+| [🔍 Buscar...]  [Prioridade ▼]  [Tags ▼]  [Ordenar ▼]   |
++----------------------------------------------------------+
+| [Hoje (5)] [Semana (3)] [Todas (12)] [Feitas (8)]       |
++----------------------------------------------------------+
+| [TaskCard] [TaskCard] [TaskCard] ...                     |
++----------------------------------------------------------+
+```
+
+---
+
+### 7. Multi-Select de Tags (Popover com Checkboxes)
+
+Usar Popover + Command (cmdk) para lista de tags com checkboxes:
+
+```tsx
+<Popover>
+  <PopoverTrigger asChild>
+    <Button variant="outline" className="gap-2">
+      <Tag className="h-4 w-4" />
+      Tags
+      {selectedTags.length > 0 && (
+        <Badge variant="secondary">{selectedTags.length}</Badge>
+      )}
+    </Button>
+  </PopoverTrigger>
+  <PopoverContent className="w-[200px] p-0">
+    <Command>
+      <CommandInput placeholder="Buscar tags..." />
+      <CommandList>
+        <CommandEmpty>Nenhuma tag encontrada</CommandEmpty>
+        <CommandGroup>
+          {availableTags.map(tag => (
+            <CommandItem key={tag} onSelect={() => toggleTag(tag)}>
+              <Checkbox checked={selectedTags.includes(tag)} />
+              <span className="ml-2">{tag}</span>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      </CommandList>
+    </Command>
+  </PopoverContent>
+</Popover>
+```
+
+---
+
+### 8. Contadores Dinamicos nas Tabs
+
+Atualizar contadores para refletir filtros aplicados:
+
+```tsx
+// Contar tarefas filtradas por tab
+const getFilteredCount = (tabTasks: JarvisTask[]) => {
+  let count = tabTasks;
+  if (debouncedSearch) {
+    const q = debouncedSearch.toLowerCase();
+    count = count.filter(t => t.title.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q));
   }
-  
-  return items;
-}, [memoryItems, debouncedQuery, kindFilter]);
+  if (priorityFilter !== 'all') {
+    count = count.filter(t => t.priority === priorityFilter);
+  }
+  if (selectedTags.length > 0) {
+    count = count.filter(t => selectedTags.every(tag => t.tags.includes(tag)));
+  }
+  return count.length;
+};
+
+// Exibir contadores
+<TabsTrigger value="today">
+  Hoje ({getFilteredCount(todayTasks)})
+</TabsTrigger>
 ```
 
 ---
 
-## Dialog "Ver Mais" (Detalhes da Memoria)
+### 9. Indicador Visual de Filtros Ativos
 
-Ao clicar em "Ver mais", abre um Dialog mostrando:
-- Titulo completo
-- Kind badge
-- Data de criacao formatada
-- Conteudo completo (scrollable)
-- Source badge (manual/whatsapp/etc)
-- Botao "Copiar tudo"
-- Botao "Fechar"
+Mostrar badge ou texto indicando que filtros estao ativos:
+
+```tsx
+{hasActiveFilters && (
+  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+    <span>Filtros ativos:</span>
+    {debouncedSearch && <Badge variant="secondary">Busca: "{debouncedSearch}"</Badge>}
+    {priorityFilter !== 'all' && <Badge variant="secondary">Prioridade: {priorityLabels[priorityFilter]}</Badge>}
+    {selectedTags.map(tag => <Badge key={tag} variant="secondary">{tag}</Badge>)}
+    <Button variant="ghost" size="sm" onClick={clearFilters}>
+      <X className="h-3 w-3 mr-1" /> Limpar
+    </Button>
+  </div>
+)}
+```
 
 ---
 
-## Responsividade
+### 10. Responsividade
 
-- Desktop: Grid de 3 colunas
-- Tablet: Grid de 2 colunas
-- Mobile: 1 coluna
+Mobile: filtros em coluna, Popover/Sheet para tags
+Desktop: filtros em linha horizontal
 
-Classes Tailwind:
 ```css
-grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3
+/* Filtros container */
+flex flex-col gap-3 sm:flex-row sm:items-center
 ```
 
 ---
 
-## Consideracoes de Seguranca
+## Fluxo de Dados
 
-- O hook `useJarvisMemory` ja filtra por `tenant_id` via RLS
-- Delete e feito direto (tabela nao tem `deleted_at`)
-- Confirmacao antes de deletar com `window.confirm()`
+```text
+URL Query Params (inicial)
+        ↓
+  useState (filtros locais)
+        ↓
+  useMemo (filtragem/ordenacao)
+        ↓
+  Renderizacao (lista filtrada)
+        ↓
+  Usuario muda filtro
+        ↓
+  Atualiza state + URL params
+```
 
 ---
 
 ## Entregaveis
 
-1. `src/pages/JarvisMemory.tsx` - Pagina completa
-2. `src/components/jarvis/MemoryCard.tsx` - Card individual
-3. `src/components/jarvis/MemoryForm.tsx` - Dialog de criacao
-4. `src/components/jarvis/JarvisSidebar.tsx` - Link adicionado
-5. `src/App.tsx` - Rota registrada
+1. `src/hooks/useJarvisTasks.ts` - adicionar `allTags`
+2. `src/components/jarvis/TaskFilters.tsx` - novo componente de filtros
+3. `src/pages/JarvisTasks.tsx` - integrar filtros, busca, ordenacao e URL sync
+
+---
+
+## Comportamento Esperado
+
+1. Usuario acessa `/jarvis/tasks` - ve tarefas de "Hoje" ordenadas por prazo
+2. Usuario digita "reuniao" na busca - apos 300ms, filtra tarefas
+3. Usuario seleciona prioridade "Alta" - lista atualiza instantaneamente
+4. Usuario seleciona tags "trabalho" e "urgente" - mostra apenas tarefas com ambas
+5. URL atualiza para `/jarvis/tasks?q=reuniao&priority=high&tags=trabalho,urgente&tab=today`
+6. Usuario compartilha link - destinatario ve mesma visualizacao
+7. Usuario clica "Limpar" - todos os filtros resetam, URL volta para `/jarvis/tasks?tab=today`
 
