@@ -1,361 +1,296 @@
 
+# Varredura Completa do Sistema JARVIS - Relatorio de Problemas e Implementacoes Faltantes
 
-# Plano: Implementar Configuracoes > Integracoes (Google Calendar)
+## Resumo Executivo
 
-## Visao Geral
-
-Transformar a secao de Integracoes na pagina de Configuracoes do JARVIS para mostrar o status de conexao com o Google Calendar, incluindo um hook para gerenciar os dados da tabela `ff_integrations_google` e uma UI preparada para OAuth futuro.
-
----
-
-## Estado Atual vs Novo
-
-| Aspecto | Atual | Novo |
-|---------|-------|------|
-| Botao Google Calendar | Desabilitado ("Em breve") | Funcional ("Conectar" / "Desconectar") |
-| Status de conexao | Nenhum | Badge Conectado/Desconectado |
-| Storage | Tabela existe, nao usada | Hook busca/cria entradas |
-| Placeholder OAuth | Nenhum | Alert informativo |
+Identifiquei **1 problema critico** que bloqueia todo o funcionamento do sistema, **3 problemas de seguranca** e **8 funcionalidades faltantes** para completar o modulo JARVIS.
 
 ---
 
-## Arquitetura da Solucao
+## PARTE 1: PROBLEMAS CRITICOS (BLOQUEANTES)
 
-```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         CARD INTEGRACOES                                 │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │   [Info Icon]  OAuth sera ativado na proxima sprint.            │    │
-│  │                Abaixo esta a estrutura preparada.               │    │
-│  └─────────────────────────────────────────────────────────────────┘    │
-│                                                                          │
-│  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │  [G] Google Calendar                         [Desconectado]     │    │
-│  │      Sincronize seus eventos automaticamente                    │    │
-│  │                                             [Conectar (Em breve)]│    │
-│  └─────────────────────────────────────────────────────────────────┘    │
-│                                                                          │
-│  ---- Separador ----                                                    │
-│                                                                          │
-│  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │  [WA] WhatsApp                                                   │    │
-│  │      Receba lembretes via WhatsApp             [Em breve]       │    │
-│  └─────────────────────────────────────────────────────────────────┘    │
-│                                                                          │
-└─────────────────────────────────────────────────────────────────────────┘
+### 1.1 Recursao Infinita nas Policies RLS de `tenant_members`
+
+**Severidade:** CRITICA - Bloqueia todas as operacoes do JARVIS
+
+**Erro nos logs:**
+```
+infinite recursion detected in policy for relation "tenant_members"
+```
+
+**Causa raiz:**
+As policies da tabela `tenant_members` referenciam a propria tabela em subqueries, criando um loop infinito:
+
+```sql
+-- Policy problematica: tenant_members_select_if_member
+USING condition: (tenant_id IN ( 
+  SELECT tenant_members_1.tenant_id
+  FROM tenant_members tenant_members_1
+  WHERE (tenant_members_1.user_id = auth.uid())
+))
+```
+
+Quando o banco tenta verificar se o usuario pode ler `tenant_members`, ele precisa fazer SELECT em `tenant_members` para verificar, que precisa verificar novamente... recursao infinita.
+
+**Solucao proposta:**
+Reescrever as policies de `tenant_members` para usar verificacao direta sem subquery:
+
+```sql
+-- DROPAR policies problematicas
+DROP POLICY IF EXISTS "tenant_members_select_if_member" ON public.tenant_members;
+DROP POLICY IF EXISTS "tenant_members_mutate_admin" ON public.tenant_members;
+
+-- Nova policy SELECT: usuario pode ver suas proprias memberships
+CREATE POLICY "tenant_members_select_own"
+ON public.tenant_members FOR SELECT
+USING (user_id = auth.uid());
+
+-- Nova policy UPDATE/DELETE: apenas owner/admin podem modificar
+CREATE POLICY "tenant_members_update_admin"
+ON public.tenant_members FOR UPDATE
+USING (
+  EXISTS (
+    SELECT 1 FROM public.tenants t
+    WHERE t.id = tenant_members.tenant_id
+    AND t.created_by = auth.uid()
+  )
+);
+
+CREATE POLICY "tenant_members_delete_admin"
+ON public.tenant_members FOR DELETE
+USING (
+  EXISTS (
+    SELECT 1 FROM public.tenants t
+    WHERE t.id = tenant_members.tenant_id
+    AND t.created_by = auth.uid()
+  )
+);
 ```
 
 ---
 
-## Parte 1: Adicionar Tipo GoogleIntegration
+## PARTE 2: PROBLEMAS DE SEGURANCA
 
-### Modificar: `src/types/jarvis.ts`
+### 2.1 Policy RLS "Always True" no INSERT de Leads
 
-```typescript
-export interface GoogleIntegration {
-  id: string;
-  tenant_id: string;
-  user_id: string;
-  email: string | null;
-  access_token: string | null;
-  refresh_token: string | null;
-  expiry: string | null;
-  scope: string | null;
-  created_at: string;
-  updated_at: string;
-}
+**Severidade:** WARN
+
+A tabela `leads` tem `WITH CHECK (true)` para INSERT, permitindo insercao anonima. Isso e intencional para captura de leads na landing page, mas deve ser monitorado.
+
+### 2.2 Functions com Search Path Mutavel
+
+**Severidade:** WARN
+
+Duas funcoes nao tem `search_path` definido, potencial vetor de ataque:
+- `ff_complete_task`
+- Outras funcoes de sistema
+
+**Solucao:**
+```sql
+ALTER FUNCTION ff_complete_task(uuid) SET search_path = public;
+```
+
+### 2.3 Extensao no Schema Public
+
+**Severidade:** WARN
+
+Extensoes instaladas no schema `public` podem ser problematicas.
+
+---
+
+## PARTE 3: FUNCIONALIDADES FALTANTES
+
+### 3.1 Pagina de Memoria (ff_memory_items)
+
+**Status:** Hook existe, pagina NAO existe
+
+O hook `useJarvisMemory.ts` esta implementado, mas:
+- Nao existe pagina `/jarvis/memory`
+- Nao existe link no sidebar
+- UI de gerenciamento de memorias nao implementada
+
+**Arquivos necessarios:**
+- `src/pages/JarvisMemory.tsx` (novo)
+- Atualizar `src/components/jarvis/JarvisSidebar.tsx`
+- Atualizar `src/App.tsx` com rota
+
+### 3.2 Sincronizacao Real com Google Calendar (OAuth)
+
+**Status:** UI placeholder pronta, OAuth NAO implementado
+
+O sistema tem:
+- Tabela `ff_integrations_google` criada
+- Hook `useGoogleIntegration.ts` funcionando
+- UI de status na pagina de Configuracoes
+
+Faltando:
+- Edge function para OAuth flow com Google
+- Callback handler para tokens
+- Sincronizacao automatica de eventos
+
+### 3.3 Notificacoes Push/WhatsApp para Lembretes
+
+**Status:** NAO implementado
+
+O sistema tem:
+- Tabela `ff_reminders` com campo `channel`
+- Hook para marcar status manualmente
+
+Faltando:
+- Service Worker para Push notifications
+- Integracao com WhatsApp API
+- Edge function para envio de lembretes (cron)
+
+### 3.4 Calculo de Streaks para Habitos
+
+**Status:** PARCIAL
+
+O hook `useJarvisHabits.ts` calcula progresso do periodo atual, mas:
+- Nao calcula streak consecutivo
+- Type `JarvisHabit` tem campo opcional `currentStreak` mas nao e populado
+
+### 3.5 Convite de Membros para Tenant
+
+**Status:** NAO implementado
+
+Preparado na UI com botao "Em breve", mas falta:
+- UI para convidar por email
+- Sistema de convites pendentes
+- Edge function para envio de convite
+
+### 3.6 Filtros e Busca Avancada em Tarefas/Eventos
+
+**Status:** Basico implementado
+
+Existe filtros por periodo (Hoje/Semana/Todas/Feitas), mas falta:
+- Busca por texto
+- Filtro por tags
+- Filtro por prioridade
+
+### 3.7 Exportacao de Dados JARVIS
+
+**Status:** NAO implementado
+
+Nao existe funcionalidade para exportar:
+- Tarefas para CSV/PDF
+- Eventos para ICS (iCalendar)
+- Habitos para relatorio
+
+### 3.8 Dashboard Analitcio de Produtividade
+
+**Status:** NAO implementado
+
+O dashboard atual mostra resumo simples, mas falta:
+- Graficos de produtividade ao longo do tempo
+- Taxa de conclusao de tarefas por semana/mes
+- Analise de habitos (dias com melhor adesao)
+- Comparativo de periodos
+
+---
+
+## PARTE 4: CORRECOES MENORES
+
+### 4.1 Erro de RLS em Transactions (soft-delete)
+
+**Erro nos logs:**
+```
+new row violates row-level security policy for table "transactions"
+```
+
+A policy de DELETE em `transactions` usa `USING (auth.uid() = user_id)`, mas o hook faz soft-delete com UPDATE em `deleted_at`. A policy de UPDATE tambem esta correta, entao o problema pode ser:
+- Tentativa de deletar transacao de outro usuario
+- Falta de dados no primeiro acesso (categorias/wallets nao criadas)
+
+### 4.2 Warning de DialogContent sem Description
+
+**Severidade:** Menor (acessibilidade)
+
+Alguns dialogs nao tem `aria-describedby`. Corrigir adicionando:
+```tsx
+<DialogHeader>
+  <DialogTitle>Titulo</DialogTitle>
+  <DialogDescription>Descricao opcional</DialogDescription>
+</DialogHeader>
 ```
 
 ---
 
-## Parte 2: Criar Hook useGoogleIntegration
+## PARTE 5: PLANO DE ACAO PRIORIZADO
 
-### Novo arquivo: `src/hooks/useGoogleIntegration.ts`
+### Prioridade 1 - Critico (Imediato)
+1. **Corrigir recursao infinita em tenant_members** - Sem isso, nada funciona
+   - Dropar policies problematicas
+   - Criar novas policies com verificacao direta
 
-O hook gerencia o estado de conexao com Google Calendar:
+### Prioridade 2 - Alta (Esta semana)
+2. **Implementar pagina Memory** - Funcionalidade core do JARVIS
+3. **Adicionar calculo de streaks** - Engajamento com habitos
 
-```typescript
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useTenant } from "@/contexts/TenantContext";
-import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
-import type { GoogleIntegration } from "@/types/jarvis";
+### Prioridade 3 - Media (Proximo sprint)
+4. **Implementar OAuth Google Calendar** - Integracao principal
+5. **Sistema de Push Notifications** - Notificacoes locais primeiro
+6. **Filtros avancados em tarefas**
 
-export const useGoogleIntegration = () => {
-  const { tenantId } = useTenant();
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+### Prioridade 4 - Baixa (Futuro)
+7. **Convite de membros**
+8. **Exportacao de dados**
+9. **Dashboard analitico**
+10. **Integracao WhatsApp** (requer conta business)
 
-  const queryKey = ["google-integration", tenantId, user?.id];
+---
 
-  // Buscar integracao existente
-  const { data: integration, isLoading } = useQuery({
-    queryKey,
-    queryFn: async () => {
-      if (!tenantId || !user) return null;
-      
-      const { data, error } = await supabase
-        .from("ff_integrations_google")
-        .select("*")
-        .eq("tenant_id", tenantId)
-        .eq("user_id", user.id)
-        .maybeSingle();
+## PARTE 6: MIGRACAO SQL NECESSARIA
 
-      if (error) throw error;
-      return data as GoogleIntegration | null;
-    },
-    enabled: !!tenantId && !!user,
-  });
+Para resolver o problema critico imediato:
 
-  // Status derivado
-  const isConnected = !!integration?.access_token;
-  
-  // Placeholder: Iniciar conexao (sera OAuth real no futuro)
-  const initiateConnection = useMutation({
-    mutationFn: async () => {
-      // Por enquanto, apenas mostra toast informativo
-      throw new Error("OAuth ainda nao implementado");
-    },
-    onError: () => {
-      toast({ 
-        title: "Em desenvolvimento", 
-        description: "A conexao com Google Calendar sera ativada em breve.",
-      });
-    },
-  });
+```sql
+-- =============================================
+-- FIX: Recursao infinita em tenant_members
+-- =============================================
 
-  // Desconectar (limpar tokens)
-  const disconnect = useMutation({
-    mutationFn: async () => {
-      if (!integration) throw new Error("Nenhuma integracao encontrada");
-      
-      const { error } = await supabase
-        .from("ff_integrations_google")
-        .update({
-          access_token: null,
-          refresh_token: null,
-          expiry: null,
-          email: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", integration.id);
+-- 1. Dropar policies problematicas
+DROP POLICY IF EXISTS "tenant_members_select_if_member" ON public.tenant_members;
+DROP POLICY IF EXISTS "tenant_members_mutate_admin" ON public.tenant_members;
 
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey });
-      toast({ title: "Google Calendar desconectado" });
-    },
-    onError: (error) => {
-      toast({ title: "Erro ao desconectar", description: error.message, variant: "destructive" });
-    },
-  });
+-- 2. Nova policy SELECT: usuario ve suas proprias memberships
+CREATE POLICY "tenant_members_select_own"
+ON public.tenant_members FOR SELECT
+USING (user_id = auth.uid());
 
-  return {
-    integration,
-    isLoading,
-    isConnected,
-    initiateConnection,
-    disconnect,
-    // Informacoes extras para UI
-    connectedEmail: integration?.email || null,
-  };
-};
+-- 3. Policy UPDATE: owner do tenant pode modificar
+CREATE POLICY "tenant_members_update_owner"
+ON public.tenant_members FOR UPDATE
+USING (
+  EXISTS (
+    SELECT 1 FROM public.tenants t
+    WHERE t.id = tenant_members.tenant_id
+    AND t.created_by = auth.uid()
+  )
+);
+
+-- 4. Policy DELETE: owner do tenant pode remover membros
+CREATE POLICY "tenant_members_delete_owner"
+ON public.tenant_members FOR DELETE
+USING (
+  EXISTS (
+    SELECT 1 FROM public.tenants t
+    WHERE t.id = tenant_members.tenant_id
+    AND t.created_by = auth.uid()
+  )
+);
+
+-- 5. Atualizar policies das tabelas JARVIS para usar tenant_members seguro
+-- As tabelas ff_* referenciam tenant_members em suas policies.
+-- Com a nova policy de SELECT, elas funcionarao corretamente.
+
+-- 6. Fix search_path em funcoes
+ALTER FUNCTION public.ff_complete_task(uuid) SET search_path = public;
 ```
 
 ---
 
-## Parte 3: Reestruturar JarvisSettings - Secao Integracoes
+## Conclusao
 
-### Modificar: `src/pages/JarvisSettings.tsx`
+O sistema JARVIS tem uma base solida com todas as tabelas, hooks e componentes principais criados. O bloqueio critico e a recursao infinita nas policies de RLS do multi-tenant, que impede qualquer operacao de CRUD.
 
-Nova estrutura da secao de Integracoes:
-
-```typescript
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Info, Calendar as CalendarIcon, Link, Unlink } from "lucide-react";
-import { useGoogleIntegration } from "@/hooks/useGoogleIntegration";
-
-// Dentro do componente:
-const { 
-  isLoading: googleLoading, 
-  isConnected: googleConnected, 
-  connectedEmail,
-  initiateConnection,
-  disconnect
-} = useGoogleIntegration();
-
-// Nova secao de integracoes:
-<Card>
-  <CardHeader>
-    <CardTitle className="text-base flex items-center gap-2">
-      <Link className="h-4 w-4" />
-      Integracoes
-    </CardTitle>
-    <CardDescription>
-      Conecte servicos externos ao JARVIS
-    </CardDescription>
-  </CardHeader>
-  <CardContent className="space-y-4">
-    {/* Placeholder Alert */}
-    <Alert className="bg-muted/50 border-dashed">
-      <Info className="h-4 w-4" />
-      <AlertTitle className="text-sm">Em desenvolvimento</AlertTitle>
-      <AlertDescription className="text-xs">
-        OAuth sera ativado na proxima sprint. A estrutura abaixo esta preparada.
-      </AlertDescription>
-    </Alert>
-    
-    {/* Google Calendar */}
-    <div className="flex items-start gap-4 p-3 rounded-lg border bg-card">
-      <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-        <CalendarIcon className="h-5 w-5 text-blue-600" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <Label className="font-medium">Google Calendar</Label>
-          <Badge 
-            variant="outline" 
-            className={cn(
-              "text-xs",
-              googleConnected 
-                ? "border-success text-success" 
-                : "border-muted text-muted-foreground"
-            )}
-          >
-            {googleConnected ? "Conectado" : "Desconectado"}
-          </Badge>
-        </div>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          {googleConnected && connectedEmail
-            ? `Sincronizado com ${connectedEmail}`
-            : "Sincronize seus eventos automaticamente"}
-        </p>
-      </div>
-      <Button 
-        variant={googleConnected ? "destructive" : "outline"} 
-        size="sm"
-        disabled={googleLoading}
-        onClick={() => {
-          if (googleConnected) {
-            disconnect.mutate();
-          } else {
-            initiateConnection.mutate();
-          }
-        }}
-      >
-        {googleConnected ? (
-          <>
-            <Unlink className="h-3.5 w-3.5 mr-1" />
-            Desconectar
-          </>
-        ) : (
-          <>
-            <Link className="h-3.5 w-3.5 mr-1" />
-            Conectar
-          </>
-        )}
-      </Button>
-    </div>
-
-    <Separator />
-
-    {/* WhatsApp (mantido como placeholder) */}
-    <div className="flex items-center justify-between">
-      <div>
-        <Label>WhatsApp</Label>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Receba lembretes via WhatsApp
-        </p>
-      </div>
-      <Button variant="outline" size="sm" disabled>
-        Em breve
-      </Button>
-    </div>
-  </CardContent>
-</Card>
-```
-
----
-
-## Resumo de Arquivos
-
-### Criar (1 arquivo)
-
-| Arquivo | Descricao |
-|---------|-----------|
-| `src/hooks/useGoogleIntegration.ts` | Hook para gerenciar conexao Google |
-
-### Modificar (2 arquivos)
-
-| Arquivo | Alteracao |
-|---------|-----------|
-| `src/types/jarvis.ts` | Adicionar interface GoogleIntegration |
-| `src/pages/JarvisSettings.tsx` | Nova UI de integracoes com status |
-
----
-
-## Estrutura da Tabela (Ja Existente)
-
-A tabela `ff_integrations_google` ja existe com os campos:
-
-| Campo | Tipo | Uso |
-|-------|------|-----|
-| id | uuid | PK |
-| tenant_id | uuid | FK para tenants |
-| user_id | uuid | ID do usuario |
-| email | text | Email da conta Google conectada |
-| access_token | text | Token de acesso (OAuth) |
-| refresh_token | text | Token de refresh (OAuth) |
-| expiry | timestamptz | Expiracao do token |
-| scope | text | Escopos autorizados |
-| created_at | timestamptz | Criacao |
-| updated_at | timestamptz | Atualizacao |
-
----
-
-## Estados da UI
-
-| Estado | Badge | Botao | Descricao |
-|--------|-------|-------|-----------|
-| Desconectado | "Desconectado" (cinza) | "Conectar" (outline) | Sem tokens |
-| Conectando | - | Disabled + Loader | Durante OAuth (futuro) |
-| Conectado | "Conectado" (verde) | "Desconectar" (destructive) | access_token presente |
-| Email visivel | - | - | Mostra email@exemplo.com |
-
----
-
-## Fluxo de Conexao (Preparado para OAuth)
-
-```text
-1. Usuario clica "Conectar"
-2. Toast: "OAuth sera ativado na proxima sprint"
-3. [FUTURO] Redireciona para Google OAuth
-4. [FUTURO] Callback salva tokens em ff_integrations_google
-5. [FUTURO] UI atualiza para "Conectado"
-```
-
----
-
-## Fluxo de Desconexao
-
-```text
-1. Usuario clica "Desconectar"
-2. Hook limpa access_token, refresh_token, email
-3. Query invalida e refetch
-4. UI atualiza para "Desconectado"
-5. Toast: "Google Calendar desconectado"
-```
-
----
-
-## Seguranca
-
-- Tokens armazenados na tabela com RLS por tenant_id e user_id
-- Apenas o proprio usuario pode ver/modificar sua integracao
-- Desconexao remove tokens completamente
-
+Apos corrigir esse problema, as funcionalidades core (tarefas, eventos, habitos, lembretes) funcionarao. As integracoes externas (Google, WhatsApp) e features avancadas podem ser implementadas incrementalmente.
