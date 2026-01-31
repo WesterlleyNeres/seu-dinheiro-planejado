@@ -19,6 +19,7 @@ const JarvisHabits = () => {
     logHabit,
     getHabitProgress,
     isHabitLoggedToday,
+    getHabitStreak,
   } = useJarvisHabits();
 
   const [formOpen, setFormOpen] = useState(false);
@@ -156,6 +157,7 @@ const JarvisHabits = () => {
               habit={habit}
               progress={getHabitProgress(habit)}
               isLoggedToday={isHabitLoggedToday(habit.id)}
+              streak={getHabitStreak(habit)}
               isLogging={logHabit.isPending}
               onLog={handleLog}
               onEdit={handleEdit}
