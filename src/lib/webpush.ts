@@ -5,8 +5,42 @@
 
 import { supabase } from "@/integrations/supabase/client";
 
-// VAPID Public Key - deve ser configurada como env var
-const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || "";
+// VAPID Public Key - carregada dinamicamente do backend
+let VAPID_PUBLIC_KEY: string | null = null;
+let vapidLoadPromise: Promise<string | null> | null = null;
+
+/**
+ * Fetches the VAPID public key from the backend
+ */
+async function fetchVapidPublicKey(): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke("get-vapid-public-key");
+    if (error || !data?.publicKey) {
+      console.error("Failed to fetch VAPID key:", error);
+      return null;
+    }
+    return data.publicKey;
+  } catch (err) {
+    console.error("Error fetching VAPID key:", err);
+    return null;
+  }
+}
+
+/**
+ * Gets the VAPID public key, fetching it if necessary
+ */
+export async function getVapidPublicKey(): Promise<string | null> {
+  if (VAPID_PUBLIC_KEY) return VAPID_PUBLIC_KEY;
+  
+  if (!vapidLoadPromise) {
+    vapidLoadPromise = fetchVapidPublicKey().then(key => {
+      VAPID_PUBLIC_KEY = key;
+      return key;
+    });
+  }
+  
+  return vapidLoadPromise;
+}
 
 /**
  * Converts a base64 string to Uint8Array for VAPID key
@@ -74,7 +108,9 @@ export function getNotificationPermission(): NotificationPermission {
  * Subscribes to push notifications using the push manager
  */
 export async function subscribeToPush(): Promise<PushSubscription | null> {
-  if (!VAPID_PUBLIC_KEY) {
+  const vapidKey = await getVapidPublicKey();
+  
+  if (!vapidKey) {
     console.error("VAPID_PUBLIC_KEY not configured");
     return null;
   }
@@ -82,7 +118,7 @@ export async function subscribeToPush(): Promise<PushSubscription | null> {
   const registration = await navigator.serviceWorker.ready;
   
   try {
-    const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+    const applicationServerKey = urlBase64ToUint8Array(vapidKey);
     const subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: applicationServerKey.buffer as ArrayBuffer,
@@ -224,7 +260,15 @@ export function isPushSupported(): boolean {
 }
 
 /**
- * Checks if VAPID key is configured
+ * Checks if VAPID key is configured (async check)
+ */
+export async function checkVapidConfigured(): Promise<boolean> {
+  const key = await getVapidPublicKey();
+  return !!key && key.length > 0;
+}
+
+/**
+ * Synchronous check - returns cached value
  */
 export function isVapidConfigured(): boolean {
   return !!VAPID_PUBLIC_KEY && VAPID_PUBLIC_KEY.length > 0;
