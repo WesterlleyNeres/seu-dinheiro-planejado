@@ -7,6 +7,7 @@ import {
   Bell,
   Settings,
   Wallet,
+  Lightbulb,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -21,6 +22,7 @@ const jarvisNav = [
   { icon: CalendarDays, label: "Agenda", href: "/jarvis/calendar" },
   { icon: Repeat, label: "Hábitos", href: "/jarvis/habits" },
   { icon: Bell, label: "Lembretes", href: "/jarvis/reminders" },
+  { icon: Lightbulb, label: "Memória", href: "/jarvis/memory" },
   { icon: Settings, label: "Configurações", href: "/jarvis/settings" },
 ];
 

@@ -31,6 +31,7 @@ import JarvisCalendar from "./pages/JarvisCalendar";
 import JarvisHabits from "./pages/JarvisHabits";
 import JarvisReminders from "./pages/JarvisReminders";
 import JarvisSettings from "./pages/JarvisSettings";
+import JarvisMemory from "./pages/JarvisMemory";
 
 // Component to redirect logged users from landing to dashboard
 const LandingOrDashboard = () => {
@@ -288,6 +289,18 @@ const App = () => (
                   <ErrorBoundary>
                     <JarvisLayout>
                       <JarvisSettings />
+                    </JarvisLayout>
+                  </ErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/jarvis/memory"
+              element={
+                <ProtectedRoute>
+                  <ErrorBoundary>
+                    <JarvisLayout>
+                      <JarvisMemory />
                     </JarvisLayout>
                   </ErrorBoundary>
                 </ProtectedRoute>
