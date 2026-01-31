@@ -1,10 +1,10 @@
 
 
-# Plano de Implementacao - Filtros Avancados para JarvisTasks
+# Plano de Implementacao - Calculo de Streak para Habitos
 
 ## Resumo
 
-Adicionar busca por texto, filtros por prioridade e tags, opcoes de ordenacao, e sincronizacao com query params na URL para a pagina de tarefas do JARVIS.
+Implementar calculo de streaks consecutivos para habitos no hook `useJarvisHabits.ts`, considerando logica diferenciada para habitos diarios (dias consecutivos) e semanais (semanas consecutivas com meta atingida).
 
 ---
 
@@ -12,266 +12,274 @@ Adicionar busca por texto, filtros por prioridade e tags, opcoes de ordenacao, e
 
 | Arquivo | Acao | Descricao |
 |---------|------|-----------|
-| `src/pages/JarvisTasks.tsx` | Modificar | Adicionar filtros, busca, ordenacao e integracao com URL |
-| `src/components/jarvis/TaskFilters.tsx` | Criar | Componente dedicado para filtros (busca, prioridade, tags, ordenacao) |
-| `src/hooks/useJarvisTasks.ts` | Modificar | Adicionar funcao para extrair todas as tags unicas |
+| `src/hooks/useJarvisHabits.ts` | Modificar | Expandir query de logs para 90 dias + adicionar funcao `getHabitStreak()` |
+| `src/pages/JarvisHabits.tsx` | Modificar | Passar prop `streak` para `HabitCardNectar` |
+| `src/components/jarvis/HabitCardNectar.tsx` | Modificar | Ajustar label de streak para refletir cadencia (dias/semanas) |
 
 ---
 
 ## Detalhamento Tecnico
 
-### 1. Hook useJarvisTasks - Adicionar extracao de tags unicas
+### 1. Expandir Query de Logs para 90 Dias
 
-Adicionar computed property para coletar todas as tags usadas nas tarefas:
+Atualmente a query busca apenas logs do mes atual, o que limita o calculo de streaks longos.
 
-```typescript
-const allTags = useMemo(() => {
-  const tagSet = new Set<string>();
-  tasks.forEach(t => t.tags.forEach(tag => tagSet.add(tag)));
-  return Array.from(tagSet).sort();
-}, [tasks]);
-```
-
-Retornar `allTags` junto com os outros dados do hook.
-
----
-
-### 2. Componente TaskFilters (novo arquivo)
-
-Criar `src/components/jarvis/TaskFilters.tsx` com:
-
-```text
-+-----------------------------------------------------------------------+
-| [🔍 Buscar tarefas...               ] [Prioridade ▼] [Tags ▼] [⇅ Ord] |
-+-----------------------------------------------------------------------+
-```
-
-Props:
-- `searchQuery` / `onSearchChange` - busca por texto
-- `priorityFilter` / `onPriorityChange` - filtro por prioridade (all/low/medium/high)
-- `selectedTags` / `onTagsChange` - array de tags selecionadas
-- `sortBy` / `onSortChange` - campo de ordenacao (due_at/created_at)
-- `availableTags` - lista de tags disponiveis para multi-select
-
-Componentes internos:
-- Input com icone de busca e debounce interno (300ms)
-- Select para prioridade (Todas, Baixa, Media, Alta)
-- Popover com Checkboxes para tags (multi-select com chips)
-- Toggle ou Select para ordenacao (Por prazo / Por criacao)
-
----
-
-### 3. Sincronizacao com URL Query Params
-
-Usar `useSearchParams` do react-router-dom para:
-- Ler filtros iniciais da URL ao montar componente
-- Atualizar URL quando filtros mudam (sem reload)
-
-Parametros da URL:
-- `q` - texto de busca
-- `priority` - low/medium/high
-- `tags` - tags separadas por virgula (ex: "trabalho,pessoal")
-- `sort` - due_at ou created_at
-- `tab` - aba temporal atual (today/week/all/done)
-
-Exemplo de URL completa:
-```
-/jarvis/tasks?q=reuniao&priority=high&tags=trabalho,urgente&sort=due_at&tab=today
-```
-
----
-
-### 4. Logica de Filtragem na Pagina
-
-Manter os filtros temporais existentes (Hoje/Semana/Todas/Feitas) e aplicar filtros adicionais sobre o resultado:
+Modificacao na query `logsQueryKey`:
 
 ```typescript
-const filteredTasks = useMemo(() => {
-  // 1. Pegar base conforme tab selecionada
-  let base = tab === 'today' ? todayTasks
-           : tab === 'week' ? weekTasks
-           : tab === 'done' ? completedTasks
-           : allOpenTasks;
-  
-  // 2. Busca por texto (title + description)
-  if (debouncedSearch) {
-    const query = debouncedSearch.toLowerCase();
-    base = base.filter(t => 
-      t.title.toLowerCase().includes(query) ||
-      (t.description?.toLowerCase().includes(query))
-    );
-  }
-  
-  // 3. Filtro por prioridade
-  if (priorityFilter !== 'all') {
-    base = base.filter(t => t.priority === priorityFilter);
-  }
-  
-  // 4. Filtro por tags (AND logic - tarefa deve ter todas as tags)
-  if (selectedTags.length > 0) {
-    base = base.filter(t => 
-      selectedTags.every(tag => t.tags.includes(tag))
-    );
-  }
-  
-  // 5. Ordenacao
-  return [...base].sort((a, b) => {
-    if (sortBy === 'due_at') {
-      // Tarefas sem prazo vao pro final
-      if (!a.due_at && !b.due_at) return 0;
-      if (!a.due_at) return 1;
-      if (!b.due_at) return -1;
-      return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
-    } else {
-      // created_at desc (mais recentes primeiro)
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    }
-  });
-}, [tab, todayTasks, weekTasks, allOpenTasks, completedTasks, 
-    debouncedSearch, priorityFilter, selectedTags, sortBy]);
+// ANTES: apenas mes atual
+const start = startOfMonth(new Date());
+const end = endOfMonth(new Date());
+
+// DEPOIS: ultimos 90 dias para cobrir streaks longos
+const start = subDays(new Date(), 90);
+const end = new Date();
 ```
+
+Importar `subDays` do date-fns.
 
 ---
 
-### 5. Debounce para Busca
+### 2. Funcao `getHabitStreak` - Logica Principal
 
-Implementar debounce de 300ms similar ao JarvisMemory:
+Nova funcao no hook que calcula streak baseado na cadencia do habito:
 
 ```typescript
-const [searchQuery, setSearchQuery] = useState(initialSearch);
-const [debouncedSearch, setDebouncedSearch] = useState(initialSearch);
-
-useEffect(() => {
-  const timer = setTimeout(() => {
-    setDebouncedSearch(searchQuery);
-  }, 300);
-  return () => clearTimeout(timer);
-}, [searchQuery]);
-
-// Atualizar URL quando debouncedSearch mudar
-useEffect(() => {
-  setSearchParams(prev => {
-    if (debouncedSearch) prev.set('q', debouncedSearch);
-    else prev.delete('q');
-    return prev;
-  });
-}, [debouncedSearch]);
-```
-
----
-
-### 6. Layout Visual da Pagina Atualizada
-
-```text
-+----------------------------------------------------------+
-| [icone] Tarefas                                          |
-|         X pendentes                        [+ Nova]      |
-+----------------------------------------------------------+
-| [Adicionar tarefa rapida...                           +] |
-+----------------------------------------------------------+
-| [🔍 Buscar...]  [Prioridade ▼]  [Tags ▼]  [Ordenar ▼]   |
-+----------------------------------------------------------+
-| [Hoje (5)] [Semana (3)] [Todas (12)] [Feitas (8)]       |
-+----------------------------------------------------------+
-| [TaskCard] [TaskCard] [TaskCard] ...                     |
-+----------------------------------------------------------+
-```
-
----
-
-### 7. Multi-Select de Tags (Popover com Checkboxes)
-
-Usar Popover + Command (cmdk) para lista de tags com checkboxes:
-
-```tsx
-<Popover>
-  <PopoverTrigger asChild>
-    <Button variant="outline" className="gap-2">
-      <Tag className="h-4 w-4" />
-      Tags
-      {selectedTags.length > 0 && (
-        <Badge variant="secondary">{selectedTags.length}</Badge>
-      )}
-    </Button>
-  </PopoverTrigger>
-  <PopoverContent className="w-[200px] p-0">
-    <Command>
-      <CommandInput placeholder="Buscar tags..." />
-      <CommandList>
-        <CommandEmpty>Nenhuma tag encontrada</CommandEmpty>
-        <CommandGroup>
-          {availableTags.map(tag => (
-            <CommandItem key={tag} onSelect={() => toggleTag(tag)}>
-              <Checkbox checked={selectedTags.includes(tag)} />
-              <span className="ml-2">{tag}</span>
-            </CommandItem>
-          ))}
-        </CommandGroup>
-      </CommandList>
-    </Command>
-  </PopoverContent>
-</Popover>
-```
-
----
-
-### 8. Contadores Dinamicos nas Tabs
-
-Atualizar contadores para refletir filtros aplicados:
-
-```tsx
-// Contar tarefas filtradas por tab
-const getFilteredCount = (tabTasks: JarvisTask[]) => {
-  let count = tabTasks;
-  if (debouncedSearch) {
-    const q = debouncedSearch.toLowerCase();
-    count = count.filter(t => t.title.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q));
+const getHabitStreak = (habit: JarvisHabit): number => {
+  const habitLogs = logs.filter(l => l.habit_id === habit.id);
+  
+  if (habitLogs.length === 0) return 0;
+  
+  switch (habit.cadence) {
+    case "daily":
+      return calculateDailyStreak(habitLogs);
+    case "weekly":
+      return calculateWeeklyStreak(habitLogs, habit.times_per_cadence);
+    case "monthly":
+      return calculateMonthlyStreak(habitLogs, habit.times_per_cadence);
+    default:
+      return 0;
   }
-  if (priorityFilter !== 'all') {
-    count = count.filter(t => t.priority === priorityFilter);
-  }
-  if (selectedTags.length > 0) {
-    count = count.filter(t => selectedTags.every(tag => t.tags.includes(tag)));
-  }
-  return count.length;
 };
-
-// Exibir contadores
-<TabsTrigger value="today">
-  Hoje ({getFilteredCount(todayTasks)})
-</TabsTrigger>
 ```
 
 ---
 
-### 9. Indicador Visual de Filtros Ativos
+### 3. Calculo de Streak Diario
 
-Mostrar badge ou texto indicando que filtros estao ativos:
+Para habitos diarios, contar dias consecutivos com pelo menos 1 log:
+
+```typescript
+const calculateDailyStreak = (habitLogs: JarvisHabitLog[]): number => {
+  // Obter datas unicas com logs, ordenadas desc
+  const logDates = [...new Set(habitLogs.map(l => l.log_date))].sort().reverse();
+  
+  if (logDates.length === 0) return 0;
+  
+  const today = format(new Date(), "yyyy-MM-dd");
+  const yesterday = format(subDays(new Date(), 1), "yyyy-MM-dd");
+  
+  // Streak so conta se ultimo log foi hoje ou ontem
+  if (logDates[0] !== today && logDates[0] !== yesterday) {
+    return 0;
+  }
+  
+  let streak = 0;
+  let currentDate = logDates[0] === today 
+    ? new Date() 
+    : subDays(new Date(), 1);
+  
+  for (const logDate of logDates) {
+    const expectedDate = format(currentDate, "yyyy-MM-dd");
+    
+    if (logDate === expectedDate) {
+      streak++;
+      currentDate = subDays(currentDate, 1);
+    } else if (logDate < expectedDate) {
+      // Gap encontrado, parar contagem
+      break;
+    }
+  }
+  
+  return streak;
+};
+```
+
+---
+
+### 4. Calculo de Streak Semanal
+
+Para habitos semanais, contar semanas consecutivas onde `times_per_cadence` foi atingido:
+
+```typescript
+const calculateWeeklyStreak = (
+  habitLogs: JarvisHabitLog[], 
+  timesPerCadence: number
+): number => {
+  // Agrupar logs por semana (ISO week)
+  const weeklyCompletions = new Map<string, number>();
+  
+  habitLogs.forEach(log => {
+    const weekKey = format(startOfWeek(new Date(log.log_date), { weekStartsOn: 0 }), "yyyy-MM-dd");
+    weeklyCompletions.set(weekKey, (weeklyCompletions.get(weekKey) || 0) + log.value);
+  });
+  
+  // Ordenar semanas desc
+  const sortedWeeks = [...weeklyCompletions.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]));
+  
+  if (sortedWeeks.length === 0) return 0;
+  
+  const currentWeekStart = format(startOfWeek(new Date(), { weekStartsOn: 0 }), "yyyy-MM-dd");
+  const lastWeekStart = format(startOfWeek(subWeeks(new Date(), 1), { weekStartsOn: 0 }), "yyyy-MM-dd");
+  
+  // Verificar se semana atual ou anterior tem completions
+  const firstWeekInLogs = sortedWeeks[0][0];
+  if (firstWeekInLogs !== currentWeekStart && firstWeekInLogs !== lastWeekStart) {
+    return 0;
+  }
+  
+  let streak = 0;
+  let expectedWeek = firstWeekInLogs === currentWeekStart 
+    ? new Date() 
+    : subWeeks(new Date(), 1);
+  
+  for (const [weekStart, completions] of sortedWeeks) {
+    const expectedWeekStart = format(startOfWeek(expectedWeek, { weekStartsOn: 0 }), "yyyy-MM-dd");
+    
+    if (weekStart === expectedWeekStart && completions >= timesPerCadence) {
+      streak++;
+      expectedWeek = subWeeks(expectedWeek, 1);
+    } else if (weekStart === expectedWeekStart && completions < timesPerCadence) {
+      // Semana existe mas meta nao atingida
+      break;
+    } else if (weekStart < expectedWeekStart) {
+      // Gap de semana, parar
+      break;
+    }
+  }
+  
+  return streak;
+};
+```
+
+Importar `subWeeks` do date-fns.
+
+---
+
+### 5. Calculo de Streak Mensal (Bonus)
+
+Similar ao semanal, mas agrupando por mes:
+
+```typescript
+const calculateMonthlyStreak = (
+  habitLogs: JarvisHabitLog[], 
+  timesPerCadence: number
+): number => {
+  const monthlyCompletions = new Map<string, number>();
+  
+  habitLogs.forEach(log => {
+    const monthKey = format(startOfMonth(new Date(log.log_date)), "yyyy-MM");
+    monthlyCompletions.set(monthKey, (monthlyCompletions.get(monthKey) || 0) + log.value);
+  });
+  
+  const sortedMonths = [...monthlyCompletions.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]));
+  
+  if (sortedMonths.length === 0) return 0;
+  
+  const currentMonth = format(new Date(), "yyyy-MM");
+  const lastMonth = format(subMonths(new Date(), 1), "yyyy-MM");
+  
+  const firstMonthInLogs = sortedMonths[0][0];
+  if (firstMonthInLogs !== currentMonth && firstMonthInLogs !== lastMonth) {
+    return 0;
+  }
+  
+  let streak = 0;
+  let expectedMonth = firstMonthInLogs === currentMonth 
+    ? new Date() 
+    : subMonths(new Date(), 1);
+  
+  for (const [month, completions] of sortedMonths) {
+    const expectedMonthKey = format(expectedMonth, "yyyy-MM");
+    
+    if (month === expectedMonthKey && completions >= timesPerCadence) {
+      streak++;
+      expectedMonth = subMonths(expectedMonth, 1);
+    } else {
+      break;
+    }
+  }
+  
+  return streak;
+};
+```
+
+Importar `subMonths` do date-fns.
+
+---
+
+### 6. Retornar `getHabitStreak` no Hook
+
+Adicionar ao return do hook:
+
+```typescript
+return {
+  habits,
+  logs,
+  isLoading: habitsLoading || logsLoading,
+  createHabit,
+  updateHabit,
+  deleteHabit,
+  logHabit,
+  getHabitProgress,
+  isHabitLoggedToday,
+  getHabitStreak, // NOVO
+};
+```
+
+---
+
+### 7. Passar Streak para o Card na Pagina
+
+No arquivo `JarvisHabits.tsx`, adicionar a prop:
 
 ```tsx
-{hasActiveFilters && (
-  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-    <span>Filtros ativos:</span>
-    {debouncedSearch && <Badge variant="secondary">Busca: "{debouncedSearch}"</Badge>}
-    {priorityFilter !== 'all' && <Badge variant="secondary">Prioridade: {priorityLabels[priorityFilter]}</Badge>}
-    {selectedTags.map(tag => <Badge key={tag} variant="secondary">{tag}</Badge>)}
-    <Button variant="ghost" size="sm" onClick={clearFilters}>
-      <X className="h-3 w-3 mr-1" /> Limpar
-    </Button>
+<HabitCardNectar
+  key={habit.id}
+  habit={habit}
+  progress={getHabitProgress(habit)}
+  isLoggedToday={isHabitLoggedToday(habit.id)}
+  streak={getHabitStreak(habit)} // NOVO
+  isLogging={logHabit.isPending}
+  onLog={handleLog}
+  onEdit={handleEdit}
+  onDelete={handleDelete}
+/>
+```
+
+---
+
+### 8. Ajustar Label de Streak no Card
+
+No `HabitCardNectar.tsx`, o label deve refletir a cadencia:
+
+```tsx
+{streak > 0 && (
+  <div className="flex items-center gap-1 mt-2">
+    <Flame className="h-3.5 w-3.5 text-warning" />
+    <span className="text-xs text-warning font-medium">
+      {streak} {
+        habit.cadence === "daily" 
+          ? streak === 1 ? "dia" : "dias seguidos"
+          : habit.cadence === "weekly"
+            ? streak === 1 ? "semana" : "semanas seguidas"
+            : streak === 1 ? "mes" : "meses seguidos"
+      }
+    </span>
   </div>
 )}
-```
-
----
-
-### 10. Responsividade
-
-Mobile: filtros em coluna, Popover/Sheet para tags
-Desktop: filtros em linha horizontal
-
-```css
-/* Filtros container */
-flex flex-col gap-3 sm:flex-row sm:items-center
 ```
 
 ---
@@ -279,36 +287,77 @@ flex flex-col gap-3 sm:flex-row sm:items-center
 ## Fluxo de Dados
 
 ```text
-URL Query Params (inicial)
-        ↓
-  useState (filtros locais)
-        ↓
-  useMemo (filtragem/ordenacao)
-        ↓
-  Renderizacao (lista filtrada)
-        ↓
-  Usuario muda filtro
-        ↓
-  Atualiza state + URL params
+Query logs (90 dias)
+       ↓
+getHabitStreak(habit)
+       ↓
+  switch (cadence)
+       ↓
+ daily → calculateDailyStreak()   → dias consecutivos com log
+weekly → calculateWeeklyStreak()  → semanas com meta atingida
+monthly → calculateMonthlyStreak() → meses com meta atingida
+       ↓
+  Retorna numero inteiro
+       ↓
+ Passa como prop para HabitCardNectar
+       ↓
+   Exibe com icone de fogo
 ```
+
+---
+
+## Otimizacao de Performance
+
+1. **Query limitada a 90 dias**: Suficiente para streaks longos sem sobrecarregar
+2. **useMemo para calculo**: Evitar recalculos desnecessarios
+3. **Filtragem client-side**: Logs ja estao em memoria, nao precisa de nova query
+
+```typescript
+// Opcional: memoizar streaks para todos os habitos
+const habitStreaks = useMemo(() => {
+  return habits.reduce((acc, habit) => {
+    acc[habit.id] = getHabitStreak(habit);
+    return acc;
+  }, {} as Record<string, number>);
+}, [habits, logs]);
+```
+
+---
+
+## Imports Necessarios (date-fns)
+
+Adicionar ao `useJarvisHabits.ts`:
+
+```typescript
+import { 
+  startOfWeek, 
+  endOfWeek, 
+  startOfMonth, 
+  endOfMonth, 
+  format,
+  subDays,    // NOVO
+  subWeeks,   // NOVO
+  subMonths   // NOVO
+} from "date-fns";
+```
+
+---
+
+## Casos de Borda Tratados
+
+| Cenario | Comportamento |
+|---------|---------------|
+| Nenhum log registrado | Streak = 0 |
+| Ultimo log ha 3 dias (daily) | Streak = 0 (quebrado) |
+| Semana atual incompleta (weekly) | Conta se semana anterior estava completa |
+| Habito criado hoje sem logs | Streak = 0 |
+| Log registrado hoje (primeiro) | Streak = 1 |
 
 ---
 
 ## Entregaveis
 
-1. `src/hooks/useJarvisTasks.ts` - adicionar `allTags`
-2. `src/components/jarvis/TaskFilters.tsx` - novo componente de filtros
-3. `src/pages/JarvisTasks.tsx` - integrar filtros, busca, ordenacao e URL sync
-
----
-
-## Comportamento Esperado
-
-1. Usuario acessa `/jarvis/tasks` - ve tarefas de "Hoje" ordenadas por prazo
-2. Usuario digita "reuniao" na busca - apos 300ms, filtra tarefas
-3. Usuario seleciona prioridade "Alta" - lista atualiza instantaneamente
-4. Usuario seleciona tags "trabalho" e "urgente" - mostra apenas tarefas com ambas
-5. URL atualiza para `/jarvis/tasks?q=reuniao&priority=high&tags=trabalho,urgente&tab=today`
-6. Usuario compartilha link - destinatario ve mesma visualizacao
-7. Usuario clica "Limpar" - todos os filtros resetam, URL volta para `/jarvis/tasks?tab=today`
+1. `src/hooks/useJarvisHabits.ts` - Funcao `getHabitStreak()` + query 90 dias
+2. `src/pages/JarvisHabits.tsx` - Passar prop `streak`
+3. `src/components/jarvis/HabitCardNectar.tsx` - Label dinamico por cadencia
 
