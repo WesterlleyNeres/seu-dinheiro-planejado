@@ -60,12 +60,40 @@ export const useJarvisMemory = () => {
       if (error) throw error;
       return data as JarvisMemoryItem;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey });
-      toast({ title: "Memória salva!" });
+    // Optimistic update para inserir no topo instantaneamente
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey });
+      
+      const previousItems = queryClient.getQueryData<JarvisMemoryItem[]>(queryKey);
+      
+      // Criar item temporário
+      const optimisticItem: JarvisMemoryItem = {
+        id: `temp-${Date.now()}`,
+        tenant_id: tenantId!,
+        user_id: user!.id,
+        kind: input.kind,
+        title: input.title || null,
+        content: input.content,
+        metadata: (input.metadata || {}) as Record<string, unknown>,
+        source: input.source || "manual",
+        created_at: new Date().toISOString(),
+      };
+      
+      queryClient.setQueryData<JarvisMemoryItem[]>(queryKey, (old) => 
+        [optimisticItem, ...(old || [])]
+      );
+      
+      return { previousItems };
     },
-    onError: (error) => {
-      toast({ title: "Erro ao salvar memória", description: error.message, variant: "destructive" });
+    onError: (err, _input, context) => {
+      queryClient.setQueryData(queryKey, context?.previousItems);
+      toast({ title: "Erro ao salvar memória", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey });
+    },
+    onSuccess: () => {
+      toast({ title: "Memória salva!" });
     },
   });
 

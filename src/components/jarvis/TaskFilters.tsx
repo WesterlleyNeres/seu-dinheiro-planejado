@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,10 +23,18 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Search, Tag, ArrowUpDown, X } from "lucide-react";
+import { Search, Tag, ArrowUpDown, X, Plus } from "lucide-react";
 
 export type PriorityFilter = "all" | "low" | "medium" | "high";
 export type SortBy = "due_at" | "created_at";
+
+const SUGGESTED_TAGS = [
+  "trabalho",
+  "pessoal",
+  "casa",
+  "saúde",
+  "urgente",
+];
 
 interface TaskFiltersProps {
   searchQuery: string;
@@ -66,11 +74,15 @@ export function TaskFilters({
 
   const toggleTag = (tag: string) => {
     if (selectedTags.includes(tag)) {
-      onTagsChange(selectedTags.filter(t => t !== tag));
+      onTagsChange(selectedTags.filter((t) => t !== tag));
     } else {
       onTagsChange([...selectedTags, tag]);
     }
   };
+
+  // Se não houver tags disponíveis, mostrar sugestões
+  const displayTags = availableTags.length > 0 ? availableTags : [];
+  const showSuggestions = availableTags.length === 0;
 
   return (
     <div className="space-y-3">
@@ -116,10 +128,34 @@ export function TaskFilters({
               )}
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-[200px] p-0 bg-background border" align="start">
-            {availableTags.length === 0 ? (
-              <div className="p-3 text-sm text-muted-foreground text-center">
-                Nenhuma tag disponível
+          <PopoverContent
+            className="w-[220px] p-0 bg-background border"
+            align="start"
+          >
+            {showSuggestions ? (
+              <div className="p-4 text-center">
+                <p className="text-sm text-muted-foreground mb-3">
+                  Nenhuma tag criada ainda
+                </p>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Sugestões para começar:
+                </p>
+                <div className="flex flex-wrap gap-1.5 justify-center">
+                  {SUGGESTED_TAGS.map((tag) => (
+                    <Badge
+                      key={tag}
+                      variant="outline"
+                      className="text-xs cursor-pointer hover:bg-primary/10"
+                      onClick={() => {
+                        toggleTag(tag);
+                        setTagsOpen(false);
+                      }}
+                    >
+                      <Plus className="h-3 w-3 mr-0.5" />
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
               </div>
             ) : (
               <Command>
@@ -127,7 +163,7 @@ export function TaskFilters({
                 <CommandList>
                   <CommandEmpty>Nenhuma tag encontrada</CommandEmpty>
                   <CommandGroup>
-                    {availableTags.map((tag) => (
+                    {displayTags.map((tag) => (
                       <CommandItem
                         key={tag}
                         value={tag}
@@ -149,10 +185,7 @@ export function TaskFilters({
         </Popover>
 
         {/* Sort Toggle */}
-        <Select
-          value={sortBy}
-          onValueChange={(v) => onSortChange(v as SortBy)}
-        >
+        <Select value={sortBy} onValueChange={(v) => onSortChange(v as SortBy)}>
           <SelectTrigger className="w-full sm:w-[150px]">
             <ArrowUpDown className="h-4 w-4 mr-2" />
             <SelectValue placeholder="Ordenar" />

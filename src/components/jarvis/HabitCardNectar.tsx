@@ -5,6 +5,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { MoreHorizontal, Trash2, Edit, Check, Flame, Loader2 } from "lucide-react";
 import type { JarvisHabit } from "@/types/jarvis";
 import { cn } from "@/lib/utils";
@@ -26,6 +32,18 @@ interface HabitCardNectarProps {
   onEdit: (habit: JarvisHabit) => void;
   onDelete: (id: string) => void;
 }
+
+const getStreakLabel = (cadence: string, streak: number) => {
+  if (cadence === "daily") return streak === 1 ? "dia" : "dias seguidos";
+  if (cadence === "weekly") return streak === 1 ? "semana" : "semanas seguidas";
+  return streak === 1 ? "mês" : "meses seguidos";
+};
+
+const getStreakTooltip = (cadence: string) => {
+  if (cadence === "daily") return "Dias consecutivos com pelo menos 1 registro";
+  if (cadence === "weekly") return "Semanas consecutivas com a meta atingida";
+  return "Meses consecutivos com a meta atingida";
+};
 
 export const HabitCardNectar = ({
   habit,
@@ -152,20 +170,23 @@ export const HabitCardNectar = ({
           </DropdownMenu>
         </div>
 
-        {/* Streak */}
+        {/* Streak with Tooltip */}
         {streak > 0 && (
-          <div className="flex items-center gap-1 mt-2">
-            <Flame className="h-3.5 w-3.5 text-warning" />
-            <span className="text-xs text-warning font-medium">
-              {streak} {
-                habit.cadence === "daily" 
-                  ? streak === 1 ? "dia" : "dias seguidos"
-                  : habit.cadence === "weekly"
-                    ? streak === 1 ? "semana" : "semanas seguidas"
-                    : streak === 1 ? "mês" : "meses seguidos"
-              }
-            </span>
-          </div>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="inline-flex items-center gap-1.5 mt-2 px-2 py-0.5 rounded-full bg-warning/10 cursor-help">
+                  <Flame className="h-3.5 w-3.5 text-warning" />
+                  <span className="text-xs text-warning font-medium">
+                    {streak} {getStreakLabel(habit.cadence, streak)}
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[200px]">
+                <p className="text-xs">{getStreakTooltip(habit.cadence)}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
 
         {/* Progress dots visualization - adaptive to cadence */}

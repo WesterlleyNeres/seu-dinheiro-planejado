@@ -1,0 +1,25 @@
+{
+  "name": "FRACTTO FLOW",
+  "short_name": "JARVIS",
+  "description": "Assistente pessoal JARVIS - Suas finanças e produtividade",
+  "start_url": "/jarvis",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ],
+  "categories": ["productivity", "finance"],
+  "lang": "pt-BR"
+}
