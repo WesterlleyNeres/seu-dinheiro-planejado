@@ -226,6 +226,357 @@ export type Database = {
         }
         Relationships: []
       }
+      ff_events: {
+        Row: {
+          all_day: boolean
+          created_at: string
+          created_by: string
+          description: string | null
+          end_at: string | null
+          google_calendar_id: string | null
+          google_event_id: string | null
+          id: string
+          location: string | null
+          priority: string
+          source: string
+          start_at: string
+          status: string
+          tenant_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          all_day?: boolean
+          created_at?: string
+          created_by: string
+          description?: string | null
+          end_at?: string | null
+          google_calendar_id?: string | null
+          google_event_id?: string | null
+          id?: string
+          location?: string | null
+          priority?: string
+          source?: string
+          start_at: string
+          status?: string
+          tenant_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          all_day?: boolean
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          end_at?: string | null
+          google_calendar_id?: string | null
+          google_event_id?: string | null
+          id?: string
+          location?: string | null
+          priority?: string
+          source?: string
+          start_at?: string
+          status?: string
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ff_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ff_habit_logs: {
+        Row: {
+          created_at: string
+          habit_id: string
+          id: string
+          log_date: string
+          tenant_id: string
+          user_id: string
+          value: number
+        }
+        Insert: {
+          created_at?: string
+          habit_id: string
+          id?: string
+          log_date?: string
+          tenant_id: string
+          user_id: string
+          value?: number
+        }
+        Update: {
+          created_at?: string
+          habit_id?: string
+          id?: string
+          log_date?: string
+          tenant_id?: string
+          user_id?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ff_habit_logs_habit_id_fkey"
+            columns: ["habit_id"]
+            isOneToOne: false
+            referencedRelation: "ff_habits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ff_habit_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ff_habits: {
+        Row: {
+          active: boolean
+          cadence: string
+          created_at: string
+          created_by: string
+          id: string
+          target_type: string
+          target_value: number
+          tenant_id: string
+          times_per_cadence: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          cadence?: string
+          created_at?: string
+          created_by: string
+          id?: string
+          target_type?: string
+          target_value?: number
+          tenant_id: string
+          times_per_cadence?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          cadence?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          target_type?: string
+          target_value?: number
+          tenant_id?: string
+          times_per_cadence?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ff_habits_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ff_integrations_google: {
+        Row: {
+          access_token: string | null
+          created_at: string
+          email: string | null
+          expiry: string | null
+          id: string
+          refresh_token: string | null
+          scope: string | null
+          tenant_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token?: string | null
+          created_at?: string
+          email?: string | null
+          expiry?: string | null
+          id?: string
+          refresh_token?: string | null
+          scope?: string | null
+          tenant_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string | null
+          created_at?: string
+          email?: string | null
+          expiry?: string | null
+          id?: string
+          refresh_token?: string | null
+          scope?: string | null
+          tenant_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ff_integrations_google_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ff_memory_items: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          kind: string
+          metadata: Json
+          source: string
+          tenant_id: string
+          title: string | null
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          kind: string
+          metadata?: Json
+          source?: string
+          tenant_id: string
+          title?: string | null
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          metadata?: Json
+          source?: string
+          tenant_id?: string
+          title?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ff_memory_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ff_reminders: {
+        Row: {
+          channel: string
+          created_at: string
+          created_by: string
+          id: string
+          remind_at: string
+          status: string
+          tenant_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          channel?: string
+          created_at?: string
+          created_by: string
+          id?: string
+          remind_at: string
+          status?: string
+          tenant_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          remind_at?: string
+          status?: string
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ff_reminders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ff_tasks: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          due_at: string | null
+          id: string
+          priority: string
+          source: string
+          status: string
+          tags: string[]
+          tenant_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          due_at?: string | null
+          id?: string
+          priority?: string
+          source?: string
+          status?: string
+          tags?: string[]
+          tenant_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          due_at?: string | null
+          id?: string
+          priority?: string
+          source?: string
+          status?: string
+          tags?: string[]
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ff_tasks_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       goals: {
         Row: {
           created_at: string
@@ -697,6 +1048,62 @@ export type Database = {
           },
         ]
       }
+      tenant_members: {
+        Row: {
+          created_at: string
+          id: string
+          role: string
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role?: string
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: string
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_members_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenants: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           category_id: string
@@ -1020,6 +1427,7 @@ export type Database = {
         Args: { p_month: number; p_user_id: string; p_year: number }
         Returns: undefined
       }
+      ff_complete_task: { Args: { p_task_id: string }; Returns: undefined }
       pay_card_statement: {
         Args: {
           p_payment_date: string
