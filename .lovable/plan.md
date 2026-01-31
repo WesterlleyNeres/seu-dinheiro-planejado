@@ -1,162 +1,328 @@
 
-# Plano: Validar e Corrigir Backend JARVIS + Gerar Helpers Frontend
+# Plano: Implementar Fluxo de Bootstrap Multi-Tenant
 
-## Status Atual - Análise Completa
+## Visão Geral
 
-### Tabelas JARVIS - Todas Existem
-| Tabela | Status | RLS | Triggers updated_at |
-|--------|--------|-----|---------------------|
-| `tenants` | Existe | Somente SELECT | Sim (`set_updated_at`) |
-| `tenant_members` | Existe | SELECT + mutate_admin | Não tem updated_at |
-| `profiles` | Existe | SELECT/INSERT/UPDATE | Sim |
-| `ff_tasks` | Existe | Completo (CRUD) | Sim |
-| `ff_events` | Existe | Completo (CRUD) | Sim |
-| `ff_habits` | Existe | Completo (CRUD) | Sim |
-| `ff_habit_logs` | Existe | Completo (CRUD) | Não aplicável |
-| `ff_reminders` | Existe | Completo (CRUD) | Sim |
-| `ff_memory_items` | Existe | SELECT/INSERT/DELETE | Não tem |
-| `ff_integrations_google` | Existe | SELECT/INSERT/UPDATE | Sim |
-
-### RPC `ff_complete_task` - Já Existe
-```sql
-CREATE OR REPLACE FUNCTION public.ff_complete_task(p_task_id uuid)
-RETURNS void LANGUAGE plpgsql SECURITY DEFINER
--- Marca status='done', completed_at=now(), respeitando tenant membership
-```
-
-### Problema Crítico Identificado
-As tabelas `tenants` e `tenant_members` não possuem policies INSERT para usuários autenticados criarem seu primeiro tenant. Isso causa erro quando `TenantContext.tsx` tenta criar "Meu Espaço JARVIS" para novos usuários.
+Aprimorar o sistema multi-tenant para:
+- Suportar usuários com múltiplos workspaces
+- Criar tenant automático com nome personalizado
+- Permitir troca de tenant ativa sem logout
+- Persistir seleção entre sessões
 
 ---
 
-## Parte 1: Migration SQL - Correções Necessárias
+## Arquitetura da Solução
 
-### 1.1 Adicionar Policy INSERT para `tenants`
-Permitir que qualquer usuário autenticado crie um tenant (sendo o `created_by`):
-```sql
-CREATE POLICY "tenants_insert_own" ON public.tenants
-FOR INSERT WITH CHECK (auth.uid() = created_by);
-```
-
-### 1.2 Adicionar Policy INSERT para `tenant_members` (bootstrap)
-Permitir que o criador do tenant se adicione como primeiro membro:
-```sql
-CREATE POLICY "tenant_members_insert_first" ON public.tenant_members
-FOR INSERT WITH CHECK (
-  auth.uid() = user_id 
-  AND role = 'owner'
-  AND NOT EXISTS (
-    SELECT 1 FROM tenant_members 
-    WHERE tenant_members.tenant_id = tenant_id
-  )
-);
-```
-
-### 1.3 Adicionar Policy UPDATE para `ff_memory_items`
-Faltante na configuração atual:
-```sql
-CREATE POLICY "ff_memory_update_tenant" ON public.ff_memory_items
-FOR UPDATE USING (tenant_id IN (
-  SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid()
-));
-```
-
-### 1.4 Adicionar Trigger `updated_at` para `ff_memory_items`
-```sql
-CREATE TRIGGER ff_memory_items_set_updated_at
-BEFORE UPDATE ON public.ff_memory_items
-FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           Fluxo de Autenticação                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   Login → AuthContext.user → TenantContext.fetchUserTenants()           │
+│                                   │                                      │
+│                                   ▼                                      │
+│                    ┌──────────────────────────────┐                     │
+│                    │  Usuário tem memberships?    │                     │
+│                    └──────────────────────────────┘                     │
+│                              │                                          │
+│               ┌──────────────┴──────────────┐                          │
+│               │                             │                           │
+│               ▼ Sim                         ▼ Não                       │
+│   ┌───────────────────────┐    ┌───────────────────────────────────┐   │
+│   │ Carregar todos os     │    │ Criar tenant:                     │   │
+│   │ tenants via JOIN      │    │ name = "Pessoal - {firstName}"    │   │
+│   └───────────────────────┘    │ created_by = auth.uid()           │   │
+│               │                │ + tenant_member role='owner'       │   │
+│               ▼                └───────────────────────────────────┘   │
+│   ┌───────────────────────┐                     │                       │
+│   │ Restaurar último      │                     │                       │
+│   │ tenant do localStorage│◄────────────────────┘                       │
+│   │ ou usar o primeiro    │                                             │
+│   └───────────────────────┘                                             │
+│               │                                                          │
+│               ▼                                                          │
+│   ┌───────────────────────────────────────────────────────────────┐    │
+│   │                    TenantContext.activeTenant                  │    │
+│   │                    TenantContext.allTenants[]                  │    │
+│   │                    TenantContext.switchTenant(id)              │    │
+│   └───────────────────────────────────────────────────────────────┘    │
+│               │                                                          │
+│               ▼                                                          │
+│   ┌───────────────────────────────────────────────────────────────┐    │
+│   │  Se allTenants.length > 1 → Exibir TenantSwitcher no header   │    │
+│   └───────────────────────────────────────────────────────────────┘    │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Parte 2: Frontend - Melhorias nos Hooks
+## Parte 1: Atualizar TenantContext.tsx
 
-### 2.1 Criar Helper `useJarvisMemory.ts`
-Hook para CRUD de memory items (ainda não existe):
+### 1.1 Novo Estado
+
 ```typescript
-// src/hooks/useJarvisMemory.ts
-- createMemoryItem(kind, content, metadata)
-- deleteMemoryItem(id)
-- searchMemory(query)
-- Filtrar por tenant_id via contexto
-```
-
-### 2.2 Criar Type Helper `src/lib/jarvis-helpers.ts`
-Funções utilitárias para o módulo JARVIS:
-```typescript
-// Formatação de prioridade
-export const priorityColor = (p: Priority) => ...
-
-// Formatação de status
-export const statusLabel = (s: TaskStatus) => ...
-
-// Verificação de membership
-export const hasRole = (member: TenantMember, roles: string[]) => ...
-
-// Formatar data relativa
-export const formatRelativeDate = (date: string) => ...
-```
-
-### 2.3 Adicionar RPC Helper no `useJarvisTasks.ts`
-Melhorar o hook existente para expor typing correto do RPC:
-```typescript
-// Typing para o RPC já existe nos types.ts:
-// ff_complete_task: { Args: { p_task_id: string }; Returns: undefined }
-```
-
----
-
-## Parte 3: Atualizar Types
-
-### 3.1 Complementar `src/types/jarvis.ts`
-Adicionar interfaces de Memory que faltam:
-```typescript
-export interface JarvisMemoryItem {
-  id: string;
-  tenant_id: string;
-  user_id: string;
-  kind: string;
-  title?: string | null;
-  content: string;
-  metadata: Record<string, unknown>;
-  source: string;
-  created_at: string;
+interface TenantContextType {
+  // Estado atual
+  tenant: Tenant | null;           // Tenant ativo
+  tenantId: string | null;         // ID do tenant ativo
+  membership: TenantMember | null; // Membership ativa
+  loading: boolean;
+  error: string | null;
+  
+  // Novos campos
+  allTenants: Tenant[];            // Todos os tenants do usuário
+  allMemberships: TenantMember[];  // Todas as memberships
+  switchTenant: (tenantId: string) => void;  // Trocar tenant
+  refetch: () => Promise<void>;
 }
+```
 
-// Type helpers
-export type TaskStatus = 'open' | 'in_progress' | 'done';
-export type TaskPriority = 'low' | 'medium' | 'high';
-export type HabitCadence = 'daily' | 'weekly' | 'monthly';
-export type ReminderChannel = 'whatsapp' | 'email' | 'push';
+### 1.2 Nova Lógica de Bootstrap
+
+```typescript
+const fetchUserTenants = async () => {
+  if (!user) {
+    resetState();
+    return;
+  }
+
+  // 1. Buscar TODAS as memberships do usuário
+  const { data: memberships } = await supabase
+    .from("tenant_members")
+    .select("*, tenants(*)")
+    .eq("user_id", user.id);
+
+  if (memberships && memberships.length > 0) {
+    // 2. Extrair tenants das memberships
+    const tenants = memberships.map(m => m.tenants);
+    
+    // 3. Restaurar último tenant do localStorage ou usar primeiro
+    const savedTenantId = localStorage.getItem(`ff_active_tenant_${user.id}`);
+    const activeTenant = tenants.find(t => t.id === savedTenantId) || tenants[0];
+    
+    setAllTenants(tenants);
+    setAllMemberships(memberships);
+    setActiveTenant(activeTenant);
+  } else {
+    // 4. Criar novo tenant com nome personalizado
+    const firstName = extractFirstName(user);
+    const tenantName = `Pessoal - ${firstName}`;
+    
+    const { data: newTenant } = await supabase
+      .from("tenants")
+      .insert({ name: tenantName, created_by: user.id })
+      .select()
+      .single();
+    
+    // 5. Adicionar como owner
+    await supabase
+      .from("tenant_members")
+      .insert({ tenant_id: newTenant.id, user_id: user.id, role: "owner" });
+    
+    setAllTenants([newTenant]);
+    setActiveTenant(newTenant);
+  }
+};
+
+// Helper para extrair primeiro nome
+const extractFirstName = (user: User): string => {
+  const fullName = user.user_metadata?.full_name;
+  if (fullName) return fullName.split(" ")[0];
+  return user.email?.split("@")[0] || "Usuário";
+};
+```
+
+### 1.3 Função switchTenant
+
+```typescript
+const switchTenant = (tenantId: string) => {
+  const newTenant = allTenants.find(t => t.id === tenantId);
+  if (newTenant && user) {
+    setTenant(newTenant);
+    setMembership(allMemberships.find(m => m.tenant_id === tenantId) || null);
+    localStorage.setItem(`ff_active_tenant_${user.id}`, tenantId);
+    
+    // Invalidar queries do React Query para recarregar dados
+    queryClient.invalidateQueries();
+  }
+};
 ```
 
 ---
 
-## Resumo de Alterações
+## Parte 2: Criar Componente TenantSwitcher
 
-### Migration SQL (1 arquivo)
-Criar migration com:
-- Policy INSERT para `tenants` (criador pode inserir)
-- Policy INSERT para `tenant_members` (bootstrap do primeiro membro)
-- Policy UPDATE para `ff_memory_items`
-- Trigger updated_at para `ff_memory_items`
+### 2.1 Novo Arquivo: `src/components/tenant/TenantSwitcher.tsx`
 
-### Frontend (3 arquivos)
-| Arquivo | Ação |
-|---------|------|
-| `src/hooks/useJarvisMemory.ts` | Criar - CRUD para memory items |
-| `src/lib/jarvis-helpers.ts` | Criar - Funções utilitárias |
-| `src/types/jarvis.ts` | Atualizar - Adicionar JarvisMemoryItem |
+```typescript
+// Dropdown que mostra todos os tenants disponíveis
+// Só renderiza se houver mais de 1 tenant
+// Integra com TenantContext.switchTenant()
+
+interface TenantSwitcherProps {
+  variant?: "header" | "sidebar"; // Estilos diferentes por contexto
+}
+```
+
+### 2.2 Estrutura do Componente
+
+```text
+┌────────────────────────────────────┐
+│  📦 Pessoal - West            ▼   │  ← Botão dropdown
+└────────────────────────────────────┘
+           │
+           ▼
+┌────────────────────────────────────┐
+│ ✓ Pessoal - West                   │  ← Item ativo (checkmark)
+│   Casa - Família Silva             │  ← Outro tenant
+│   ─────────────────────────────    │
+│   + Criar novo espaço              │  ← Ação futura (opcional)
+└────────────────────────────────────┘
+```
+
+### 2.3 Código Base
+
+```typescript
+export const TenantSwitcher = ({ variant = "header" }: TenantSwitcherProps) => {
+  const { tenant, allTenants, switchTenant, loading } = useTenant();
+
+  // Não renderizar se só tiver 1 tenant
+  if (allTenants.length <= 1) return null;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" className="gap-2">
+          <Building2 className="h-4 w-4" />
+          <span className="truncate max-w-[150px]">{tenant?.name}</span>
+          <ChevronDown className="h-4 w-4 opacity-50" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56">
+        <DropdownMenuLabel>Seus espaços</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {allTenants.map((t) => (
+          <DropdownMenuItem
+            key={t.id}
+            onClick={() => switchTenant(t.id)}
+            className="gap-2"
+          >
+            {t.id === tenant?.id && <Check className="h-4 w-4" />}
+            <span className={t.id !== tenant?.id ? "ml-6" : ""}>
+              {t.name}
+            </span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
+```
 
 ---
 
-## Validação Final
+## Parte 3: Integrar TenantSwitcher nos Layouts
 
-Após implementação, o sistema terá:
-- Todas as 10 tabelas JARVIS com RLS completo
-- Políticas permitem criação de tenant para novos usuários
-- Triggers `updated_at` em todas tabelas aplicáveis
-- RPC `ff_complete_task` funcionando com validação de membership
-- Hooks TypeScript para todas as entidades
-- Types tipados para consumo seguro das tabelas
+### 3.1 Atualizar JarvisLayout.tsx
+
+Adicionar TenantSwitcher no header ao lado da saudação:
+
+```typescript
+<header className="...">
+  <div className="flex items-center justify-between">
+    <div>
+      <h1>{greeting()}, {userName}</h1>
+      <p>{formatDate()}</p>
+    </div>
+    
+    {/* Novo: Tenant Switcher */}
+    <TenantSwitcher variant="header" />
+  </div>
+</header>
+```
+
+### 3.2 Atualizar AppLayout.tsx
+
+Adicionar no topo da sidebar, abaixo do logo:
+
+```typescript
+{/* Logo */}
+<div className="...">...</div>
+
+{/* Novo: Tenant Switcher */}
+<div className="border-b border-border px-4 py-2">
+  <TenantSwitcher variant="sidebar" />
+</div>
+
+{/* Quick Period Actions */}
+<div className="...">...</div>
+```
+
+---
+
+## Parte 4: Integrar com React Query
+
+### 4.1 Adicionar queryClient ao TenantContext
+
+O contexto precisa invalidar todas as queries quando trocar de tenant:
+
+```typescript
+import { useQueryClient } from "@tanstack/react-query";
+
+export const TenantProvider = ({ children }: { children: ReactNode }) => {
+  const queryClient = useQueryClient();
+  
+  const switchTenant = (tenantId: string) => {
+    // ... lógica de troca
+    
+    // Invalidar todas as queries para recarregar dados do novo tenant
+    queryClient.invalidateQueries();
+  };
+};
+```
+
+---
+
+## Resumo de Arquivos
+
+### Criar (1 arquivo novo)
+
+| Arquivo | Descrição |
+|---------|-----------|
+| `src/components/tenant/TenantSwitcher.tsx` | Dropdown para alternar entre tenants |
+
+### Modificar (3 arquivos)
+
+| Arquivo | Alteração |
+|---------|-----------|
+| `src/contexts/TenantContext.tsx` | Suporte a múltiplos tenants, switchTenant, localStorage |
+| `src/components/layout/JarvisLayout.tsx` | Adicionar TenantSwitcher no header |
+| `src/components/layout/AppLayout.tsx` | Adicionar TenantSwitcher na sidebar |
+
+---
+
+## Validação de RLS
+
+A implementação respeita RLS porque:
+1. Todas as queries já filtram por `tenant_id` via hooks existentes
+2. `tenant_members` tem policy que só retorna memberships do usuário autenticado
+3. `tenants` só pode ser lido se o usuário for membro
+4. O `switchTenant` só permite trocar para tenants da lista `allTenants`
+
+---
+
+## Fluxo de Teste
+
+1. **Usuário novo**: Login → Tenant "Pessoal - {nome}" criado automaticamente
+2. **Usuário existente (1 tenant)**: Login → Carrega tenant → Sem switcher visível
+3. **Usuário com múltiplos tenants**: Login → Carrega todos → Switcher aparece → Troca funciona
+4. **Persistência**: Fechar aba → Reabrir → Último tenant selecionado restaurado
+
+---
+
+## Próximos Passos (Pós-Implementação)
+
+- Implementar convite de membros via email
+- Criar tela de gerenciamento de membros do tenant
+- Adicionar roles (admin, editor, viewer) com permissões granulares
