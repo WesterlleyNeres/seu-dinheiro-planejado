@@ -480,35 +480,94 @@ export type Database = {
           },
         ]
       }
+      ff_push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          is_active: boolean
+          last_seen_at: string | null
+          p256dh: string
+          tenant_id: string
+          updated_at: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          is_active?: boolean
+          last_seen_at?: string | null
+          p256dh: string
+          tenant_id: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          is_active?: boolean
+          last_seen_at?: string | null
+          p256dh?: string
+          tenant_id?: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ff_push_subscriptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ff_reminders: {
         Row: {
+          attempt_count: number
           channel: string
           created_at: string
           created_by: string
           id: string
+          last_attempt_at: string | null
           remind_at: string
+          sent_at: string | null
           status: string
           tenant_id: string
           title: string
           updated_at: string
         }
         Insert: {
+          attempt_count?: number
           channel?: string
           created_at?: string
           created_by: string
           id?: string
+          last_attempt_at?: string | null
           remind_at: string
+          sent_at?: string | null
           status?: string
           tenant_id: string
           title: string
           updated_at?: string
         }
         Update: {
+          attempt_count?: number
           channel?: string
           created_at?: string
           created_by?: string
           id?: string
+          last_attempt_at?: string | null
           remind_at?: string
+          sent_at?: string | null
           status?: string
           tenant_id?: string
           title?: string
