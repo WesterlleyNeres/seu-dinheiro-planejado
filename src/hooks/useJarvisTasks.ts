@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -186,6 +187,13 @@ export const useJarvisTasks = () => {
   const allOpenTasks = tasks.filter(t => t.status !== 'done');
   const completedTasks = tasks.filter(t => t.status === 'done');
 
+  // Extract all unique tags from tasks
+  const allTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    tasks.forEach(t => t.tags?.forEach(tag => tagSet.add(tag)));
+    return Array.from(tagSet).sort();
+  }, [tasks]);
+
   return {
     tasks,
     isLoading,
@@ -199,6 +207,8 @@ export const useJarvisTasks = () => {
     weekTasks,
     allOpenTasks,
     completedTasks,
+    // All unique tags
+    allTags,
     // Legacy computed (for compatibility)
     openTasks: tasks.filter(t => t.status === "open"),
     inProgressTasks: tasks.filter(t => t.status === "in_progress"),
