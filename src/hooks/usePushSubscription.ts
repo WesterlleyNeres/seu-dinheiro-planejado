@@ -4,7 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   isPushSupported,
-  isVapidConfigured,
+  checkVapidConfigured,
   registerServiceWorker,
   requestNotificationPermission,
   getNotificationPermission,
@@ -32,20 +32,33 @@ export const usePushSubscription = (): UsePushSubscriptionReturn => {
   const { toast } = useToast();
 
   const [isSupported] = useState(() => isPushSupported());
-  const [isVapidReady] = useState(() => isVapidConfigured());
+  const [isVapidReady, setIsVapidReady] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>(
     () => getNotificationPermission()
   );
   const [isSubscribed, setIsSubscribed] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Check existing subscription on mount
+  // Check VAPID and existing subscription on mount
   useEffect(() => {
-    const checkSubscription = async () => {
-      if (!isSupported) return;
+    const initializePush = async () => {
+      if (!isSupported) {
+        setIsLoading(false);
+        return;
+      }
 
       try {
+        // Check if VAPID is configured
+        const vapidReady = await checkVapidConfigured();
+        setIsVapidReady(vapidReady);
+
+        if (!vapidReady) {
+          setIsLoading(false);
+          return;
+        }
+
+        // Register service worker and check subscription
         await registerServiceWorker();
         const existingSub = await getExistingSubscription();
         
@@ -55,11 +68,13 @@ export const usePushSubscription = (): UsePushSubscriptionReturn => {
           await updateSubscriptionLastSeen(existingSub.endpoint);
         }
       } catch (err) {
-        console.error("Failed to check subscription:", err);
+        console.error("Failed to initialize push:", err);
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    checkSubscription();
+    initializePush();
   }, [isSupported]);
 
   // Subscribe to push notifications
