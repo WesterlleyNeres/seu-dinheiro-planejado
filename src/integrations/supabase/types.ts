@@ -443,6 +443,7 @@ export type Database = {
           source: string
           tenant_id: string
           title: string | null
+          updated_at: string | null
           user_id: string
         }
         Insert: {
@@ -454,6 +455,7 @@ export type Database = {
           source?: string
           tenant_id: string
           title?: string | null
+          updated_at?: string | null
           user_id: string
         }
         Update: {
@@ -465,6 +467,7 @@ export type Database = {
           source?: string
           tenant_id?: string
           title?: string | null
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: [
