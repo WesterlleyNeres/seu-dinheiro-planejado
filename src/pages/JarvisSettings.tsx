@@ -3,15 +3,26 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { Settings, Moon, Sun, Calendar, Users, LogOut } from "lucide-react";
+import { useGoogleIntegration } from "@/hooks/useGoogleIntegration";
+import { Settings, Moon, Calendar as CalendarIcon, Users, LogOut, Info, Link2, Unlink } from "lucide-react";
 import { Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { cn } from "@/lib/utils";
 
 const JarvisSettings = () => {
   const { tenant, loading: tenantLoading } = useTenant();
   const { user, signOut } = useAuth();
+  const { 
+    isLoading: googleLoading, 
+    isConnected: googleConnected, 
+    connectedEmail,
+    initiateConnection,
+    disconnect
+  } = useGoogleIntegration();
 
   if (tenantLoading) {
     return (
@@ -64,7 +75,7 @@ const JarvisSettings = () => {
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
+            <Link2 className="h-4 w-4" />
             Integrações
           </CardTitle>
           <CardDescription>
@@ -72,18 +83,72 @@ const JarvisSettings = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <Label>Google Calendar</Label>
+          {/* Placeholder Alert */}
+          <Alert className="bg-muted/50 border-dashed">
+            <Info className="h-4 w-4" />
+            <AlertTitle className="text-sm">Em desenvolvimento</AlertTitle>
+            <AlertDescription className="text-xs">
+              OAuth será ativado na próxima sprint. A estrutura abaixo está preparada.
+            </AlertDescription>
+          </Alert>
+          
+          {/* Google Calendar */}
+          <div className="flex items-start gap-4 p-3 rounded-lg border bg-card">
+            <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+              <CalendarIcon className="h-5 w-5 text-blue-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <Label className="font-medium">Google Calendar</Label>
+                <Badge 
+                  variant="outline" 
+                  className={cn(
+                    "text-xs",
+                    googleConnected 
+                      ? "border-green-500 text-green-600 dark:text-green-400" 
+                      : "border-muted text-muted-foreground"
+                  )}
+                >
+                  {googleConnected ? "Conectado" : "Desconectado"}
+                </Badge>
+              </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Sincronize seus eventos automaticamente
+                {googleConnected && connectedEmail
+                  ? `Sincronizado com ${connectedEmail}`
+                  : "Sincronize seus eventos automaticamente"}
               </p>
             </div>
-            <Button variant="outline" size="sm" disabled>
-              Em breve
+            <Button 
+              variant={googleConnected ? "destructive" : "outline"} 
+              size="sm"
+              disabled={googleLoading || initiateConnection.isPending || disconnect.isPending}
+              onClick={() => {
+                if (googleConnected) {
+                  disconnect.mutate();
+                } else {
+                  initiateConnection.mutate();
+                }
+              }}
+            >
+              {(googleLoading || initiateConnection.isPending || disconnect.isPending) ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : googleConnected ? (
+                <>
+                  <Unlink className="h-3.5 w-3.5 mr-1" />
+                  Desconectar
+                </>
+              ) : (
+                <>
+                  <Link2 className="h-3.5 w-3.5 mr-1" />
+                  Conectar
+                </>
+              )}
             </Button>
           </div>
+
           <Separator />
+
+          {/* WhatsApp (placeholder) */}
           <div className="flex items-center justify-between">
             <div>
               <Label>WhatsApp</Label>

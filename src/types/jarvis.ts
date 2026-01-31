@@ -108,3 +108,16 @@ export type HabitCadence = 'daily' | 'weekly' | 'monthly';
 export type ReminderChannel = 'whatsapp' | 'email' | 'push';
 export type ReminderStatus = 'pending' | 'sent' | 'dismissed' | 'canceled';
 export type EventStatus = 'scheduled' | 'cancelled' | 'completed';
+
+export interface GoogleIntegration {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  email: string | null;
+  access_token: string | null;
+  refresh_token: string | null;
+  expiry: string | null;
+  scope: string | null;
+  created_at: string;
+  updated_at: string;
+}
