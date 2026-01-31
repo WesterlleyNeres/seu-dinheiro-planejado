@@ -166,3 +166,24 @@ export const getDayOfWeek = (): string => {
 export const getFormattedDate = (): string => {
   return format(new Date(), "d 'de' MMMM", { locale: ptBR });
 };
+
+// ===========================
+// User Helpers
+// ===========================
+
+export const getInitials = (name: string): string => {
+  if (!name) return "?";
+
+  // Se for email, usar primeira letra do local part
+  if (name.includes("@")) {
+    return name.split("@")[0].charAt(0).toUpperCase();
+  }
+
+  // Se for nome completo, usar primeiras duas iniciais
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+  }
+
+  return name.charAt(0).toUpperCase();
+};
