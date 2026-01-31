@@ -1,271 +1,361 @@
 
-# Plano: Melhorar Pagina Habitos com Campos Completos e UX Aprimorada
+
+# Plano: Implementar Configuracoes > Integracoes (Google Calendar)
 
 ## Visao Geral
 
-A pagina de Habitos ja esta funcional, mas precisa de melhorias para exibir todos os campos e comunicar melhor o estado "ja registrado hoje".
+Transformar a secao de Integracoes na pagina de Configuracoes do JARVIS para mostrar o status de conexao com o Google Calendar, incluindo um hook para gerenciar os dados da tabela `ff_integrations_google` e uma UI preparada para OAuth futuro.
 
 ---
 
-## Analise do Estado Atual
+## Estado Atual vs Novo
 
-| Componente | Status | Problema |
-|------------|--------|----------|
-| useJarvisHabits.ts | Completo | Nenhum - ja previne duplicidade |
-| JarvisHabits.tsx | Completo | Nenhum ajuste necessario |
-| HabitCardNectar.tsx | Funcional | Weekly dots sempre mostram 7 dias |
-| HabitForm.tsx | Incompleto | target_type nao visivel, form nao reseta ao editar |
+| Aspecto | Atual | Novo |
+|---------|-------|------|
+| Botao Google Calendar | Desabilitado ("Em breve") | Funcional ("Conectar" / "Desconectar") |
+| Status de conexao | Nenhum | Badge Conectado/Desconectado |
+| Storage | Tabela existe, nao usada | Hook busca/cria entradas |
+| Placeholder OAuth | Nenhum | Alert informativo |
 
 ---
 
-## Parte 1: Corrigir HabitForm
+## Arquitetura da Solucao
 
-### Modificar: `src/components/jarvis/HabitForm.tsx`
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         CARD INTEGRACOES                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │   [Info Icon]  OAuth sera ativado na proxima sprint.            │    │
+│  │                Abaixo esta a estrutura preparada.               │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                          │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │  [G] Google Calendar                         [Desconectado]     │    │
+│  │      Sincronize seus eventos automaticamente                    │    │
+│  │                                             [Conectar (Em breve)]│    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                          │
+│  ---- Separador ----                                                    │
+│                                                                          │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │  [WA] WhatsApp                                                   │    │
+│  │      Receba lembretes via WhatsApp             [Em breve]       │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
 
-#### 1.1 Adicionar useEffect para resetar form ao editar
+---
+
+## Parte 1: Adicionar Tipo GoogleIntegration
+
+### Modificar: `src/types/jarvis.ts`
 
 ```typescript
-import { useEffect } from "react";
+export interface GoogleIntegration {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  email: string | null;
+  access_token: string | null;
+  refresh_token: string | null;
+  expiry: string | null;
+  scope: string | null;
+  created_at: string;
+  updated_at: string;
+}
+```
+
+---
+
+## Parte 2: Criar Hook useGoogleIntegration
+
+### Novo arquivo: `src/hooks/useGoogleIntegration.ts`
+
+O hook gerencia o estado de conexao com Google Calendar:
+
+```typescript
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useTenant } from "@/contexts/TenantContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import type { GoogleIntegration } from "@/types/jarvis";
+
+export const useGoogleIntegration = () => {
+  const { tenantId } = useTenant();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const queryKey = ["google-integration", tenantId, user?.id];
+
+  // Buscar integracao existente
+  const { data: integration, isLoading } = useQuery({
+    queryKey,
+    queryFn: async () => {
+      if (!tenantId || !user) return null;
+      
+      const { data, error } = await supabase
+        .from("ff_integrations_google")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data as GoogleIntegration | null;
+    },
+    enabled: !!tenantId && !!user,
+  });
+
+  // Status derivado
+  const isConnected = !!integration?.access_token;
+  
+  // Placeholder: Iniciar conexao (sera OAuth real no futuro)
+  const initiateConnection = useMutation({
+    mutationFn: async () => {
+      // Por enquanto, apenas mostra toast informativo
+      throw new Error("OAuth ainda nao implementado");
+    },
+    onError: () => {
+      toast({ 
+        title: "Em desenvolvimento", 
+        description: "A conexao com Google Calendar sera ativada em breve.",
+      });
+    },
+  });
+
+  // Desconectar (limpar tokens)
+  const disconnect = useMutation({
+    mutationFn: async () => {
+      if (!integration) throw new Error("Nenhuma integracao encontrada");
+      
+      const { error } = await supabase
+        .from("ff_integrations_google")
+        .update({
+          access_token: null,
+          refresh_token: null,
+          expiry: null,
+          email: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", integration.id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey });
+      toast({ title: "Google Calendar desconectado" });
+    },
+    onError: (error) => {
+      toast({ title: "Erro ao desconectar", description: error.message, variant: "destructive" });
+    },
+  });
+
+  return {
+    integration,
+    isLoading,
+    isConnected,
+    initiateConnection,
+    disconnect,
+    // Informacoes extras para UI
+    connectedEmail: integration?.email || null,
+  };
+};
+```
+
+---
+
+## Parte 3: Reestruturar JarvisSettings - Secao Integracoes
+
+### Modificar: `src/pages/JarvisSettings.tsx`
+
+Nova estrutura da secao de Integracoes:
+
+```typescript
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Info, Calendar as CalendarIcon, Link, Unlink } from "lucide-react";
+import { useGoogleIntegration } from "@/hooks/useGoogleIntegration";
 
 // Dentro do componente:
-useEffect(() => {
-  if (open) {
-    form.reset({
-      title: habit?.title || "",
-      cadence: habit?.cadence || "weekly",
-      times_per_cadence: habit?.times_per_cadence || 3,
-      target_type: habit?.target_type || "count",
-      target_value: habit?.target_value || 1,
-    });
-  }
-}, [open, habit, form]);
-```
+const { 
+  isLoading: googleLoading, 
+  isConnected: googleConnected, 
+  connectedEmail,
+  initiateConnection,
+  disconnect
+} = useGoogleIntegration();
 
-#### 1.2 Adicionar campo target_type visivel
+// Nova secao de integracoes:
+<Card>
+  <CardHeader>
+    <CardTitle className="text-base flex items-center gap-2">
+      <Link className="h-4 w-4" />
+      Integracoes
+    </CardTitle>
+    <CardDescription>
+      Conecte servicos externos ao JARVIS
+    </CardDescription>
+  </CardHeader>
+  <CardContent className="space-y-4">
+    {/* Placeholder Alert */}
+    <Alert className="bg-muted/50 border-dashed">
+      <Info className="h-4 w-4" />
+      <AlertTitle className="text-sm">Em desenvolvimento</AlertTitle>
+      <AlertDescription className="text-xs">
+        OAuth sera ativado na proxima sprint. A estrutura abaixo esta preparada.
+      </AlertDescription>
+    </Alert>
+    
+    {/* Google Calendar */}
+    <div className="flex items-start gap-4 p-3 rounded-lg border bg-card">
+      <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+        <CalendarIcon className="h-5 w-5 text-blue-600" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <Label className="font-medium">Google Calendar</Label>
+          <Badge 
+            variant="outline" 
+            className={cn(
+              "text-xs",
+              googleConnected 
+                ? "border-success text-success" 
+                : "border-muted text-muted-foreground"
+            )}
+          >
+            {googleConnected ? "Conectado" : "Desconectado"}
+          </Badge>
+        </div>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {googleConnected && connectedEmail
+            ? `Sincronizado com ${connectedEmail}`
+            : "Sincronize seus eventos automaticamente"}
+        </p>
+      </div>
+      <Button 
+        variant={googleConnected ? "destructive" : "outline"} 
+        size="sm"
+        disabled={googleLoading}
+        onClick={() => {
+          if (googleConnected) {
+            disconnect.mutate();
+          } else {
+            initiateConnection.mutate();
+          }
+        }}
+      >
+        {googleConnected ? (
+          <>
+            <Unlink className="h-3.5 w-3.5 mr-1" />
+            Desconectar
+          </>
+        ) : (
+          <>
+            <Link className="h-3.5 w-3.5 mr-1" />
+            Conectar
+          </>
+        )}
+      </Button>
+    </div>
 
-```typescript
-<div className="grid grid-cols-2 gap-4">
-  <FormField
-    control={form.control}
-    name="target_type"
-    render={({ field }) => (
-      <FormItem>
-        <FormLabel>Tipo de Meta</FormLabel>
-        <Select onValueChange={field.onChange} value={field.value}>
-          <FormControl>
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione" />
-            </SelectTrigger>
-          </FormControl>
-          <SelectContent>
-            <SelectItem value="count">Contagem (vezes)</SelectItem>
-            <SelectItem value="duration">Duracao (minutos)</SelectItem>
-          </SelectContent>
-        </Select>
-        <FormMessage />
-      </FormItem>
-    )}
-  />
-  
-  <FormField
-    control={form.control}
-    name="target_value"
-    render={({ field }) => (
-      <FormItem>
-        <FormLabel>Valor por Registro</FormLabel>
-        <FormControl>
-          <Input type="number" min={1} {...field} />
-        </FormControl>
-        <FormDescription className="text-xs">
-          {form.watch("target_type") === "duration" ? "Minutos por vez" : "Unidades por vez"}
-        </FormDescription>
-        <FormMessage />
-      </FormItem>
-    )}
-  />
-</div>
-```
+    <Separator />
 
----
-
-## Parte 2: Melhorar HabitCardNectar
-
-### Modificar: `src/components/jarvis/HabitCardNectar.tsx`
-
-#### 2.1 Adaptar dots ao cadence
-
-```typescript
-// Calcular numero de dots baseado no cadence
-const getDotsCount = () => {
-  switch (habit.cadence) {
-    case "daily": return 1;
-    case "weekly": return 7;
-    case "monthly": return Math.min(progress.target, 10); // max 10 dots para mensal
-  }
-};
-
-// Na renderizacao:
-<div className="flex items-center gap-1 mt-2">
-  {Array.from({ length: Math.min(progress.target, getDotsCount()) }).map((_, i) => (
-    <div
-      key={i}
-      className={cn(
-        "h-2 w-2 rounded-full transition-all",
-        i < progress.completions ? "bg-primary" : "bg-muted"
-      )}
-    />
-  ))}
-</div>
-```
-
-#### 2.2 Adicionar mensagem "Ja registrado hoje"
-
-```typescript
-{/* Ao lado do botao, quando ja registrado */}
-{isLoggedToday && (
-  <span className="text-xs text-green-600 dark:text-green-400 font-medium">
-    Feito hoje!
-  </span>
-)}
-```
-
-#### 2.3 Mostrar unidade correta (vezes vs minutos)
-
-```typescript
-const getUnitLabel = () => {
-  if (habit.target_type === "duration") {
-    return progress.completions === 1 ? "minuto" : "minutos";
-  }
-  return progress.completions === 1 ? "vez" : "vezes";
-};
-
-// Na exibicao:
-<p className="text-xs text-muted-foreground mt-0.5">
-  {progress.completions}/{progress.target} {cadenceLabel[habit.cadence]}
-  {habit.target_type === "duration" && " (min)"}
-</p>
-```
-
----
-
-## Parte 3: Melhorar Feedback Visual de Loading
-
-### Modificar: `src/components/jarvis/HabitCardNectar.tsx`
-
-Adicionar prop `isLogging` para mostrar spinner durante mutacao:
-
-```typescript
-interface HabitCardNectarProps {
-  // ... existentes
-  isLogging?: boolean;
-}
-
-// No botao central:
-<button
-  onClick={() => onLog(habit.id)}
-  disabled={isLoggedToday || isLogging}
-  className={cn(
-    "absolute inset-0 m-auto h-10 w-10 rounded-full flex items-center justify-center transition-all",
-    isLoggedToday
-      ? "bg-primary text-primary-foreground"
-      : "bg-muted hover:bg-primary hover:text-primary-foreground"
-  )}
->
-  {isLogging ? (
-    <Loader2 className="h-5 w-5 animate-spin" />
-  ) : (
-    <Check className="h-5 w-5" />
-  )}
-</button>
+    {/* WhatsApp (mantido como placeholder) */}
+    <div className="flex items-center justify-between">
+      <div>
+        <Label>WhatsApp</Label>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Receba lembretes via WhatsApp
+        </p>
+      </div>
+      <Button variant="outline" size="sm" disabled>
+        Em breve
+      </Button>
+    </div>
+  </CardContent>
+</Card>
 ```
 
 ---
 
 ## Resumo de Arquivos
 
+### Criar (1 arquivo)
+
+| Arquivo | Descricao |
+|---------|-----------|
+| `src/hooks/useGoogleIntegration.ts` | Hook para gerenciar conexao Google |
+
 ### Modificar (2 arquivos)
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `src/components/jarvis/HabitForm.tsx` | useEffect para reset + campo target_type visivel |
-| `src/components/jarvis/HabitCardNectar.tsx` | Dots adaptativos + "Feito hoje!" + loading state |
+| `src/types/jarvis.ts` | Adicionar interface GoogleIntegration |
+| `src/pages/JarvisSettings.tsx` | Nova UI de integracoes com status |
 
 ---
 
-## Campos do Formulario (Atualizados)
+## Estrutura da Tabela (Ja Existente)
 
-| Campo | Tipo | Default | Descricao |
-|-------|------|---------|-----------|
-| title | text | - | Nome do habito (obrigatorio) |
-| cadence | select | "weekly" | Diario / Semanal / Mensal |
-| times_per_cadence | number | 3 | Meta de vezes por periodo |
-| target_type | select | "count" | Contagem (vezes) ou Duracao (minutos) |
-| target_value | number | 1 | Valor por cada registro |
+A tabela `ff_integrations_google` ja existe com os campos:
 
----
-
-## Logica de Prevencao de Duplicidade (Ja Implementada)
-
-O hook `logHabit` ja verifica duplicidade:
-
-```typescript
-// Em useJarvisHabits.ts (linha 147-155)
-const { data: existingLog } = await supabase
-  .from("ff_habit_logs")
-  .select("id")
-  .eq("habit_id", habitId)
-  .eq("log_date", logDate)
-  .maybeSingle();
-
-if (existingLog) {
-  // Atualiza log existente em vez de criar novo
-}
-```
+| Campo | Tipo | Uso |
+|-------|------|-----|
+| id | uuid | PK |
+| tenant_id | uuid | FK para tenants |
+| user_id | uuid | ID do usuario |
+| email | text | Email da conta Google conectada |
+| access_token | text | Token de acesso (OAuth) |
+| refresh_token | text | Token de refresh (OAuth) |
+| expiry | timestamptz | Expiracao do token |
+| scope | text | Escopos autorizados |
+| created_at | timestamptz | Criacao |
+| updated_at | timestamptz | Atualizacao |
 
 ---
 
-## Fluxo de Registro com Feedback
+## Estados da UI
+
+| Estado | Badge | Botao | Descricao |
+|--------|-------|-------|-----------|
+| Desconectado | "Desconectado" (cinza) | "Conectar" (outline) | Sem tokens |
+| Conectando | - | Disabled + Loader | Durante OAuth (futuro) |
+| Conectado | "Conectado" (verde) | "Desconectar" (destructive) | access_token presente |
+| Email visivel | - | - | Mostra email@exemplo.com |
+
+---
+
+## Fluxo de Conexao (Preparado para OAuth)
 
 ```text
-1. Usuario clica no botao de check no card
-2. Botao mostra spinner (isLogging=true)
-3. Hook verifica se ja existe log para hoje
-4. Se nao existe: cria novo log
-5. Se existe: atualiza valor existente
-6. UI atualiza: botao fica preenchido + "Feito hoje!" aparece
-7. Toast: "Habito registrado! (emoji)"
+1. Usuario clica "Conectar"
+2. Toast: "OAuth sera ativado na proxima sprint"
+3. [FUTURO] Redireciona para Google OAuth
+4. [FUTURO] Callback salva tokens em ff_integrations_google
+5. [FUTURO] UI atualiza para "Conectado"
 ```
 
 ---
 
-## UI do Card Aprimorado
+## Fluxo de Desconexao
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│  ╭─────╮                                                    ... │
-│  │  ✓  │  Fazer exercicio                                       │
-│  ╰─────╯  2/3 por semana                      Feito hoje!       │
-│                                                                  │
-│           🔥 5 dias seguidos                                     │
-│           ● ● ○ ○ ○ ○ ○                                         │
-└─────────────────────────────────────────────────────────────────┘
+1. Usuario clica "Desconectar"
+2. Hook limpa access_token, refresh_token, email
+3. Query invalida e refetch
+4. UI atualiza para "Desconectado"
+5. Toast: "Google Calendar desconectado"
 ```
 
 ---
 
-## Estatisticas da Pagina (Ja Implementadas)
+## Seguranca
 
-| Card | Valor | Icone |
-|------|-------|-------|
-| Metas atingidas | X/Y | Trophy |
-| Progresso medio | X% | Flame |
-| Habitos ativos | N | Target |
+- Tokens armazenados na tabela com RLS por tenant_id e user_id
+- Apenas o proprio usuario pode ver/modificar sua integracao
+- Desconexao remove tokens completamente
 
----
-
-## Melhorias Futuras (Fora do Escopo Atual)
-
-- Calculo de streak (dias consecutivos)
-- Grafico de frequencia semanal/mensal
-- Notificacoes de lembrete
-- Historico de logs por habito
