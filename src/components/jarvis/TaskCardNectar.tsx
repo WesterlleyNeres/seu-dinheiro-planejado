@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Calendar, Trash2, Edit, Check } from "lucide-react";
+import { MoreHorizontal, Calendar, Trash2, Edit, Check, AlertCircle } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { JarvisTask } from "@/types/jarvis";
@@ -29,6 +29,7 @@ const priorityColors = {
 export const TaskCardNectar = ({ task, onComplete, onEdit, onDelete }: TaskCardNectarProps) => {
   const [isCompleting, setIsCompleting] = useState(false);
   const isDone = task.status === "done";
+  const isOverdue = task.due_at && new Date(task.due_at) < new Date() && !isDone;
 
   const handleComplete = () => {
     if (isDone) return;
@@ -43,7 +44,8 @@ export const TaskCardNectar = ({ task, onComplete, onEdit, onDelete }: TaskCardN
       className={cn(
         "group flex items-start gap-3 p-4 rounded-xl bg-card border border-border transition-all duration-300",
         isDone && "opacity-50",
-        isCompleting && "scale-95 opacity-50"
+        isCompleting && "scale-95 opacity-50",
+        isOverdue && "border-destructive/50"
       )}
     >
       {/* Circular Checkbox */}
@@ -105,17 +107,34 @@ export const TaskCardNectar = ({ task, onComplete, onEdit, onDelete }: TaskCardN
         )}
 
         <div className="flex items-center gap-2 mt-2 flex-wrap">
-          <Badge variant="outline" className={cn("text-xs", priorityColors[task.priority])}>
-            {task.priority === "high" ? "Alta" : task.priority === "medium" ? "Média" : "Baixa"}
-          </Badge>
+          {/* Status badge para concluídas */}
+          {isDone && (
+            <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/30">
+              <Check className="h-3 w-3 mr-1" />
+              Concluída
+            </Badge>
+          )}
 
+          {/* Priority badge */}
+          {!isDone && (
+            <Badge variant="outline" className={cn("text-xs", priorityColors[task.priority])}>
+              {task.priority === "high" ? "Alta" : task.priority === "medium" ? "Média" : "Baixa"}
+            </Badge>
+          )}
+
+          {/* Due date */}
           {task.due_at && (
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              {format(parseISO(task.due_at), "dd MMM", { locale: ptBR })}
+            <span className={cn(
+              "text-xs flex items-center gap-1",
+              isOverdue ? "text-destructive font-medium" : "text-muted-foreground"
+            )}>
+              {isOverdue ? <AlertCircle className="h-3 w-3" /> : <Calendar className="h-3 w-3" />}
+              {isOverdue && "Atrasado: "}
+              {format(parseISO(task.due_at), "dd MMM 'às' HH:mm", { locale: ptBR })}
             </span>
           )}
 
+          {/* Tags */}
           {task.tags.map((tag) => (
             <Badge key={tag} variant="secondary" className="text-xs">
               {tag}

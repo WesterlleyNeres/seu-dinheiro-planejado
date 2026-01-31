@@ -17,6 +17,22 @@ interface UpdateTaskInput extends Partial<CreateTaskInput> {
   status?: 'open' | 'in_progress' | 'done';
 }
 
+// Date helpers
+const endOfToday = () => {
+  const d = new Date();
+  d.setHours(23, 59, 59, 999);
+  return d;
+};
+
+const endOfWeek = () => {
+  const d = new Date();
+  const day = d.getDay();
+  const diff = day === 0 ? 0 : 7 - day; // dias até domingo
+  d.setDate(d.getDate() + diff);
+  d.setHours(23, 59, 59, 999);
+  return d;
+};
+
 export const useJarvisTasks = () => {
   const { tenantId } = useTenant();
   const { user } = useAuth();
@@ -121,14 +137,54 @@ export const useJarvisTasks = () => {
       const { error } = await supabase.rpc("ff_complete_task", { p_task_id: taskId });
       if (error) throw error;
     },
-    onSuccess: () => {
+    // Optimistic update
+    onMutate: async (taskId) => {
+      await queryClient.cancelQueries({ queryKey });
+      
+      const previousTasks = queryClient.getQueryData<JarvisTask[]>(queryKey);
+      
+      queryClient.setQueryData<JarvisTask[]>(queryKey, (old) =>
+        old?.map(task =>
+          task.id === taskId
+            ? { ...task, status: 'done' as const, completed_at: new Date().toISOString() }
+            : task
+        ) || []
+      );
+      
+      return { previousTasks };
+    },
+    onError: (err, taskId, context) => {
+      queryClient.setQueryData(queryKey, context?.previousTasks);
+      toast({ title: "Erro ao concluir tarefa", variant: "destructive" });
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey });
+    },
+    onSuccess: () => {
       toast({ title: "Tarefa concluída! 🎉" });
     },
-    onError: (error) => {
-      toast({ title: "Erro ao concluir tarefa", description: error.message, variant: "destructive" });
-    },
   });
+
+  // Computed filters
+  const today = endOfToday();
+  const weekEnd = endOfWeek();
+
+  const todayTasks = tasks.filter(t => {
+    if (t.status === 'done') return false;
+    if (!t.due_at) return true; // sem prazo = hoje
+    const due = new Date(t.due_at);
+    return due <= today;
+  });
+
+  const weekTasks = tasks.filter(t => {
+    if (t.status === 'done') return false;
+    if (!t.due_at) return false;
+    const due = new Date(t.due_at);
+    return due > today && due <= weekEnd;
+  });
+
+  const allOpenTasks = tasks.filter(t => t.status !== 'done');
+  const completedTasks = tasks.filter(t => t.status === 'done');
 
   return {
     tasks,
@@ -138,7 +194,12 @@ export const useJarvisTasks = () => {
     updateTask,
     deleteTask,
     completeTask,
-    // Computed
+    // Temporal filters
+    todayTasks,
+    weekTasks,
+    allOpenTasks,
+    completedTasks,
+    // Legacy computed (for compatibility)
     openTasks: tasks.filter(t => t.status === "open"),
     inProgressTasks: tasks.filter(t => t.status === "in_progress"),
     doneTasks: tasks.filter(t => t.status === "done"),
