@@ -1,306 +1,271 @@
 
-# Plano: Implementar Módulo JARVIS no FRACTTO FLOW
+# Plano: Redesign UI JARVIS - Estilo Néctar (Dark Mode)
 
-## Contexto Atual
+## Visão Geral
 
-Analisando o banco de dados, as tabelas JARVIS **ja existem**:
-- `tenants` (name, created_by)
-- `tenant_members` (tenant_id, user_id, role)
-- `ff_tasks` (title, description, status, priority, due_at, tags)
-- `ff_events` (title, description, start_at, end_at, location, priority, status)
-- `ff_habits` (title, cadence, times_per_cadence, target_type, target_value)
-- `ff_habit_logs` (habit_id, log_date, value)
-- `ff_reminders` (title, remind_at, channel, status)
-- `ff_memory_items` (kind, title, content, metadata, source)
-- `ff_integrations_google` (email, access_token, refresh_token, expiry, scope)
-
-Todas as tabelas possuem `tenant_id` e RLS ativado com policies baseadas em `tenant_members`.
+Redesenhar completamente a UI do módulo JARVIS com visual inspirado no Néctar:
+- **Dark mode by default** com gradientes sutis azul/ciano
+- **Design minimalista** com cards flutuantes
+- **Interações de 1 clique** para completar tarefas/hábitos
+- **Sidebar icônica** compacta (estilo Néctar)
+- **Suporte multi-tenant** (West + esposa) já funcional
 
 ---
 
-## Parte 1: Backend (Supabase)
+## Análise do Design Néctar
 
-### 1.1 Criar Função RPC `ff_complete_task`
+Baseado no screenshot capturado:
 
-```sql
-CREATE OR REPLACE FUNCTION public.ff_complete_task(p_task_id uuid)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-  UPDATE public.ff_tasks
-  SET status = 'done',
-      completed_at = now(),
-      updated_at = now()
-  WHERE id = p_task_id
-    AND tenant_id IN (
-      SELECT tenant_id FROM public.tenant_members 
-      WHERE user_id = auth.uid()
-    );
-END;
-$$;
+| Característica | Néctar | FRACTTO FLOW (Atual) |
+|----------------|--------|----------------------|
+| Tema | Dark (azul profundo) | Light/Dark parcial |
+| Sidebar | Ícones compactos, minimalista | Lista expandida |
+| Cards | Flutuantes, bordas sutis | Cards padrão shadcn |
+| Ações | 1-click checkboxes | Menus dropdown |
+| Cores | Gradiente azul/ciano | Verde esmeralda |
+
+---
+
+## Parte 1: Sistema de Cores (Dark Mode)
+
+### Atualizar `src/index.css`
+
+Criar nova paleta "jarvis" inspirada no Néctar:
+
+```css
+.jarvis-theme {
+  --background: 220 40% 6%;      /* Azul profundo quase preto */
+  --foreground: 210 20% 95%;
+  --card: 220 35% 10%;           /* Cards sutilmente mais claros */
+  --card-foreground: 210 20% 95%;
+  --primary: 192 95% 55%;        /* Ciano vibrante */
+  --primary-foreground: 220 40% 6%;
+  --accent: 200 80% 60%;         /* Azul accent */
+  --muted: 220 30% 15%;
+  --muted-foreground: 210 15% 60%;
+  --border: 220 30% 18%;
+}
 ```
 
-### 1.2 Adicionar Policies de DELETE (faltantes)
-
-Tabelas que precisam de policy DELETE:
-- `ff_habits`
-- `ff_events`
-- `ff_habit_logs`
-- `ff_reminders`
-
 ---
 
-## Parte 2: Frontend - Estrutura
+## Parte 2: Novo Layout JARVIS
 
-### 2.1 Novo Contexto: `TenantContext.tsx`
+### 2.1 Criar `JarvisLayout.tsx`
 
-Gerencia o tenant ativo do usuário:
-- Busca tenant_members do usuário logado
-- Expõe `tenantId` para os hooks consumirem
-- Cria tenant automaticamente se usuário não tiver
-
-### 2.2 Novos Hooks (seguindo padrão existente)
-
-| Hook | Tabela | Operações |
-|------|--------|-----------|
-| `useTenant.ts` | tenants, tenant_members | Gerenciar tenant do usuário |
-| `useJarvisTasks.ts` | ff_tasks | CRUD + completeTask |
-| `useJarvisEvents.ts` | ff_events | CRUD |
-| `useJarvisHabits.ts` | ff_habits, ff_habit_logs | CRUD + logHabit |
-| `useJarvisReminders.ts` | ff_reminders | CRUD |
-| `useJarvisMemory.ts` | ff_memory_items | CRUD |
-
-### 2.3 Novas Páginas
-
-| Página | Rota | Descrição |
-|--------|------|-----------|
-| `JarvisDashboard.tsx` | `/jarvis` | Dashboard principal do JARVIS |
-| `JarvisTasks.tsx` | `/jarvis/tasks` | Gerenciamento de tarefas |
-| `JarvisCalendar.tsx` | `/jarvis/calendar` | Agenda/Eventos |
-| `JarvisHabits.tsx` | `/jarvis/habits` | Rastreamento de hábitos |
-
-### 2.4 Novos Componentes
+Layout dedicado para o módulo JARVIS com:
+- **Sidebar icônica** (60px) com tooltip nos ícones
+- **Área principal** com padding generoso
+- **Header minimal** com saudação contextual
+- **Animações sutis** de entrada
 
 ```text
-src/components/jarvis/
-├── TaskCard.tsx           # Card de tarefa individual
-├── TaskForm.tsx           # Formulário de criação/edição
-├── TaskList.tsx           # Lista de tarefas
-├── EventCard.tsx          # Card de evento
-├── EventForm.tsx          # Formulário de evento
-├── HabitCard.tsx          # Card de hábito com progresso
-├── HabitLogButton.tsx     # Botão de marcar hábito
-├── ReminderCard.tsx       # Card de lembrete
-├── JarvisNav.tsx          # Navegação do módulo
-└── QuickComplete.tsx      # Botão rápido de completar
+┌──────┬──────────────────────────────────────┐
+│ 🧠   │  Olá, West. Hoje é sexta-feira.     │
+│ ✓    │  ─────────────────────────────────  │
+│ 📅   │                                      │
+│ 🔄   │  [Cards de conteúdo aqui]           │
+│ 🔔   │                                      │
+│ ⚙️   │                                      │
+└──────┴──────────────────────────────────────┘
 ```
 
-### 2.5 Atualizar Navegação
-
-Adicionar seção JARVIS no `AppLayout.tsx`:
+### 2.2 Componente `JarvisSidebar.tsx`
 
 ```typescript
-{ name: "JARVIS", href: "/jarvis", icon: Brain },
-{ name: "Tarefas", href: "/jarvis/tasks", icon: CheckSquare },
-{ name: "Agenda", href: "/jarvis/calendar", icon: CalendarDays },
-{ name: "Hábitos", href: "/jarvis/habits", icon: Repeat },
-```
-
----
-
-## Parte 3: Validações Zod
-
-Adicionar em `src/lib/validations.ts`:
-
-```typescript
-export const jarvisTaskSchema = z.object({
-  title: z.string().min(1, 'Título é obrigatório').max(200),
-  description: z.string().max(1000).optional(),
-  priority: z.enum(['low', 'medium', 'high']).default('medium'),
-  due_at: z.string().optional().nullable(),
-  tags: z.array(z.string()).default([]),
-});
-
-export const jarvisEventSchema = z.object({
-  title: z.string().min(1, 'Título é obrigatório').max(200),
-  description: z.string().max(1000).optional(),
-  location: z.string().max(200).optional(),
-  start_at: z.string().min(1, 'Data de início é obrigatória'),
-  end_at: z.string().optional().nullable(),
-  all_day: z.boolean().default(false),
-  priority: z.enum(['low', 'medium', 'high']).default('medium'),
-});
-
-export const jarvisHabitSchema = z.object({
-  title: z.string().min(1, 'Título é obrigatório').max(100),
-  cadence: z.enum(['daily', 'weekly', 'monthly']).default('weekly'),
-  times_per_cadence: z.number().min(1).max(30).default(3),
-  target_type: z.enum(['count', 'duration']).default('count'),
-  target_value: z.number().min(1).default(1),
-});
+const jarvisNav = [
+  { icon: Brain, label: "Início", href: "/jarvis" },
+  { icon: CheckSquare, label: "Tarefas", href: "/jarvis/tasks" },
+  { icon: CalendarDays, label: "Agenda", href: "/jarvis/calendar" },
+  { icon: Repeat, label: "Hábitos", href: "/jarvis/habits" },
+  { icon: Bell, label: "Lembretes", href: "/jarvis/reminders" },
+  { icon: Settings, label: "Configurações", href: "/jarvis/settings" },
+];
 ```
 
 ---
 
-## Parte 4: Tipos TypeScript
+## Parte 3: Páginas JARVIS Redesenhadas
 
-Criar `src/types/jarvis.ts`:
+### 3.1 Home (`JarvisDashboard.tsx`)
+
+**Novo design:**
+- Saudação contextual com nome do usuário
+- Cards resumo com animação de contagem
+- Lista "O que fazer hoje" em checklist
+- Seção "Próximos eventos" estilo timeline
+
+```text
+┌─────────────────────────────────────────────┐
+│  Olá, West 👋                               │
+│  Sexta-feira, 31 de Janeiro                 │
+├─────────────────────────────────────────────┤
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐       │
+│  │ 5       │ │ 2       │ │ 3/7     │       │
+│  │ tarefas │ │ eventos │ │ hábitos │       │
+│  └─────────┘ └─────────┘ └─────────┘       │
+├─────────────────────────────────────────────┤
+│  ✅ O que fazer hoje                        │
+│  ─────────────────────────────────────────  │
+│  ☐ Finalizar relatório          alta  📅   │
+│  ☐ Ligar para médico           média  ⏰   │
+│  ☑ Revisar código (concluída)              │
+└─────────────────────────────────────────────┘
+```
+
+### 3.2 Tarefas (`JarvisTasks.tsx`)
+
+**Novo design:**
+- Input de criação rápida no topo
+- Lista com checkbox à esquerda (1-click)
+- Badge de prioridade colorido
+- Animação de riscar ao completar
+
+### 3.3 Hábitos (`JarvisHabits.tsx`)
+
+**Novo design:**
+- Grid de hábitos com círculo de progresso
+- Botão de check grande e destacado
+- Streak counter com emoji de fogo
+- Visualização semanal (7 bolinhas)
+
+### 3.4 Lembretes (`JarvisReminders.tsx`) - **NOVA PÁGINA**
+
+Criar página completa de lembretes:
+- Lista cronológica
+- Badge de canal (WhatsApp/Email/Push)
+- Ação de dismiss com swipe
+
+### 3.5 Configurações JARVIS (`JarvisSettings.tsx`) - **NOVA PÁGINA**
+
+- Toggle de tema
+- Configuração de horário de lembretes
+- Conexão Google Calendar (placeholder)
+- Gerenciamento de tenant members
+
+---
+
+## Parte 4: Componentes UI Redesenhados
+
+### 4.1 `TaskCardNectar.tsx`
 
 ```typescript
-export interface JarvisTask {
-  id: string;
-  tenant_id: string;
-  created_by: string;
-  title: string;
-  description?: string;
-  status: 'open' | 'in_progress' | 'done';
-  priority: 'low' | 'medium' | 'high';
-  due_at?: string;
-  completed_at?: string;
-  tags: string[];
-  source: 'manual' | 'whatsapp';
-  created_at: string;
-  updated_at: string;
-}
+// Novo design com checkbox proeminente
+- Checkbox circular grande (24px)
+- Título com fade ao completar
+- Micro-animação de check
+- Swipe para deletar (mobile)
+```
 
-export interface JarvisEvent {
-  id: string;
-  tenant_id: string;
-  created_by: string;
-  title: string;
-  description?: string;
-  location?: string;
-  start_at: string;
-  end_at?: string;
-  all_day: boolean;
-  priority: 'low' | 'medium' | 'high';
-  status: 'scheduled' | 'cancelled' | 'completed';
-  google_calendar_id?: string;
-  google_event_id?: string;
-  source: 'manual' | 'google';
-  created_at: string;
-  updated_at: string;
-}
+### 4.2 `HabitCardNectar.tsx`
 
-export interface JarvisHabit {
-  id: string;
-  tenant_id: string;
-  created_by: string;
-  title: string;
-  cadence: 'daily' | 'weekly' | 'monthly';
-  times_per_cadence: number;
-  target_type: 'count' | 'duration';
-  target_value: number;
-  active: boolean;
-  created_at: string;
-  updated_at: string;
-  // Calculated fields
-  currentStreak?: number;
-  completionsThisPeriod?: number;
-}
+```typescript
+// Design com progresso circular
+- Círculo SVG de progresso
+- Botão de check central
+- Streak badge
+- Dias da semana (●●●○○○○)
+```
 
-export interface JarvisHabitLog {
-  id: string;
-  tenant_id: string;
-  habit_id: string;
-  user_id: string;
-  log_date: string;
-  value: number;
-  created_at: string;
-}
+### 4.3 `ReminderCard.tsx`
 
-export interface JarvisReminder {
-  id: string;
-  tenant_id: string;
-  created_by: string;
-  title: string;
-  remind_at: string;
-  channel: 'whatsapp' | 'email' | 'push';
-  status: 'pending' | 'sent' | 'dismissed';
-  created_at: string;
-  updated_at: string;
-}
+```typescript
+// Card de lembrete
+- Ícone de canal (WhatsApp/bell)
+- Horário destacado
+- Botão dismiss
+```
+
+### 4.4 `QuickAddInput.tsx`
+
+```typescript
+// Input de adição rápida estilo Néctar
+- Placeholder "O que você precisa fazer?"
+- Submit com Enter ou botão
+- Parsing inteligente de data ("amanhã às 14h")
 ```
 
 ---
 
-## Parte 5: Rotas
+## Parte 5: Rotas e Navegação
 
-Adicionar em `App.tsx`:
+### Adicionar novas rotas em `App.tsx`:
 
 ```typescript
-import JarvisDashboard from "./pages/JarvisDashboard";
-import JarvisTasks from "./pages/JarvisTasks";
-import JarvisCalendar from "./pages/JarvisCalendar";
-import JarvisHabits from "./pages/JarvisHabits";
+// Novas rotas JARVIS
+<Route path="/jarvis/reminders" element={<JarvisReminders />} />
+<Route path="/jarvis/settings" element={<JarvisSettings />} />
+```
 
-// Rotas JARVIS
-<Route path="/jarvis" element={<ProtectedRoute><AppLayout><JarvisDashboard /></AppLayout></ProtectedRoute>} />
-<Route path="/jarvis/tasks" element={<ProtectedRoute><AppLayout><JarvisTasks /></AppLayout></ProtectedRoute>} />
-<Route path="/jarvis/calendar" element={<ProtectedRoute><AppLayout><JarvisCalendar /></AppLayout></ProtectedRoute>} />
-<Route path="/jarvis/habits" element={<ProtectedRoute><AppLayout><JarvisHabits /></AppLayout></ProtectedRoute>} />
+### Atualizar `AppLayout.tsx`:
+
+Criar toggle entre "modo finanças" e "modo JARVIS":
+- Layout atual para finanças
+- `JarvisLayout` para rotas `/jarvis/*`
+
+---
+
+## Parte 6: Dark Mode Toggle
+
+### Implementar com next-themes (já instalado):
+
+```typescript
+// ThemeProvider no App.tsx
+<ThemeProvider attribute="class" defaultTheme="dark">
+  ...
+</ThemeProvider>
+
+// Toggle no JarvisSettings
+<Switch onCheckedChange={toggleTheme} />
 ```
 
 ---
 
 ## Resumo de Arquivos
 
-### Criar (17 arquivos)
+### Criar (8 arquivos)
 
-| Arquivo | Tipo |
-|---------|------|
-| `src/contexts/TenantContext.tsx` | Contexto |
-| `src/hooks/useTenant.ts` | Hook |
-| `src/hooks/useJarvisTasks.ts` | Hook |
-| `src/hooks/useJarvisEvents.ts` | Hook |
-| `src/hooks/useJarvisHabits.ts` | Hook |
-| `src/hooks/useJarvisReminders.ts` | Hook |
-| `src/types/jarvis.ts` | Tipos |
-| `src/pages/JarvisDashboard.tsx` | Página |
-| `src/pages/JarvisTasks.tsx` | Página |
-| `src/pages/JarvisCalendar.tsx` | Página |
-| `src/pages/JarvisHabits.tsx` | Página |
-| `src/components/jarvis/TaskCard.tsx` | Componente |
-| `src/components/jarvis/TaskForm.tsx` | Componente |
-| `src/components/jarvis/EventCard.tsx` | Componente |
-| `src/components/jarvis/EventForm.tsx` | Componente |
-| `src/components/jarvis/HabitCard.tsx` | Componente |
-| `src/components/jarvis/HabitLogButton.tsx` | Componente |
+| Arquivo | Descrição |
+|---------|-----------|
+| `src/components/layout/JarvisLayout.tsx` | Layout exclusivo JARVIS |
+| `src/components/jarvis/JarvisSidebar.tsx` | Sidebar icônica |
+| `src/components/jarvis/TaskCardNectar.tsx` | Card de tarefa redesenhado |
+| `src/components/jarvis/HabitCardNectar.tsx` | Card de hábito com progresso circular |
+| `src/components/jarvis/ReminderCard.tsx` | Card de lembrete |
+| `src/components/jarvis/QuickAddInput.tsx` | Input de adição rápida |
+| `src/pages/JarvisReminders.tsx` | Página de lembretes |
+| `src/pages/JarvisSettings.tsx` | Configurações JARVIS |
 
-### Modificar (3 arquivos)
+### Modificar (6 arquivos)
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/App.tsx` | Adicionar rotas JARVIS + TenantProvider |
-| `src/components/layout/AppLayout.tsx` | Adicionar navegação JARVIS |
-| `src/lib/validations.ts` | Adicionar schemas JARVIS |
-
-### Migration SQL (1)
-
-Criar função `ff_complete_task` e policies de DELETE faltantes.
-
----
-
-## Fluxo de Tenant
-
-1. Usuário faz login
-2. `TenantContext` busca `tenant_members` do usuário
-3. Se não tiver tenant:
-   - Cria novo tenant com nome "Meu Espaço"
-   - Adiciona usuário como `owner`
-4. Hooks JARVIS usam `tenantId` do contexto para queries
+| `src/index.css` | Adicionar tema jarvis dark |
+| `src/App.tsx` | Adicionar ThemeProvider + novas rotas |
+| `src/pages/JarvisDashboard.tsx` | Redesign completo |
+| `src/pages/JarvisTasks.tsx` | Redesign com novo card |
+| `src/pages/JarvisHabits.tsx` | Redesign com círculo de progresso |
+| `src/pages/JarvisCalendar.tsx` | Ajustes de tema |
 
 ---
 
 ## Ordem de Implementação
 
-1. Migration SQL (função RPC + policies)
-2. Tipos TypeScript (`jarvis.ts`)
-3. Contexto de Tenant
-4. Hooks de dados
-5. Componentes de UI
-6. Páginas
-7. Atualizar navegação e rotas
-8. Adicionar validações Zod
+1. **Tema Dark Mode** - CSS variables + ThemeProvider
+2. **JarvisLayout + Sidebar** - Novo layout dedicado
+3. **Componentes UI** - Cards redesenhados
+4. **Dashboard** - Redesign da home
+5. **Páginas** - Tasks, Habits, Calendar atualizadas
+6. **Novas páginas** - Reminders + Settings
+7. **Rotas** - Integração final
+
+---
+
+## Diferenças vs Néctar (Originalidade)
+
+Para não plagiar, o FRACTTO FLOW terá:
+- Paleta verde/esmeralda como accent secundário (identidade própria)
+- Integração nativa com módulo de finanças
+- Toggle entre "modo finanças" e "modo assistente"
+- Branding FRACTTO FLOW mantido
+- Estética inspirada, não copiada
