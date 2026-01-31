@@ -1,79 +1,187 @@
 
-Objetivo
-- Corrigir o erro “Tenant ou usuário não encontrado” ao tentar criar tarefa/evento/hábito no JARVIS após a limpeza de dados.
-- Garantir que, se um usuário autenticado não tiver workspace (tenant) ainda, o sistema consiga criar automaticamente um tenant “Pessoal - {Nome}” e a membership “owner”, sem falhar por regras de segurança do backend.
 
-O que descobri (causa raiz)
-- O erro exibido nos cards do JARVIS (“Tenant ou usuário não encontrado”) não é o problema principal; ele é apenas um “efeito colateral” porque tenantId fica null.
-- O problema real está no bootstrap do tenant dentro do TenantContext:
-  - O app busca memberships em tenant_members.
-  - Como o retorno vem vazio (Response Body: []), ele tenta criar um tenant novo.
-  - Essa criação falha com: “new row violates row-level security policy for table "tenants"”.
-- Existe policy de INSERT em tenants (tenants_insert_own) e ela parece correta (WITH CHECK auth.uid() = created_by).
-- Porém, o insert está sendo feito com .select().single(), e isso exige que a linha inserida também passe pela policy de SELECT para ser retornada.
-  - A policy atual de SELECT em tenants (tenants_select_if_member) só deixa ver tenants onde o usuário já é membro em tenant_members.
-  - No momento do INSERT, ainda não existe membership, então o SELECT nega a linha recém-criada e o PostgREST acaba retornando 403 com mensagem de RLS, impedindo o bootstrap do tenant.
+# Plano de Implementacao - Pagina JarvisMemory
 
-Correção proposta (backend / RLS)
-1) Ajustar policy de SELECT da tabela public.tenants
-- Trocar a regra “apenas se for membro” por “se for dono (created_by) OU se for membro”.
-- Isso permite:
-  - O INSERT + RETURNING (via .select()) funcionar imediatamente para o criador.
-  - Continuar protegendo o acesso para outras pessoas.
+## Resumo
 
-SQL planejado (migração)
-- Remover a policy atual e recriar:
+Implementar a pagina de Memoria do JARVIS (`/jarvis/memory`) com listagem, filtros, busca e acoes sobre itens de memoria, seguindo o estilo visual Nectar (dark mode, cards minimalistas).
 
-  DROP POLICY IF EXISTS "tenants_select_if_member" ON public.tenants;
+---
 
-  CREATE POLICY "tenants_select_if_owner_or_member"
-  ON public.tenants
-  FOR SELECT
-  USING (
-    created_by = auth.uid()
-    OR EXISTS (
-      SELECT 1
-      FROM public.tenant_members tm
-      WHERE tm.tenant_id = tenants.id
-        AND tm.user_id = auth.uid()
-    )
-  );
+## Arquivos a Criar/Modificar
 
-Observações importantes
-- Isso não cria recursão infinita:
-  - A policy de tenants consulta tenant_members.
-  - A policy de SELECT em tenant_members é simples (user_id = auth.uid()) e não consulta tenants, então não há loop.
-- A tabela tenant_members já possui uma policy de INSERT de bootstrap (tenant_members_insert_bootstrap) que permite inserir o primeiro “owner” se ainda não existe membership para aquele tenant; isso deve destravar o fluxo completo (cria tenant → cria membership → tenantId passa a existir).
+| Arquivo | Acao | Descricao |
+|---------|------|-----------|
+| `src/pages/JarvisMemory.tsx` | Criar | Pagina principal de memorias |
+| `src/components/jarvis/MemoryCard.tsx` | Criar | Card individual de memoria (estilo Nectar) |
+| `src/components/jarvis/MemoryForm.tsx` | Criar | Dialog para criar nova memoria |
+| `src/components/jarvis/JarvisSidebar.tsx` | Modificar | Adicionar link "Memoria" |
+| `src/App.tsx` | Modificar | Adicionar rota `/jarvis/memory` |
 
-Melhoria complementar (frontend)
-2) Tornar o TenantContext mais resiliente e “autocurável”
-- Após corrigir a policy, o fluxo atual deve voltar a funcionar sem mudar o código.
-- Mesmo assim, vou reforçar para evitar regressões:
-  - Se o insert do tenant falhar, exibir um erro mais explícito na UI (ex.: “Não foi possível criar seu workspace. Verifique permissões.”) em vez de deixar o usuário chegar no erro de “Tenant ou usuário não encontrado”.
-  - Desabilitar ações de criação (QuickAdd, botões “Criar tarefa/hábito”, etc.) enquanto tenantLoading estiver true ou enquanto tenantId estiver null e existir erro no TenantContext.
-  - Opcional: adicionar um botão “Tentar novamente” chamando refetch().
+---
 
-Verificações e testes (end-to-end)
-3) Cenários para validar na prática
-- Cenário A: usuário antigo (auth existente) sem rows em tenants/tenant_members (após limpeza)
-  - Ao abrir o app: deve criar automaticamente “Pessoal - {Nome}”
-  - Deve permitir criar tarefa, evento e hábito.
-- Cenário B: usuário novo
-  - Deve criar tenant/membership automaticamente e funcionar igual.
-- Cenário C: usuário com múltiplos tenants
-  - TenantSwitcher continua funcionando
-  - Troca de tenant invalida queries e muda dados do JARVIS corretamente.
+## Detalhamento Tecnico
 
-Checagens técnicas (diagnóstico pós-fix)
-4) Confirmar via logs e rede
-- Confirmar que o POST /tenants deixa de retornar 403.
-- Confirmar que, após criar tenant, ocorre o POST /tenant_members com sucesso.
-- Confirmar que tenant_members GET passa a retornar pelo menos 1 item.
+### 1. Componente MemoryCard (`src/components/jarvis/MemoryCard.tsx`)
 
-Riscos/impactos
-- Baixo risco: a mudança apenas amplia o SELECT para o owner, mantendo isolamento por membership para os demais.
-- Não altera schema nem dados existentes; apenas política de acesso.
+Card minimalista inspirado no `TaskCardNectar`:
 
-Entregáveis desta implementação
-- 1 migração SQL com ajuste da policy de SELECT em tenants.
-- Ajustes pequenos no frontend para feedback/UX quando tenant não puder ser criado (opcional, mas recomendado para evitar “erro silencioso” e frustração).
+```text
++------------------------------------------+
+| [kind badge]                    [menu ⋮] |
+| Titulo (ou primeiras palavras)           |
+| Trecho do conteudo (line-clamp-2)...     |
+| [data formatada]     [copiar] [ver mais] |
++------------------------------------------+
+```
+
+Funcionalidades:
+- Badge colorido por `kind` (profile=roxo, preference=azul, decision=amarelo, project=verde, note=cinza, message=ciano)
+- Botao "Copiar" usando `navigator.clipboard.writeText()`
+- Botao "Ver mais" abre dialog com conteudo completo
+- Menu dropdown com opcao "Excluir"
+- Skeleton loading durante carregamento
+
+### 2. Pagina JarvisMemory (`src/pages/JarvisMemory.tsx`)
+
+Estrutura:
+```text
++------------------------------------------+
+| [icone] Memoria                          |
+|         X itens salvos      [+ Nova]     |
++------------------------------------------+
+| [Dropdown Kind ▼]  [🔍 Buscar...      ]  |
++------------------------------------------+
+| [MemoryCard] [MemoryCard] [MemoryCard]   |
+| ...grid responsivo...                    |
++------------------------------------------+
+```
+
+Filtros:
+- Dropdown por `kind` com opcoes: Todos, Perfil, Preferencia, Decisao, Projeto, Nota, Mensagem
+- Input de busca com debounce de 300ms (usa `searchMemory()` do hook)
+
+Estados:
+- Loading: grid de 6 Skeletons
+- Empty: icone + mensagem "Nenhuma memoria salva"
+- Filtered empty: "Nenhum resultado para os filtros aplicados"
+
+### 3. Formulario de Criacao (`src/components/jarvis/MemoryForm.tsx`)
+
+Dialog com campos:
+- `kind`: Select com opcoes predefinidas
+- `title`: Input opcional
+- `content`: Textarea (obrigatorio)
+- `source`: Hidden, default "manual"
+
+### 4. Modificacao no Sidebar (`JarvisSidebar.tsx`)
+
+Adicionar item na lista `jarvisNav`:
+```typescript
+{ icon: Brain, label: "Memoria", href: "/jarvis/memory" }
+```
+Usar icone `Lightbulb` ou `BookOpen` do lucide-react para diferenciar de "Inicio".
+
+### 5. Rota no App.tsx
+
+Adicionar apos `/jarvis/settings`:
+```tsx
+<Route
+  path="/jarvis/memory"
+  element={
+    <ProtectedRoute>
+      <ErrorBoundary>
+        <JarvisLayout>
+          <JarvisMemory />
+        </JarvisLayout>
+      </ErrorBoundary>
+    </ProtectedRoute>
+  }
+/>
+```
+
+---
+
+## Mapeamento de Kinds (Cores e Labels)
+
+| kind | Label PT | Cor Badge |
+|------|----------|-----------|
+| profile | Perfil | `bg-purple-500/20 text-purple-400` |
+| preference | Preferencia | `bg-blue-500/20 text-blue-400` |
+| decision | Decisao | `bg-yellow-500/20 text-yellow-400` |
+| project | Projeto | `bg-green-500/20 text-green-400` |
+| note | Nota | `bg-muted text-muted-foreground` |
+| message | Mensagem | `bg-cyan-500/20 text-cyan-400` |
+
+---
+
+## Logica de Debounce para Busca
+
+```typescript
+const [searchQuery, setSearchQuery] = useState("");
+const [debouncedQuery, setDebouncedQuery] = useState("");
+
+useEffect(() => {
+  const timer = setTimeout(() => {
+    setDebouncedQuery(searchQuery);
+  }, 300);
+  return () => clearTimeout(timer);
+}, [searchQuery]);
+
+const filteredItems = useMemo(() => {
+  let items = debouncedQuery 
+    ? searchMemory(debouncedQuery) 
+    : memoryItems;
+  
+  if (kindFilter !== "all") {
+    items = items.filter(i => i.kind === kindFilter);
+  }
+  
+  return items;
+}, [memoryItems, debouncedQuery, kindFilter]);
+```
+
+---
+
+## Dialog "Ver Mais" (Detalhes da Memoria)
+
+Ao clicar em "Ver mais", abre um Dialog mostrando:
+- Titulo completo
+- Kind badge
+- Data de criacao formatada
+- Conteudo completo (scrollable)
+- Source badge (manual/whatsapp/etc)
+- Botao "Copiar tudo"
+- Botao "Fechar"
+
+---
+
+## Responsividade
+
+- Desktop: Grid de 3 colunas
+- Tablet: Grid de 2 colunas
+- Mobile: 1 coluna
+
+Classes Tailwind:
+```css
+grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3
+```
+
+---
+
+## Consideracoes de Seguranca
+
+- O hook `useJarvisMemory` ja filtra por `tenant_id` via RLS
+- Delete e feito direto (tabela nao tem `deleted_at`)
+- Confirmacao antes de deletar com `window.confirm()`
+
+---
+
+## Entregaveis
+
+1. `src/pages/JarvisMemory.tsx` - Pagina completa
+2. `src/components/jarvis/MemoryCard.tsx` - Card individual
+3. `src/components/jarvis/MemoryForm.tsx` - Dialog de criacao
+4. `src/components/jarvis/JarvisSidebar.tsx` - Link adicionado
+5. `src/App.tsx` - Rota registrada
+
