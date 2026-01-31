@@ -157,7 +157,13 @@ export const HabitCardNectar = ({
           <div className="flex items-center gap-1 mt-2">
             <Flame className="h-3.5 w-3.5 text-warning" />
             <span className="text-xs text-warning font-medium">
-              {streak} dias seguidos
+              {streak} {
+                habit.cadence === "daily" 
+                  ? streak === 1 ? "dia" : "dias seguidos"
+                  : habit.cadence === "weekly"
+                    ? streak === 1 ? "semana" : "semanas seguidas"
+                    : streak === 1 ? "mês" : "meses seguidos"
+              }
             </span>
           </div>
         )}
