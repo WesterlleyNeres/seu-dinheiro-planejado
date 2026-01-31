@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { format, parseISO, startOfDay, endOfDay, addDays } from "date-fns";
 import type { JarvisEvent } from "@/types/jarvis";
 
 interface CreateEventInput {
@@ -18,6 +19,31 @@ interface CreateEventInput {
 interface UpdateEventInput extends Partial<CreateEventInput> {
   status?: 'scheduled' | 'cancelled' | 'completed';
 }
+
+// Helper: agrupar eventos por data
+const groupEventsByDate = (events: JarvisEvent[]): Record<string, JarvisEvent[]> => {
+  const groups: Record<string, JarvisEvent[]> = {};
+
+  events.forEach(event => {
+    const dateKey = format(parseISO(event.start_at), "yyyy-MM-dd");
+    if (!groups[dateKey]) {
+      groups[dateKey] = [];
+    }
+    groups[dateKey].push(event);
+  });
+
+  // Ordenar eventos dentro de cada dia por horário
+  // Eventos "dia inteiro" (all_day) aparecem primeiro
+  Object.keys(groups).forEach(key => {
+    groups[key].sort((a, b) => {
+      if (a.all_day && !b.all_day) return -1;
+      if (!a.all_day && b.all_day) return 1;
+      return new Date(a.start_at).getTime() - new Date(b.start_at).getTime();
+    });
+  });
+
+  return groups;
+};
 
 export const useJarvisEvents = () => {
   const { tenantId } = useTenant();
@@ -130,18 +156,18 @@ export const useJarvisEvents = () => {
 
   const getTodayEvents = () => {
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return getEventsByDateRange(today, tomorrow);
+    return getEventsByDateRange(startOfDay(today), endOfDay(today));
   };
 
   const getUpcomingEvents = (days = 7) => {
-    const today = new Date();
-    const future = new Date();
-    future.setDate(future.getDate() + days);
+    const today = startOfDay(new Date());
+    const future = endOfDay(addDays(today, days - 1));
     return getEventsByDateRange(today, future);
   };
+
+  // Eventos da semana agrupados por data
+  const weekEvents = getUpcomingEvents(7);
+  const groupedWeekEvents = groupEventsByDate(weekEvents);
 
   return {
     events,
@@ -153,6 +179,9 @@ export const useJarvisEvents = () => {
     // Computed
     todayEvents: getTodayEvents(),
     upcomingEvents: getUpcomingEvents(),
+    weekEvents,
+    groupedWeekEvents,
     getEventsByDateRange,
+    getUpcomingEvents,
   };
 };
