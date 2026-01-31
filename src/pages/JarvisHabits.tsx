@@ -156,6 +156,7 @@ const JarvisHabits = () => {
               habit={habit}
               progress={getHabitProgress(habit)}
               isLoggedToday={isHabitLoggedToday(habit.id)}
+              isLogging={logHabit.isPending}
               onLog={handleLog}
               onEdit={handleEdit}
               onDelete={handleDelete}

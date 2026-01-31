@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -56,13 +57,26 @@ export const HabitForm = ({
   const form = useForm<HabitFormValues>({
     resolver: zodResolver(habitFormSchema),
     defaultValues: {
-      title: habit?.title || "",
-      cadence: habit?.cadence || "weekly",
-      times_per_cadence: habit?.times_per_cadence || 3,
-      target_type: habit?.target_type || "count",
-      target_value: habit?.target_value || 1,
+      title: "",
+      cadence: "weekly",
+      times_per_cadence: 3,
+      target_type: "count",
+      target_value: 1,
     },
   });
+
+  // Reset form when dialog opens or habit changes
+  useEffect(() => {
+    if (open) {
+      form.reset({
+        title: habit?.title || "",
+        cadence: habit?.cadence || "weekly",
+        times_per_cadence: habit?.times_per_cadence || 3,
+        target_type: habit?.target_type || "count",
+        target_value: habit?.target_value || 1,
+      });
+    }
+  }, [open, habit, form]);
 
   const handleSubmit = (values: HabitFormValues) => {
     onSubmit(values);
@@ -102,7 +116,7 @@ export const HabitForm = ({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Frequência</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Selecione" />
@@ -130,6 +144,47 @@ export const HabitForm = ({
                     </FormControl>
                     <FormDescription className="text-xs">
                       Meta de repetições
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="target_type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tipo de Meta</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="count">Contagem (vezes)</SelectItem>
+                        <SelectItem value="duration">Duração (minutos)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="target_value"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Valor por Registro</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={1} {...field} />
+                    </FormControl>
+                    <FormDescription className="text-xs">
+                      {form.watch("target_type") === "duration" ? "Minutos por vez" : "Unidades por vez"}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
