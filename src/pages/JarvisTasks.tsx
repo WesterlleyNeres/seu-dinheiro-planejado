@@ -7,15 +7,16 @@ import { useJarvisTasks } from "@/hooks/useJarvisTasks";
 import { TaskCardNectar } from "@/components/jarvis/TaskCardNectar";
 import { QuickAddInput } from "@/components/jarvis/QuickAddInput";
 import { TaskForm } from "@/components/jarvis/TaskForm";
-import { Plus, Loader2, CheckSquare, ListTodo, Clock, CheckCircle } from "lucide-react";
+import { Plus, Loader2, CheckSquare, Sun, CalendarDays, ListTodo, CheckCircle } from "lucide-react";
 import type { JarvisTask } from "@/types/jarvis";
 
 const JarvisTasks = () => {
   const { loading: tenantLoading } = useTenant();
   const {
-    openTasks,
-    inProgressTasks,
-    doneTasks,
+    todayTasks,
+    weekTasks,
+    allOpenTasks,
+    completedTasks,
     isLoading,
     createTask,
     updateTask,
@@ -68,6 +69,32 @@ const JarvisTasks = () => {
     );
   }
 
+  const renderTaskList = (tasks: JarvisTask[], emptyIcon: React.ReactNode, emptyMessage: string, emptySubMessage?: string) => (
+    <div className="space-y-3">
+      {tasks.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            {emptyIcon}
+            <p className="text-muted-foreground">{emptyMessage}</p>
+            {emptySubMessage && (
+              <p className="text-xs text-muted-foreground mt-1">{emptySubMessage}</p>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        tasks.map(task => (
+          <TaskCardNectar
+            key={task.id}
+            task={task}
+            onComplete={handleComplete}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+          />
+        ))
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -79,7 +106,7 @@ const JarvisTasks = () => {
           <div>
             <h1 className="text-xl font-bold">Tarefas</h1>
             <p className="text-sm text-muted-foreground">
-              {openTasks.length + inProgressTasks.length} pendentes
+              {allOpenTasks.length} pendentes
             </p>
           </div>
         </div>
@@ -97,96 +124,65 @@ const JarvisTasks = () => {
         isLoading={createTask.isPending}
       />
 
-      {/* Tabs por Status */}
-      <Tabs defaultValue="open" className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-3 bg-muted/50">
-          <TabsTrigger value="open" className="flex items-center gap-1.5">
-            <ListTodo className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Abertas</span>
-            <span className="text-xs opacity-70">({openTasks.length})</span>
+      {/* Tabs Temporais */}
+      <Tabs defaultValue="today" className="w-full">
+        <TabsList className="grid w-full max-w-lg grid-cols-4 bg-muted/50">
+          <TabsTrigger value="today" className="flex items-center gap-1.5">
+            <Sun className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Hoje</span>
+            <span className="text-xs opacity-70">({todayTasks.length})</span>
           </TabsTrigger>
-          <TabsTrigger value="in_progress" className="flex items-center gap-1.5">
-            <Clock className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Progresso</span>
-            <span className="text-xs opacity-70">({inProgressTasks.length})</span>
+          <TabsTrigger value="week" className="flex items-center gap-1.5">
+            <CalendarDays className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Semana</span>
+            <span className="text-xs opacity-70">({weekTasks.length})</span>
+          </TabsTrigger>
+          <TabsTrigger value="all" className="flex items-center gap-1.5">
+            <ListTodo className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Todas</span>
+            <span className="text-xs opacity-70">({allOpenTasks.length})</span>
           </TabsTrigger>
           <TabsTrigger value="done" className="flex items-center gap-1.5">
             <CheckCircle className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Feitas</span>
-            <span className="text-xs opacity-70">({doneTasks.length})</span>
+            <span className="text-xs opacity-70">({completedTasks.length})</span>
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="open" className="mt-6">
-          <div className="space-y-3">
-            {openTasks.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <ListTodo className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
-                  <p className="text-muted-foreground">Nenhuma tarefa aberta</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Use o campo acima para adicionar uma nova tarefa
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              openTasks.map(task => (
-                <TaskCardNectar
-                  key={task.id}
-                  task={task}
-                  onComplete={handleComplete}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
-              ))
-            )}
-          </div>
+        <TabsContent value="today" className="mt-6">
+          {renderTaskList(
+            todayTasks,
+            <Sun className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />,
+            "Nenhuma tarefa para hoje",
+            "Aproveite o dia! 🌟"
+          )}
         </TabsContent>
 
-        <TabsContent value="in_progress" className="mt-6">
-          <div className="space-y-3">
-            {inProgressTasks.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <Clock className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
-                  <p className="text-muted-foreground">Nenhuma tarefa em progresso</p>
-                </CardContent>
-              </Card>
-            ) : (
-              inProgressTasks.map(task => (
-                <TaskCardNectar
-                  key={task.id}
-                  task={task}
-                  onComplete={handleComplete}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
-              ))
-            )}
-          </div>
+        <TabsContent value="week" className="mt-6">
+          {renderTaskList(
+            weekTasks,
+            <CalendarDays className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />,
+            "Sem tarefas para esta semana",
+            "Todas as tarefas da semana estão em dia"
+          )}
+        </TabsContent>
+
+        <TabsContent value="all" className="mt-6">
+          {renderTaskList(
+            allOpenTasks,
+            <ListTodo className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />,
+            "Nenhuma tarefa pendente",
+            "Parabéns! Você completou tudo 🎉"
+          )}
         </TabsContent>
 
         <TabsContent value="done" className="mt-6">
-          <div className="space-y-3">
-            {doneTasks.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <CheckCircle className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
-                  <p className="text-muted-foreground">Nenhuma tarefa concluída</p>
-                </CardContent>
-              </Card>
-            ) : (
-              doneTasks.map(task => (
-                <TaskCardNectar
-                  key={task.id}
-                  task={task}
-                  onComplete={handleComplete}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
-              ))
-            )}
-          </div>
+          {renderTaskList(
+            completedTasks,
+            <CheckCircle className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />,
+            "Nenhuma tarefa concluída ainda",
+            "Complete uma tarefa para vê-la aqui"
+          )}
         </TabsContent>
       </Tabs>
 
