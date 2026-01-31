@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { TenantProvider } from "@/contexts/TenantContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -23,6 +24,10 @@ import Transfers from "./pages/Transfers";
 import Reports from "./pages/Reports";
 import Import from "./pages/Import";
 import FAQ from "./pages/FAQ";
+import JarvisDashboard from "./pages/JarvisDashboard";
+import JarvisTasks from "./pages/JarvisTasks";
+import JarvisCalendar from "./pages/JarvisCalendar";
+import JarvisHabits from "./pages/JarvisHabits";
 
 // Component to redirect logged users from landing to dashboard
 const LandingOrDashboard = () => {
@@ -52,7 +57,8 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
+          <TenantProvider>
+            <Routes>
             <Route path="/" element={<LandingOrDashboard />} />
             <Route path="/auth" element={<Auth />} />
             <Route
@@ -211,9 +217,59 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            {/* JARVIS Routes */}
+            <Route
+              path="/jarvis"
+              element={
+                <ProtectedRoute>
+                  <ErrorBoundary>
+                    <AppLayout>
+                      <JarvisDashboard />
+                    </AppLayout>
+                  </ErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/jarvis/tasks"
+              element={
+                <ProtectedRoute>
+                  <ErrorBoundary>
+                    <AppLayout>
+                      <JarvisTasks />
+                    </AppLayout>
+                  </ErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/jarvis/calendar"
+              element={
+                <ProtectedRoute>
+                  <ErrorBoundary>
+                    <AppLayout>
+                      <JarvisCalendar />
+                    </AppLayout>
+                  </ErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/jarvis/habits"
+              element={
+                <ProtectedRoute>
+                  <ErrorBoundary>
+                    <AppLayout>
+                      <JarvisHabits />
+                    </AppLayout>
+                  </ErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
-          </Routes>
+            </Routes>
+          </TenantProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
