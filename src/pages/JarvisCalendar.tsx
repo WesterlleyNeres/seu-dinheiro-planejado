@@ -1,24 +1,36 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTenant } from "@/contexts/TenantContext";
 import { useJarvisEvents } from "@/hooks/useJarvisEvents";
-import { EventCard } from "@/components/jarvis/EventCard";
 import { EventForm } from "@/components/jarvis/EventForm";
-import { Plus, Calendar, Loader2, ChevronLeft, ChevronRight, Clock } from "lucide-react";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek, parseISO } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { DayEventGroup } from "@/components/jarvis/DayEventGroup";
+import { QuickEventInput } from "@/components/jarvis/QuickEventInput";
+import { Plus, Calendar, Loader2 } from "lucide-react";
+import { parseISO } from "date-fns";
 import type { JarvisEvent } from "@/types/jarvis";
-import { cn } from "@/lib/utils";
 
 const JarvisCalendar = () => {
   const { loading: tenantLoading } = useTenant();
-  const { events, isLoading, createEvent, updateEvent, deleteEvent } = useJarvisEvents();
+  const { 
+    isLoading, 
+    createEvent, 
+    updateEvent, 
+    deleteEvent, 
+    weekEvents,
+    groupedWeekEvents 
+  } = useJarvisEvents();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<JarvisEvent | null>(null);
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
+
+  // Ordenar datas cronologicamente
+  const sortedDates = useMemo(() => {
+    return Object.keys(groupedWeekEvents).sort();
+  }, [groupedWeekEvents]);
+
+  const handleQuickAdd = (data: { title: string; start_at: string; all_day: boolean }) => {
+    createEvent.mutate(data);
+  };
 
   const handleCreateEvent = (values: any) => {
     createEvent.mutate(values);
@@ -42,19 +54,6 @@ const JarvisCalendar = () => {
     }
   };
 
-  // Dias do calendário
-  const monthStart = startOfMonth(currentMonth);
-  const monthEnd = endOfMonth(currentMonth);
-  const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 });
-  const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
-  const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
-
-  const getEventsForDay = (date: Date) => {
-    return events.filter(event => isSameDay(new Date(event.start_at), date));
-  };
-
-  const selectedDateEvents = selectedDate ? getEventsForDay(selectedDate) : [];
-
   if (tenantLoading || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -74,143 +73,46 @@ const JarvisCalendar = () => {
           <div>
             <h1 className="text-xl font-bold">Agenda</h1>
             <p className="text-sm text-muted-foreground">
-              {events.length} eventos
+              {weekEvents.length} {weekEvents.length === 1 ? "evento" : "eventos"} nos próximos 7 dias
             </p>
           </div>
         </div>
 
         <Button onClick={() => setFormOpen(true)}>
           <Plus className="h-4 w-4 mr-1" />
-          Novo Evento
+          Compromisso
         </Button>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Calendário */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-base font-medium capitalize">
-              {format(currentMonth, "MMMM yyyy", { locale: ptBR })}
-            </CardTitle>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 px-3 text-xs"
-                onClick={() => setCurrentMonth(new Date())}
-              >
-                Hoje
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {/* Dias da semana */}
-            <div className="grid grid-cols-7 gap-1 mb-2">
-              {["D", "S", "T", "Q", "Q", "S", "S"].map((day, i) => (
-                <div
-                  key={i}
-                  className="text-center text-xs font-medium text-muted-foreground py-2"
-                >
-                  {day}
-                </div>
-              ))}
-            </div>
+      {/* Quick Add */}
+      <QuickEventInput onAdd={handleQuickAdd} isLoading={createEvent.isPending} />
 
-            {/* Grid de dias */}
-            <div className="grid grid-cols-7 gap-1">
-              {calendarDays.map(day => {
-                const dayEvents = getEventsForDay(day);
-                const isToday = isSameDay(day, new Date());
-                const isCurrentMonth = isSameMonth(day, currentMonth);
-                const isSelected = selectedDate && isSameDay(day, selectedDate);
-
-                return (
-                  <button
-                    key={day.toISOString()}
-                    onClick={() => setSelectedDate(day)}
-                    className={cn(
-                      "aspect-square p-1 text-sm rounded-xl transition-all relative flex flex-col items-center justify-center",
-                      !isCurrentMonth && "text-muted-foreground/30",
-                      isToday && !isSelected && "ring-1 ring-primary",
-                      isSelected && "bg-primary text-primary-foreground",
-                      !isSelected && "hover:bg-muted"
-                    )}
-                  >
-                    <span className="text-sm">{format(day, "d")}</span>
-                    {dayEvents.length > 0 && (
-                      <div className="flex gap-0.5 mt-0.5">
-                        {dayEvents.slice(0, 3).map((_, i) => (
-                          <div
-                            key={i}
-                            className={cn(
-                              "h-1 w-1 rounded-full",
-                              isSelected ? "bg-primary-foreground" : "bg-primary"
-                            )}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Eventos do dia selecionado */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium capitalize">
-              {selectedDate
-                ? format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR })
-                : "Selecione um dia"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {selectedDate ? (
-              selectedDateEvents.length === 0 ? (
-                <div className="py-8 text-center">
-                  <Clock className="h-10 w-10 mx-auto text-muted-foreground/30 mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Nenhum evento neste dia
-                  </p>
-                </div>
-              ) : (
-                selectedDateEvents.map(event => (
-                  <EventCard
-                    key={event.id}
-                    event={event}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                  />
-                ))
-              )
-            ) : (
-              <div className="py-8 text-center">
-                <p className="text-sm text-muted-foreground">
-                  Clique em um dia para ver os eventos
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      {/* Lista agrupada por dia */}
+      {sortedDates.length === 0 ? (
+        <div className="py-16 text-center">
+          <Calendar className="h-12 w-12 mx-auto text-muted-foreground/30 mb-4" />
+          <h3 className="text-lg font-medium mb-1">Semana livre!</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Nenhum compromisso nos próximos 7 dias
+          </p>
+          <Button variant="outline" onClick={() => setFormOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" />
+            Agendar compromisso
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {sortedDates.map(dateKey => (
+            <DayEventGroup
+              key={dateKey}
+              date={parseISO(dateKey)}
+              events={groupedWeekEvents[dateKey]}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Form Dialog */}
       <EventForm
