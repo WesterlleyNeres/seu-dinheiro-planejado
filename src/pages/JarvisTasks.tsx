@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTenant } from "@/contexts/TenantContext";
 import { useJarvisTasks } from "@/hooks/useJarvisTasks";
-import { TaskCard } from "@/components/jarvis/TaskCard";
+import { TaskCardNectar } from "@/components/jarvis/TaskCardNectar";
+import { QuickAddInput } from "@/components/jarvis/QuickAddInput";
 import { TaskForm } from "@/components/jarvis/TaskForm";
-import { Plus, Search, Loader2, CheckSquare } from "lucide-react";
+import { Plus, Loader2, CheckSquare, ListTodo, Clock, CheckCircle } from "lucide-react";
 import type { JarvisTask } from "@/types/jarvis";
 
 const JarvisTasks = () => {
@@ -24,7 +25,14 @@ const JarvisTasks = () => {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<JarvisTask | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+
+  const handleQuickAdd = (title: string) => {
+    createTask.mutate({
+      title,
+      priority: "medium",
+      tags: [],
+    });
+  };
 
   const handleCreateTask = (values: any) => {
     createTask.mutate(values);
@@ -52,17 +60,6 @@ const JarvisTasks = () => {
     completeTask.mutate(id);
   };
 
-  const filterTasks = (tasks: JarvisTask[]) => {
-    if (!searchQuery) return tasks;
-    const query = searchQuery.toLowerCase();
-    return tasks.filter(
-      t =>
-        t.title.toLowerCase().includes(query) ||
-        t.description?.toLowerCase().includes(query) ||
-        t.tags.some(tag => tag.toLowerCase().includes(query))
-    );
-  };
-
   if (tenantLoading || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -76,8 +73,8 @@ const JarvisTasks = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-            <CheckSquare className="h-5 w-5 text-blue-500" />
+          <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+            <CheckSquare className="h-5 w-5 text-primary" />
           </div>
           <div>
             <h1 className="text-xl font-bold">Tarefas</h1>
@@ -87,46 +84,54 @@ const JarvisTasks = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1 sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar tarefas..."
-              className="pl-9"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <Button onClick={() => setFormOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" />
-            Nova Tarefa
-          </Button>
-        </div>
+        <Button onClick={() => setFormOpen(true)}>
+          <Plus className="h-4 w-4 mr-1" />
+          Nova Tarefa
+        </Button>
       </div>
+
+      {/* Quick Add */}
+      <QuickAddInput
+        placeholder="Adicionar tarefa rápida..."
+        onAdd={handleQuickAdd}
+        isLoading={createTask.isPending}
+      />
 
       {/* Tabs por Status */}
       <Tabs defaultValue="open" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="open">
-            Abertas ({filterTasks(openTasks).length})
+        <TabsList className="grid w-full max-w-md grid-cols-3 bg-muted/50">
+          <TabsTrigger value="open" className="flex items-center gap-1.5">
+            <ListTodo className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Abertas</span>
+            <span className="text-xs opacity-70">({openTasks.length})</span>
           </TabsTrigger>
-          <TabsTrigger value="in_progress">
-            Em Progresso ({filterTasks(inProgressTasks).length})
+          <TabsTrigger value="in_progress" className="flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Progresso</span>
+            <span className="text-xs opacity-70">({inProgressTasks.length})</span>
           </TabsTrigger>
-          <TabsTrigger value="done">
-            Concluídas ({filterTasks(doneTasks).length})
+          <TabsTrigger value="done" className="flex items-center gap-1.5">
+            <CheckCircle className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Feitas</span>
+            <span className="text-xs opacity-70">({doneTasks.length})</span>
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="open" className="mt-4">
+        <TabsContent value="open" className="mt-6">
           <div className="space-y-3">
-            {filterTasks(openTasks).length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">
-                Nenhuma tarefa aberta
-              </p>
+            {openTasks.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <ListTodo className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
+                  <p className="text-muted-foreground">Nenhuma tarefa aberta</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Use o campo acima para adicionar uma nova tarefa
+                  </p>
+                </CardContent>
+              </Card>
             ) : (
-              filterTasks(openTasks).map(task => (
-                <TaskCard
+              openTasks.map(task => (
+                <TaskCardNectar
                   key={task.id}
                   task={task}
                   onComplete={handleComplete}
@@ -138,15 +143,18 @@ const JarvisTasks = () => {
           </div>
         </TabsContent>
 
-        <TabsContent value="in_progress" className="mt-4">
+        <TabsContent value="in_progress" className="mt-6">
           <div className="space-y-3">
-            {filterTasks(inProgressTasks).length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">
-                Nenhuma tarefa em progresso
-              </p>
+            {inProgressTasks.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <Clock className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
+                  <p className="text-muted-foreground">Nenhuma tarefa em progresso</p>
+                </CardContent>
+              </Card>
             ) : (
-              filterTasks(inProgressTasks).map(task => (
-                <TaskCard
+              inProgressTasks.map(task => (
+                <TaskCardNectar
                   key={task.id}
                   task={task}
                   onComplete={handleComplete}
@@ -158,15 +166,18 @@ const JarvisTasks = () => {
           </div>
         </TabsContent>
 
-        <TabsContent value="done" className="mt-4">
+        <TabsContent value="done" className="mt-6">
           <div className="space-y-3">
-            {filterTasks(doneTasks).length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">
-                Nenhuma tarefa concluída
-              </p>
+            {doneTasks.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <CheckCircle className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
+                  <p className="text-muted-foreground">Nenhuma tarefa concluída</p>
+                </CardContent>
+              </Card>
             ) : (
-              filterTasks(doneTasks).map(task => (
-                <TaskCard
+              doneTasks.map(task => (
+                <TaskCardNectar
                   key={task.id}
                   task={task}
                   onComplete={handleComplete}

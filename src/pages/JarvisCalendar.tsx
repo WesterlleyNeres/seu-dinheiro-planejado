@@ -5,8 +5,8 @@ import { useTenant } from "@/contexts/TenantContext";
 import { useJarvisEvents } from "@/hooks/useJarvisEvents";
 import { EventCard } from "@/components/jarvis/EventCard";
 import { EventForm } from "@/components/jarvis/EventForm";
-import { Plus, Calendar, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek } from "date-fns";
+import { Plus, Calendar, Loader2, ChevronLeft, ChevronRight, Clock } from "lucide-react";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { JarvisEvent } from "@/types/jarvis";
 import { cn } from "@/lib/utils";
@@ -18,7 +18,7 @@ const JarvisCalendar = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<JarvisEvent | null>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
 
   const handleCreateEvent = (values: any) => {
     createEvent.mutate(values);
@@ -68,8 +68,8 @@ const JarvisCalendar = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-            <Calendar className="h-5 w-5 text-purple-500" />
+          <div className="h-10 w-10 rounded-xl bg-accent/10 flex items-center justify-center">
+            <Calendar className="h-5 w-5 text-accent" />
           </div>
           <div>
             <h1 className="text-xl font-bold">Agenda</h1>
@@ -89,13 +89,14 @@ const JarvisCalendar = () => {
         {/* Calendário */}
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-lg">
+            <CardTitle className="text-base font-medium capitalize">
               {format(currentMonth, "MMMM yyyy", { locale: ptBR })}
             </CardTitle>
             <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
                 size="icon"
+                className="h-8 w-8"
                 onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -103,6 +104,7 @@ const JarvisCalendar = () => {
               <Button
                 variant="ghost"
                 size="sm"
+                className="h-8 px-3 text-xs"
                 onClick={() => setCurrentMonth(new Date())}
               >
                 Hoje
@@ -110,6 +112,7 @@ const JarvisCalendar = () => {
               <Button
                 variant="ghost"
                 size="icon"
+                className="h-8 w-8"
                 onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
               >
                 <ChevronRight className="h-4 w-4" />
@@ -119,9 +122,9 @@ const JarvisCalendar = () => {
           <CardContent>
             {/* Dias da semana */}
             <div className="grid grid-cols-7 gap-1 mb-2">
-              {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map(day => (
+              {["D", "S", "T", "Q", "Q", "S", "S"].map((day, i) => (
                 <div
-                  key={day}
+                  key={i}
                   className="text-center text-xs font-medium text-muted-foreground py-2"
                 >
                   {day}
@@ -142,16 +145,16 @@ const JarvisCalendar = () => {
                     key={day.toISOString()}
                     onClick={() => setSelectedDate(day)}
                     className={cn(
-                      "aspect-square p-1 text-sm rounded-lg transition-colors relative",
-                      !isCurrentMonth && "text-muted-foreground/50",
-                      isToday && "ring-2 ring-primary",
+                      "aspect-square p-1 text-sm rounded-xl transition-all relative flex flex-col items-center justify-center",
+                      !isCurrentMonth && "text-muted-foreground/30",
+                      isToday && !isSelected && "ring-1 ring-primary",
                       isSelected && "bg-primary text-primary-foreground",
                       !isSelected && "hover:bg-muted"
                     )}
                   >
-                    <span className="block">{format(day, "d")}</span>
+                    <span className="text-sm">{format(day, "d")}</span>
                     {dayEvents.length > 0 && (
-                      <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
+                      <div className="flex gap-0.5 mt-0.5">
                         {dayEvents.slice(0, 3).map((_, i) => (
                           <div
                             key={i}
@@ -173,18 +176,21 @@ const JarvisCalendar = () => {
         {/* Eventos do dia selecionado */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
+            <CardTitle className="text-sm font-medium capitalize">
               {selectedDate
-                ? format(selectedDate, "d 'de' MMMM", { locale: ptBR })
+                ? format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR })
                 : "Selecione um dia"}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {selectedDate ? (
               selectedDateEvents.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">
-                  Nenhum evento neste dia
-                </p>
+                <div className="py-8 text-center">
+                  <Clock className="h-10 w-10 mx-auto text-muted-foreground/30 mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    Nenhum evento neste dia
+                  </p>
+                </div>
               ) : (
                 selectedDateEvents.map(event => (
                   <EventCard
@@ -196,9 +202,11 @@ const JarvisCalendar = () => {
                 ))
               )
             ) : (
-              <p className="text-sm text-muted-foreground py-4 text-center">
-                Clique em um dia para ver os eventos
-              </p>
+              <div className="py-8 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Clique em um dia para ver os eventos
+                </p>
+              </div>
             )}
           </CardContent>
         </Card>

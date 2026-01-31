@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { JarvisLayout } from "@/components/layout/JarvisLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Landing from "./pages/Landing";
 import Dashboard from "./pages/Dashboard";
@@ -28,6 +29,8 @@ import JarvisDashboard from "./pages/JarvisDashboard";
 import JarvisTasks from "./pages/JarvisTasks";
 import JarvisCalendar from "./pages/JarvisCalendar";
 import JarvisHabits from "./pages/JarvisHabits";
+import JarvisReminders from "./pages/JarvisReminders";
+import JarvisSettings from "./pages/JarvisSettings";
 
 // Component to redirect logged users from landing to dashboard
 const LandingOrDashboard = () => {
@@ -223,9 +226,9 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <ErrorBoundary>
-                    <AppLayout>
+                    <JarvisLayout>
                       <JarvisDashboard />
-                    </AppLayout>
+                    </JarvisLayout>
                   </ErrorBoundary>
                 </ProtectedRoute>
               }
@@ -235,9 +238,9 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <ErrorBoundary>
-                    <AppLayout>
+                    <JarvisLayout>
                       <JarvisTasks />
-                    </AppLayout>
+                    </JarvisLayout>
                   </ErrorBoundary>
                 </ProtectedRoute>
               }
@@ -247,9 +250,9 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <ErrorBoundary>
-                    <AppLayout>
+                    <JarvisLayout>
                       <JarvisCalendar />
-                    </AppLayout>
+                    </JarvisLayout>
                   </ErrorBoundary>
                 </ProtectedRoute>
               }
@@ -259,9 +262,33 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <ErrorBoundary>
-                    <AppLayout>
+                    <JarvisLayout>
                       <JarvisHabits />
-                    </AppLayout>
+                    </JarvisLayout>
+                  </ErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/jarvis/reminders"
+              element={
+                <ProtectedRoute>
+                  <ErrorBoundary>
+                    <JarvisLayout>
+                      <JarvisReminders />
+                    </JarvisLayout>
+                  </ErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/jarvis/settings"
+              element={
+                <ProtectedRoute>
+                  <ErrorBoundary>
+                    <JarvisLayout>
+                      <JarvisSettings />
+                    </JarvisLayout>
                   </ErrorBoundary>
                 </ProtectedRoute>
               }

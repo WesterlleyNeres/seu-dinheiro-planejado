@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { useTenant } from "@/contexts/TenantContext";
 import { useJarvisHabits } from "@/hooks/useJarvisHabits";
-import { HabitCard } from "@/components/jarvis/HabitCard";
+import { HabitCardNectar } from "@/components/jarvis/HabitCardNectar";
 import { HabitForm } from "@/components/jarvis/HabitForm";
-import { Plus, Repeat, Loader2, Flame, Trophy } from "lucide-react";
+import { Plus, Repeat, Loader2, Flame, Trophy, Target } from "lucide-react";
 import type { JarvisHabit } from "@/types/jarvis";
 
 const JarvisHabits = () => {
@@ -69,8 +69,8 @@ const JarvisHabits = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-            <Repeat className="h-5 w-5 text-green-500" />
+          <div className="h-10 w-10 rounded-xl bg-success/10 flex items-center justify-center">
+            <Repeat className="h-5 w-5 text-success" />
           </div>
           <div>
             <h1 className="text-xl font-bold">Hábitos</h1>
@@ -88,72 +88,81 @@ const JarvisHabits = () => {
 
       {/* Estatísticas */}
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-full bg-green-500/10 flex items-center justify-center">
-              <Trophy className="h-6 w-6 text-green-500" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{completedCount}/{habits.length}</p>
-              <p className="text-xs text-muted-foreground">Metas atingidas</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-full bg-orange-500/10 flex items-center justify-center">
-              <Flame className="h-6 w-6 text-orange-500" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{totalProgress}%</p>
-              <p className="text-xs text-muted-foreground">Progresso médio</p>
+        <Card className="bg-gradient-to-br from-success/10 to-success/5 border-success/20">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-3xl font-bold text-success">
+                  {completedCount}/{habits.length}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">metas atingidas</p>
+              </div>
+              <div className="h-12 w-12 rounded-xl bg-success/10 flex items-center justify-center">
+                <Trophy className="h-6 w-6 text-success" />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-full bg-blue-500/10 flex items-center justify-center">
-              <Repeat className="h-6 w-6 text-blue-500" />
+        <Card className="bg-gradient-to-br from-warning/10 to-warning/5 border-warning/20">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-3xl font-bold text-warning">
+                  {totalProgress}%
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">progresso médio</p>
+              </div>
+              <div className="h-12 w-12 rounded-xl bg-warning/10 flex items-center justify-center">
+                <Flame className="h-6 w-6 text-warning" />
+              </div>
             </div>
-            <div>
-              <p className="text-2xl font-bold">{habits.length}</p>
-              <p className="text-xs text-muted-foreground">Hábitos ativos</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-3xl font-bold text-primary">
+                  {habits.length}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">hábitos ativos</p>
+              </div>
+              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Target className="h-6 w-6 text-primary" />
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Lista de Hábitos */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">Seus Hábitos</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {habits.length === 0 ? (
-            <div className="text-center py-8">
-              <Repeat className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
+      <div className="space-y-3">
+        {habits.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <Repeat className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
               <p className="text-muted-foreground">Nenhum hábito cadastrado</p>
               <p className="text-xs text-muted-foreground mt-1">
                 Crie seu primeiro hábito para começar a rastrear seu progresso
               </p>
-            </div>
-          ) : (
-            habits.map(habit => (
-              <HabitCard
-                key={habit.id}
-                habit={habit}
-                progress={getHabitProgress(habit)}
-                isLoggedToday={isHabitLoggedToday(habit.id)}
-                onLog={handleLog}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-              />
-            ))
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        ) : (
+          habits.map(habit => (
+            <HabitCardNectar
+              key={habit.id}
+              habit={habit}
+              progress={getHabitProgress(habit)}
+              isLoggedToday={isHabitLoggedToday(habit.id)}
+              onLog={handleLog}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
+          ))
+        )}
+      </div>
 
       {/* Form Dialog */}
       <HabitForm
