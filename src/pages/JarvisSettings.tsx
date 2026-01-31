@@ -8,8 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGoogleIntegration } from "@/hooks/useGoogleIntegration";
-import { Settings, Moon, Calendar as CalendarIcon, Users, LogOut, Info, Link2, Unlink } from "lucide-react";
-import { Loader2 } from "lucide-react";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { 
+  Settings, Moon, Calendar as CalendarIcon, Users, LogOut, 
+  Info, Link2, Unlink, Bell, BellRing, Loader2 
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +26,14 @@ const JarvisSettings = () => {
     initiateConnection,
     disconnect
   } = useGoogleIntegration();
+  
+  const {
+    isSupported: notifSupported,
+    permission: notifPermission,
+    isLoading: notifLoading,
+    requestPermission,
+    sendTestNotification,
+  } = usePushNotifications();
 
   if (tenantLoading) {
     return (
@@ -68,6 +79,81 @@ const JarvisSettings = () => {
             </div>
             <Switch id="dark-mode" checked disabled />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Notifications */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Bell className="h-4 w-4" />
+            Notificações
+          </CardTitle>
+          <CardDescription>
+            Receba alertas de lembretes no navegador
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!notifSupported ? (
+            <Alert variant="destructive">
+              <AlertDescription>
+                Seu navegador não suporta notificações push.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Notificações Push</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {notifPermission === "granted" 
+                      ? "Ativadas - você receberá alertas"
+                      : notifPermission === "denied"
+                        ? "Bloqueadas - ative nas config. do navegador"
+                        : "Desativadas"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {notifPermission === "granted" ? (
+                    <Badge variant="outline" className="text-green-600 border-green-600">
+                      <BellRing className="h-3 w-3 mr-1" />
+                      Ativas
+                    </Badge>
+                  ) : (
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={requestPermission}
+                      disabled={notifLoading || notifPermission === "denied"}
+                    >
+                      {notifLoading ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        "Ativar"
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </div>
+              
+              {notifPermission === "granted" && (
+                <>
+                  <Separator />
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Testar Notificação</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Envie uma notificação de teste
+                      </p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={sendTestNotification}>
+                      Testar
+                    </Button>
+                  </div>
+                </>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
 

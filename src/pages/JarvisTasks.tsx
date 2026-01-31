@@ -326,6 +326,7 @@ const JarvisTasks = () => {
         task={editingTask}
         onSubmit={editingTask ? handleUpdateTask : handleCreateTask}
         isLoading={createTask.isPending || updateTask.isPending}
+        allTags={allTags}
       />
     </div>
   );
