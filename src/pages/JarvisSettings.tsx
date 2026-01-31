@@ -8,10 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGoogleIntegration } from "@/hooks/useGoogleIntegration";
-import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { usePushSubscription } from "@/hooks/usePushSubscription";
 import { 
   Settings, Moon, Calendar as CalendarIcon, Users, LogOut, 
-  Info, Link2, Unlink, Bell, BellRing, Loader2 
+  Info, Link2, Unlink, Bell, BellRing, BellOff, Loader2, AlertTriangle, CheckCircle2
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -28,12 +28,16 @@ const JarvisSettings = () => {
   } = useGoogleIntegration();
   
   const {
-    isSupported: notifSupported,
-    permission: notifPermission,
-    isLoading: notifLoading,
-    requestPermission,
+    isSupported: pushSupported,
+    isVapidReady,
+    permission: pushPermission,
+    isSubscribed: pushSubscribed,
+    isLoading: pushLoading,
+    error: pushError,
+    subscribe: subscribePush,
+    unsubscribe: unsubscribePush,
     sendTestNotification,
-  } = usePushNotifications();
+  } = usePushSubscription();
 
   if (tenantLoading) {
     return (
@@ -42,6 +46,51 @@ const JarvisSettings = () => {
       </div>
     );
   }
+
+  const renderPushStatus = () => {
+    if (!pushSupported) {
+      return (
+        <Badge variant="outline" className="text-destructive border-destructive">
+          <BellOff className="h-3 w-3 mr-1" />
+          Não suportado
+        </Badge>
+      );
+    }
+    
+    if (!isVapidReady) {
+      return (
+        <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+          <AlertTriangle className="h-3 w-3 mr-1" />
+          Não configurado
+        </Badge>
+      );
+    }
+    
+    if (pushPermission === "denied") {
+      return (
+        <Badge variant="outline" className="text-destructive border-destructive">
+          <BellOff className="h-3 w-3 mr-1" />
+          Bloqueado
+        </Badge>
+      );
+    }
+    
+    if (pushSubscribed) {
+      return (
+        <Badge variant="outline" className="text-green-600 border-green-600">
+          <BellRing className="h-3 w-3 mr-1" />
+          Ativo
+        </Badge>
+      );
+    }
+    
+    return (
+      <Badge variant="outline" className="text-muted-foreground">
+        <Bell className="h-3 w-3 mr-1" />
+        Desativado
+      </Badge>
+    );
+  };
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -82,72 +131,136 @@ const JarvisSettings = () => {
         </CardContent>
       </Card>
 
-      {/* Notifications */}
+      {/* Push Notifications */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Bell className="h-4 w-4" />
-            Notificações
+            Notificações Push
           </CardTitle>
           <CardDescription>
             Receba alertas de lembretes no navegador
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {!notifSupported ? (
+          {/* Status */}
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Status</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {!pushSupported 
+                  ? "Seu navegador não suporta notificações push"
+                  : !isVapidReady
+                    ? "Aguardando configuração do servidor"
+                    : pushPermission === "denied"
+                      ? "Bloqueado nas configurações do navegador"
+                      : pushSubscribed
+                        ? "Você receberá alertas de lembretes"
+                        : "Ative para receber alertas"}
+              </p>
+            </div>
+            {renderPushStatus()}
+          </div>
+          
+          {/* Error message */}
+          {pushError && (
             <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>{pushError}</AlertDescription>
+            </Alert>
+          )}
+          
+          {/* Not supported alert */}
+          {!pushSupported && (
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertTitle>Navegador não suportado</AlertTitle>
               <AlertDescription>
-                Seu navegador não suporta notificações push.
+                Use Chrome, Firefox, Edge ou Safari para receber notificações push.
               </AlertDescription>
             </Alert>
-          ) : (
+          )}
+          
+          {/* VAPID not configured alert */}
+          {pushSupported && !isVapidReady && (
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertTitle>Configuração pendente</AlertTitle>
+              <AlertDescription>
+                As chaves VAPID precisam ser configuradas no servidor. Contate o suporte.
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          {/* Permission denied instructions */}
+          {pushSupported && isVapidReady && pushPermission === "denied" && (
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Permissão bloqueada</AlertTitle>
+              <AlertDescription>
+                Para ativar, clique no ícone de cadeado na barra de endereço do navegador 
+                e permita notificações para este site.
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          {/* Actions */}
+          {pushSupported && isVapidReady && pushPermission !== "denied" && (
             <>
+              <Separator />
               <div className="flex items-center justify-between">
                 <div>
-                  <Label>Notificações Push</Label>
+                  <Label>{pushSubscribed ? "Notificações ativas" : "Ativar notificações"}</Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {notifPermission === "granted" 
-                      ? "Ativadas - você receberá alertas"
-                      : notifPermission === "denied"
-                        ? "Bloqueadas - ative nas config. do navegador"
-                        : "Desativadas"}
+                    {pushSubscribed 
+                      ? "Clique para desativar" 
+                      : "Clique para ativar alertas de lembretes"}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  {notifPermission === "granted" ? (
-                    <Badge variant="outline" className="text-green-600 border-green-600">
-                      <BellRing className="h-3 w-3 mr-1" />
-                      Ativas
-                    </Badge>
+                <Button
+                  variant={pushSubscribed ? "destructive" : "default"}
+                  size="sm"
+                  onClick={() => pushSubscribed ? unsubscribePush() : subscribePush()}
+                  disabled={pushLoading}
+                >
+                  {pushLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : pushSubscribed ? (
+                    <>
+                      <BellOff className="h-4 w-4 mr-1" />
+                      Desativar
+                    </>
                   ) : (
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={requestPermission}
-                      disabled={notifLoading || notifPermission === "denied"}
-                    >
-                      {notifLoading ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        "Ativar"
-                      )}
-                    </Button>
+                    <>
+                      <Bell className="h-4 w-4 mr-1" />
+                      Ativar
+                    </>
                   )}
-                </div>
+                </Button>
               </div>
               
-              {notifPermission === "granted" && (
+              {/* Test notification */}
+              {pushSubscribed && (
                 <>
                   <Separator />
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label>Testar Notificação</Label>
+                      <Label>Testar notificação</Label>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         Envie uma notificação de teste
                       </p>
                     </div>
-                    <Button variant="outline" size="sm" onClick={sendTestNotification}>
-                      Testar
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={sendTestNotification}
+                      disabled={pushLoading}
+                    >
+                      {pushLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        "Testar"
+                      )}
                     </Button>
                   </div>
                 </>
