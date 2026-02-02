@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTenant } from "@/contexts/TenantContext";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -32,6 +32,7 @@ export interface UserProfile {
 export function useOnboarding() {
   const { tenant } = useTenant();
   const tenantId = tenant?.id;
+  const queryClient = useQueryClient();
 
   // Query para buscar perfil do usuário
   const { data: profile, isLoading, refetch } = useQuery({
@@ -55,6 +56,28 @@ export function useOnboarding() {
     enabled: !!tenantId,
   });
 
+  // Mutation para pular onboarding
+  const skipOnboardingMutation = useMutation({
+    mutationFn: async () => {
+      if (!tenantId || !profile?.id) {
+        throw new Error("Profile not found");
+      }
+      
+      const { error } = await supabase
+        .from("ff_user_profiles")
+        .update({
+          onboarding_completed: true,
+          onboarding_step: "complete",
+        })
+        .eq("id", profile.id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-profile", tenantId] });
+    },
+  });
+
   const needsOnboarding = !isLoading && (!profile || !profile.onboarding_completed);
   const currentStep = (profile?.onboarding_step as OnboardingStep) || "welcome";
   const isNewUser = !profile || profile.interaction_count === 0;
@@ -66,5 +89,6 @@ export function useOnboarding() {
     currentStep,
     isNewUser,
     refetch,
+    skipOnboarding: skipOnboardingMutation.mutateAsync,
   };
 }
