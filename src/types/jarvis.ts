@@ -108,6 +108,25 @@ export type HabitCadence = 'daily' | 'weekly' | 'monthly';
 export type ReminderChannel = 'whatsapp' | 'email' | 'push';
 export type ReminderStatus = 'pending' | 'sent' | 'dismissed' | 'canceled';
 export type EventStatus = 'scheduled' | 'cancelled' | 'completed';
+export type OnboardingStep = 'welcome' | 'profile' | 'goals' | 'wallet_setup' | 'category_review' | 'first_habit' | 'complete';
+
+export interface JarvisUserProfile {
+  id: string;
+  user_id: string;
+  tenant_id: string;
+  full_name?: string | null;
+  nickname?: string | null;
+  birth_date?: string | null;
+  timezone: string;
+  locale: string;
+  onboarding_completed: boolean;
+  onboarding_step: OnboardingStep;
+  preferences: Record<string, unknown>;
+  last_interaction_at?: string | null;
+  interaction_count: number;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface GoogleIntegration {
   id: string;
