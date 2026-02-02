@@ -4,12 +4,22 @@ import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import type { LocalAttachment } from "@/components/jarvis/chat/ChatInput";
+
+interface Attachment {
+  type: "image" | "audio" | "document";
+  url: string;
+  name: string;
+  size: number;
+  mime_type: string;
+}
 
 interface Message {
   id: string;
   role: "user" | "assistant" | "system" | "tool";
   content: string;
   created_at: string;
+  attachments?: Attachment[];
 }
 
 interface ConversationMessage {
@@ -21,6 +31,7 @@ interface ConversationMessage {
   tool_calls: any;
   tool_call_id: string | null;
   created_at: string;
+  attachments: any; // JSON from Supabase
 }
 
 export interface Conversation {
@@ -28,6 +39,17 @@ export interface Conversation {
   title: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface SendMessageParams {
+  message: string;
+  attachments?: LocalAttachment[];
+}
+
+function getAttachmentType(mimeType: string): "image" | "audio" | "document" {
+  if (mimeType.startsWith("image/")) return "image";
+  if (mimeType.startsWith("audio/")) return "audio";
+  return "document";
 }
 
 export function useJarvisChat() {
@@ -87,6 +109,7 @@ export function useJarvisChat() {
           role: m.role as "user" | "assistant",
           content: m.content,
           created_at: m.created_at,
+          attachments: m.attachments || undefined,
         }));
     },
     enabled: !!conversationId,
@@ -116,11 +139,50 @@ export function useJarvisChat() {
     enabled: !!tenantId && !conversationId && !wantsNewConversation,
   });
 
+  // Upload attachment to storage
+  const uploadAttachment = async (
+    file: File,
+    targetConvId: string
+  ): Promise<Attachment> => {
+    const ext = file.name.split(".").pop() || "bin";
+    const path = `${tenantId}/${targetConvId}/${crypto.randomUUID()}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("chat-attachments")
+      .upload(path, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data: urlData } = supabase.storage
+      .from("chat-attachments")
+      .getPublicUrl(path);
+
+    return {
+      type: getAttachmentType(file.type),
+      url: urlData.publicUrl,
+      name: file.name,
+      size: file.size,
+      mime_type: file.type,
+    };
+  };
+
   // Send message mutation
   const sendMessage = useMutation({
-    mutationFn: async (message: string) => {
+    mutationFn: async ({ message, attachments }: SendMessageParams) => {
       if (!tenantId || !session?.access_token) {
         throw new Error("Não autenticado");
+      }
+
+      let uploadedAttachments: Attachment[] = [];
+
+      // Upload attachments if any
+      if (attachments && attachments.length > 0) {
+        // Use temp ID if no conversation yet
+        const targetConvId = conversationId || `temp-${Date.now()}`;
+        
+        uploadedAttachments = await Promise.all(
+          attachments.map((att) => uploadAttachment(att.file, targetConvId))
+        );
       }
 
       const response = await fetch(
@@ -135,6 +197,7 @@ export function useJarvisChat() {
             message,
             conversationId,
             tenantId,
+            attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
           }),
         }
       );

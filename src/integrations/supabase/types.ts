@@ -228,6 +228,7 @@ export type Database = {
       }
       ff_conversation_messages: {
         Row: {
+          attachments: Json | null
           content: string
           conversation_id: string
           created_at: string
@@ -238,6 +239,7 @@ export type Database = {
           tool_calls: Json | null
         }
         Insert: {
+          attachments?: Json | null
           content: string
           conversation_id: string
           created_at?: string
@@ -248,6 +250,7 @@ export type Database = {
           tool_calls?: Json | null
         }
         Update: {
+          attachments?: Json | null
           content?: string
           conversation_id?: string
           created_at?: string
