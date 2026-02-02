@@ -137,3 +137,55 @@ All colors MUST be HSL.
     text-wrap: balance;
   }
 }
+
+/* Mobile-first responsive utilities */
+@layer base {
+  /* Safe area support for notched devices */
+  :root {
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-left: env(safe-area-inset-left, 0px);
+    --safe-area-right: env(safe-area-inset-right, 0px);
+  }
+
+  /* Prevent text selection on mobile nav elements */
+  .mobile-nav {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Smooth scrolling for mobile */
+  html {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Better touch targets on mobile */
+  @media (max-width: 767px) {
+    button,
+    [role="button"],
+    a {
+      min-height: 44px;
+    }
+
+    /* Improve tap feedback */
+    button:active,
+    [role="button"]:active,
+    a:active {
+      opacity: 0.7;
+    }
+
+    /* Prevent horizontal scroll */
+    body {
+      overflow-x: hidden;
+    }
+  }
+
+  /* Standalone PWA mode adjustments */
+  @media (display-mode: standalone) {
+    body {
+      overscroll-behavior-y: none;
+    }
+  }
+}
