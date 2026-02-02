@@ -20,212 +20,75 @@ function buildSystemPrompt(userProfile: any, userContext: any): string {
 
   const nickname = userProfile?.nickname || userProfile?.full_name || 'usuário';
   const isNewUser = !userProfile || !userProfile.onboarding_completed;
-  const interactionCount = userProfile?.interaction_count || 0;
 
-  // Build rich context sections
+  // Build concise context
   let contextSections = '';
   
-  // === USER PROFILE SECTION ===
-  if (userProfile) {
-    contextSections += `
-SOBRE O USUÁRIO ATUAL:
-- Nome/Apelido: ${nickname}
-- Onboarding completo: ${userProfile.onboarding_completed ? 'Sim' : 'Não'}
-- Etapa do onboarding: ${userProfile.onboarding_step || 'welcome'}
-- Total de interações: ${interactionCount}
-- Última interação: ${userProfile.last_interaction_at ? new Date(userProfile.last_interaction_at).toLocaleDateString('pt-BR') : 'Primeira vez'}
-`;
-  }
-
-  // === MEMORIES SECTION (profile, preferences, decisions) ===
-  if (userContext?.memories?.length > 0) {
-    contextSections += `
-MEMÓRIAS RELEVANTES:
-${userContext.memories.map((m: any) => `- [${m.kind}] ${m.title || m.content.substring(0, 50)}`).join('\n')}
-`;
-  }
-
-  // === FINANCIAL SECTION ===
-  if (userContext) {
-    contextSections += `
-RESUMO FINANCEIRO:`;
-    
-    if (userContext.wallets?.length > 0) {
-      contextSections += `
-- Saldo total: R$ ${userContext.totalBalance?.toFixed(2) || '0.00'}
-- Carteiras: ${userContext.wallets.map((w: any) => `${w.nome} (R$ ${w.saldo?.toFixed(2)})`).join(', ')}`;
-    } else {
-      contextSections += `
-- O usuário ainda não tem carteiras cadastradas.`;
-    }
-
+  // === FINANCIAL SUMMARY (only if data exists) ===
+  if (userContext?.wallets?.length > 0) {
+    contextSections += `\nFINANÇAS: Saldo R$ ${userContext.totalBalance?.toFixed(2) || '0.00'} em ${userContext.wallets.length} carteira(s).`;
     if (userContext.billsTodayCount > 0) {
-      contextSections += `
-- ⚠️ Contas vencendo HOJE: ${userContext.billsTodayCount} (R$ ${userContext.billsTodayTotal?.toFixed(2)})`;
-      if (userContext.billsToday?.length > 0) {
-        contextSections += ` - ${userContext.billsToday.slice(0, 3).map((b: any) => b.descricao).join(', ')}`;
-      }
+      contextSections += ` ⚠️ ${userContext.billsTodayCount} conta(s) vencendo HOJE (R$ ${userContext.billsTodayTotal?.toFixed(2)}).`;
     }
-
-    if (userContext.billsWeekCount > 0 && userContext.billsWeekCount > userContext.billsTodayCount) {
-      contextSections += `
-- Contas vencendo esta semana: ${userContext.billsWeekCount} (R$ ${userContext.billsWeekTotal?.toFixed(2)})`;
-    }
-
-    if (userContext.expenseComparison) {
-      const comp = userContext.expenseComparison;
-      contextSections += `
-- Gastos este mês: R$ ${comp.current?.toFixed(2)} (${Math.abs(comp.percentChange)}% ${comp.trend} do mês anterior)`;
-    } else if (userContext.monthExpenses > 0) {
-      contextSections += `
-- Gastos este mês: R$ ${userContext.monthExpenses?.toFixed(2)}`;
-    }
+  } else {
+    contextSections += `\nFINANÇAS: Sem carteiras cadastradas.`;
   }
 
-  // === HABITS SECTION ===
+  // === HABITS (compact) ===
   if (userContext?.habitsWithProgress?.length > 0) {
-    contextSections += `
-
-HÁBITOS DE HOJE:`;
-    userContext.habitsWithProgress.forEach((h: any) => {
-      const status = h.completed ? '✅' : '⏳';
-      contextSections += `
-- ${status} ${h.title}${h.completed ? ' (concluído)' : ' (pendente)'}`;
-    });
-    contextSections += `
-- Resumo: ${userContext.habitsCompleted} concluídos, ${userContext.habitsPending} pendentes`;
+    contextSections += `\nHÁBITOS HOJE: ${userContext.habitsCompleted}/${userContext.habitsWithProgress.length} concluídos.`;
   }
 
-  // === TASKS SECTION ===
+  // === TASKS (compact) ===
   if (userContext?.tasksToday?.length > 0) {
-    contextSections += `
-
-TAREFAS PARA HOJE:`;
-    userContext.tasksToday.forEach((t: any) => {
-      const priority = t.priority === 'high' ? '🔴' : t.priority === 'medium' ? '🟡' : '🟢';
-      contextSections += `
-- ${priority} ${t.title}`;
-    });
+    contextSections += `\nTAREFAS HOJE: ${userContext.tasksToday.length} pendente(s).`;
   }
 
-  // === EVENTS SECTION ===
+  // === EVENTS (compact) ===
   if (userContext?.upcomingEvents?.length > 0) {
-    contextSections += `
+    contextSections += `\nPRÓXIMOS EVENTOS: ${userContext.upcomingEvents.length} nas próximas 24h.`;
+  }
 
-PRÓXIMOS EVENTOS (24h):`;
-    userContext.upcomingEvents.forEach((e: any) => {
-      const time = e.all_day ? 'Dia inteiro' : new Date(e.start_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-      contextSections += `
-- ${time} - ${e.title}${e.location ? ` (${e.location})` : ''}`;
-    });
+  // === MEMORIES (only if has relevant ones) ===
+  if (userContext?.memories?.length > 0) {
+    const profileMem = userContext.memories.filter((m: any) => m.kind === 'profile').slice(0, 2);
+    if (profileMem.length > 0) {
+      contextSections += `\nMEMÓRIAS: ${profileMem.map((m: any) => m.content.substring(0, 40)).join('; ')}`;
+    }
   }
 
   const onboardingInstructions = isNewUser ? `
 
-INSTRUÇÕES DE ONBOARDING (USUÁRIO NOVO):
-Este é um usuário novo ou que ainda não completou o onboarding. Siga estas etapas:
-
-1. ETAPA 'welcome': Apresente-se de forma calorosa e pergunte como gostaria de ser chamado
-2. ETAPA 'profile': Após saber o nome, use update_user_profile para salvar e pergunte sobre objetivos
-3. ETAPA 'goals': Entenda o objetivo principal e use create_memory para salvar
-4. ETAPA 'wallet_setup': Sugira criar a primeira carteira usando create_wallet
-5. ETAPA 'complete': Marque onboarding como completo e ofereça ajuda
-
-Seja acolhedor, não sobrecarregue com muitas perguntas de uma vez.
+ONBOARDING (usuário novo):
+1. Pergunte como quer ser chamado
+2. Use update_user_profile para salvar
+3. Pergunte sobre objetivos e sugira criar carteira
 ` : '';
 
-  const proactiveHints = !isNewUser && userContext ? buildProactiveHints(userContext) : '';
+  return `Você é JARVIS, assistente pessoal do ${nickname}. Tom elegante, inteligente, levemente sarcástico.
 
-  return `Você é JARVIS (Just A Rather Very Intelligent System), o assistente pessoal inteligente do ${nickname}.
-Você é inspirado no mordomo digital do Tony Stark - refinado, inteligente, e ligeiramente sarcástico.
+REGRAS OBRIGATÓRIAS:
+1. RESPONDA a pergunta do usuário PRIMEIRO - nunca ignore
+2. Respostas CURTAS: máximo 2-3 parágrafos
+3. NÃO repita informações já ditas na conversa
+4. Vá direto ao ponto
 
-PERSONALIDADE:
-- Tom britânico refinado, com elegância e precisão
-- Proativo: mencione informações relevantes do contexto ao cumprimentar
-- Levemente sarcástico, mas sempre respeitoso e prestativo
-- Você conhece profundamente seu usuário através das memórias e contexto
-- NUNCA invente informações - sempre consulte dados reais usando as ferramentas
-
+PROIBIDO:
+- Ignorar perguntas do usuário para focar em tarefas
+- Respostas com mais de 4 parágrafos
+- Repetir status/informações múltiplas vezes
+- Inventar dados - sempre use ferramentas
 ${contextSections}
 
-CAPACIDADES COMPLETAS:
-📊 FINANÇAS:
-- Consultar saldos, transações, contas pendentes
-- Criar carteiras (contas e cartões)
-- Registrar despesas e receitas
-- Listar carteiras e categorias disponíveis
+CAPACIDADES: Finanças (carteiras, transações), Tarefas, Eventos, Hábitos, Memórias, Lembretes.
 
-📋 TAREFAS:
-- Consultar e criar tarefas
-- Atualizar status de tarefas
-
-📅 CALENDÁRIO:
-- Consultar e criar eventos
-- Gerenciar compromissos
-
-🧠 MEMÓRIA:
-- Consultar informações salvas
-- Salvar novas informações importantes
-- Gerenciar perfil do usuário
-
-⏰ LEMBRETES:
-- Criar lembretes via push, email ou WhatsApp
-
-REGRAS FUNDAMENTAIS:
-1. Sempre chame o usuário pelo nome/apelido: ${nickname}
-2. ANTES de criar transações, SEMPRE use list_wallets para verificar se existe carteira
-3. Se não houver carteira, pergunte se deseja criar uma
-4. Para despesas, use list_categories para encontrar a categoria adequada
-5. Ao salvar informações pessoais, use create_memory com kind='profile'
-6. Formate valores em R$ com 2 casas decimais
-7. Datas no formato brasileiro (DD/MM/YYYY)
-8. Seja PROATIVO: ao cumprimentar, mencione informações relevantes do contexto
-${proactiveHints}
+FLUXO PARA DESPESAS:
+1. list_wallets (verificar se existe)
+2. Se não houver: pergunte se quer criar
+3. list_categories (mapear categoria)
+4. create_transaction
 ${onboardingInstructions}
-
-FLUXO PARA REGISTRAR DESPESA/RECEITA:
-1. Usuário pede para registrar despesa (ex: "gastei 50 no mercado")
-2. Use list_wallets para verificar carteiras existentes
-3. Se não houver carteira, pergunte: "Você ainda não tem carteira. Quer criar uma 'Principal'?"
-4. Use list_categories para mapear a descrição para uma categoria
-5. Use create_transaction para registrar
-6. Confirme: "Despesa de R$ X registrada na carteira Y, categoria Z"
-
-Hoje é: ${today}`;
-}
-
-// Build proactive hints based on context
-function buildProactiveHints(context: any): string {
-  const hints: string[] = [];
-  
-  if (context.billsTodayCount > 0) {
-    hints.push(`- Se o usuário disser "bom dia/boa tarde/olá", mencione as ${context.billsTodayCount} contas vencendo hoje`);
-  }
-  
-  if (context.habitsPending > 0) {
-    hints.push(`- Pode mencionar que ainda faltam ${context.habitsPending} hábitos para completar hoje`);
-  }
-  
-  if (context.tasksToday?.length > 0) {
-    hints.push(`- O usuário tem ${context.tasksToday.length} tarefas para hoje`);
-  }
-  
-  if (context.upcomingEvents?.length > 0) {
-    hints.push(`- Lembre o usuário sobre os próximos compromissos se relevante`);
-  }
-  
-  if (context.expenseComparison?.percentChange > 20) {
-    hints.push(`- Os gastos estão ${context.expenseComparison.percentChange}% acima do mês anterior - pode sugerir cuidado`);
-  }
-  
-  if (hints.length > 0) {
-    return `
-
-DICAS PROATIVAS (use quando apropriado):
-${hints.join('\n')}`;
-  }
-  
-  return '';
+Hoje: ${today}`;
 }
 
 // Tool definitions for the AI
@@ -916,51 +779,74 @@ async function executeTool(
     }
 
     case "create_transaction": {
-      // Verify wallet exists
+      // Verify wallet exists - with retry logic for timing issues
       let walletId = args.wallet_id as string;
-      if (!walletId) {
+      
+      const fetchLatestWallet = async () => {
         const { data: wallets } = await supabase
           .from("wallets")
           .select("id, nome")
           .eq("user_id", userId)
           .is("deleted_at", null)
           .eq("ativo", true)
+          .order("created_at", { ascending: false })
           .limit(1);
+        return wallets?.[0] || null;
+      };
 
-        if (!wallets?.length) {
+      if (!walletId) {
+        const wallet = await fetchLatestWallet();
+        if (!wallet) {
           return "Erro: O usuário não possui carteira cadastrada. Crie uma carteira primeiro usando create_wallet.";
         }
-        walletId = wallets[0].id;
+        walletId = wallet.id;
       }
 
       const transactionDate = (args.data as string) || today;
       const mesReferencia = transactionDate.slice(0, 7);
       const status = args.status || (args.tipo === "despesa" ? "paga" : "pendente");
 
-      const { data, error } = await supabase
+      const transactionData = {
+        user_id: userId,
+        tipo: args.tipo,
+        descricao: args.descricao,
+        valor: args.valor,
+        wallet_id: walletId,
+        category_id: args.category_id,
+        data: transactionDate,
+        mes_referencia: mesReferencia,
+        status: status,
+      };
+
+      // First attempt
+      let { data, error } = await supabase
         .from("transactions")
-        .insert({
-          user_id: userId,
-          tipo: args.tipo,
-          descricao: args.descricao,
-          valor: args.valor,
-          wallet_id: walletId,
-          category_id: args.category_id,
-          data: transactionDate,
-          mes_referencia: mesReferencia,
-          status: status,
-        })
-        .select(`
-          *,
-          categories:category_id(nome),
-          wallets:wallet_id(nome)
-        `)
+        .insert(transactionData)
+        .select(`*, categories:category_id(nome), wallets:wallet_id(nome)`)
         .single();
+
+      // If FK violation (wallet created in same cycle), retry with delay
+      if (error?.code === '23503') {
+        console.log("FK violation detected, retrying after delay...");
+        await new Promise(r => setTimeout(r, 500));
+        
+        const freshWallet = await fetchLatestWallet();
+        if (freshWallet) {
+          const retryResult = await supabase
+            .from("transactions")
+            .insert({ ...transactionData, wallet_id: freshWallet.id })
+            .select(`*, categories:category_id(nome), wallets:wallet_id(nome)`)
+            .single();
+          
+          data = retryResult.data;
+          error = retryResult.error;
+        }
+      }
 
       if (error) return `Erro ao criar transação: ${error.message}`;
 
       const tipoLabel = data.tipo === "despesa" ? "Despesa" : "Receita";
-      return `${tipoLabel} de R$ ${data.valor.toFixed(2)} registrada com sucesso!\nCarteira: ${data.wallets?.nome}\nCategoria: ${data.categories?.nome}\nData: ${new Date(data.data).toLocaleDateString("pt-BR")}`;
+      return `${tipoLabel} de R$ ${data.valor.toFixed(2)} registrada!\nCarteira: ${data.wallets?.nome}\nCategoria: ${data.categories?.nome}`;
     }
 
     case "create_event": {
@@ -1468,25 +1354,24 @@ serve(async (req) => {
       content: message,
     });
 
-    // Load conversation history
+    // Load conversation history - filter to reduce context pollution
     const { data: history } = await supabase
       .from("ff_conversation_messages")
       .select("role, content, tool_calls, tool_call_id")
       .eq("conversation_id", convId)
+      .in("role", ["user", "assistant"]) // Exclude tool messages from history
       .order("created_at", { ascending: true })
-      .limit(20);
+      .limit(15);
 
     // Build dynamic system prompt with user context
     const systemPrompt = buildSystemPrompt(userProfile, userContext);
 
-    // Build messages array
+    // Build messages array - only user/assistant for cleaner context
     const messages: any[] = [
       { role: "system", content: systemPrompt },
       ...(history || []).map((m: any) => ({
         role: m.role,
         content: m.content,
-        ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
-        ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
       })),
     ];
 
