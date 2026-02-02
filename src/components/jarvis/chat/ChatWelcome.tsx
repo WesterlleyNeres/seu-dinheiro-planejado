@@ -1,11 +1,12 @@
-import { Brain, CheckSquare, Wallet, Repeat, Calendar, Lightbulb } from "lucide-react";
+import { Brain, CheckSquare, Wallet, Repeat, Calendar, Lightbulb, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useOnboarding } from "@/hooks/useOnboarding";
 
 interface ChatWelcomeProps {
   onQuickAction: (action: string) => void;
 }
 
-const quickActions = [
+const quickActionsRegular = [
   {
     icon: CheckSquare,
     label: "Tarefas de hoje",
@@ -39,6 +40,49 @@ const quickActions = [
 ];
 
 export function ChatWelcome({ onQuickAction }: ChatWelcomeProps) {
+  const { needsOnboarding, isNewUser } = useOnboarding();
+
+  // UI para novos usuários (onboarding)
+  if (needsOnboarding || isNewUser) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full py-8 px-4">
+        <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 mb-6">
+          <Brain className="h-10 w-10 text-primary animate-pulse" />
+        </div>
+        
+        <h2 className="text-2xl font-bold mb-2 text-center">
+          Bem-vindo ao <span className="text-primary">Fractto Flow</span>!
+        </h2>
+        <p className="text-muted-foreground text-center max-w-md mb-6">
+          Eu sou o <span className="font-semibold text-primary">JARVIS</span>, 
+          seu assistente pessoal inteligente. Vou te ajudar a organizar suas finanças, 
+          tarefas e hábitos de um jeito simples e eficiente.
+        </p>
+
+        <div className="bg-muted/50 rounded-xl p-4 mb-6 max-w-md text-center">
+          <p className="text-sm text-muted-foreground">
+            🎯 Em poucos minutos, vou te conhecer melhor e configurar tudo para você. 
+            É só conversar comigo!
+          </p>
+        </div>
+
+        <Button 
+          size="lg"
+          onClick={() => onQuickAction("Olá JARVIS! Vamos começar?")}
+          className="gap-2 text-base"
+        >
+          <Sparkles className="h-5 w-5" />
+          Iniciar Configuração
+        </Button>
+
+        <p className="mt-4 text-xs text-muted-foreground">
+          Leva menos de 2 minutos ⏱️
+        </p>
+      </div>
+    );
+  }
+
+  // UI para usuários existentes
   return (
     <div className="flex flex-col items-center justify-center h-full py-8">
       <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 mb-6">
@@ -56,7 +100,7 @@ export function ChatWelcome({ onQuickAction }: ChatWelcomeProps) {
           Comece com uma pergunta rápida:
         </p>
         <div className="grid grid-cols-2 gap-2">
-          {quickActions.map((action) => (
+          {quickActionsRegular.map((action) => (
             <Button
               key={action.label}
               variant="outline"
