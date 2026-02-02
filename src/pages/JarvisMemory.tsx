@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Lightbulb, Search, FileJson } from "lucide-react";
+import { Lightbulb, Search, LayoutGrid, List } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -8,10 +8,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useJarvisMemory } from "@/hooks/useJarvisMemory";
 import { MemoryCard, MemoryCardSkeleton } from "@/components/jarvis/MemoryCard";
 import { MemoryForm } from "@/components/jarvis/MemoryForm";
 import { ChatGPTImporter, ChatGPTImporterTrigger } from "@/components/jarvis/ChatGPTImporter";
+import { ConversationGroup, ConversationGroupSkeleton } from "@/components/jarvis/ConversationGroup";
+import type { JarvisMemoryItem } from "@/types/jarvis";
 
 const kindFilterOptions = [
   { value: "all", label: "Todos os tipos" },
@@ -23,6 +26,7 @@ const kindFilterOptions = [
   { value: "message", label: "Mensagem" },
   { value: "chatgpt_user", label: "ChatGPT (Você)" },
   { value: "chatgpt_assistant", label: "ChatGPT (IA)" },
+  { value: "learned", label: "Aprendido" },
 ];
 
 const JarvisMemory = () => {
@@ -38,6 +42,7 @@ const JarvisMemory = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [importerOpen, setImporterOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"cards" | "grouped">("grouped");
 
   // Debounce search
   useEffect(() => {
@@ -58,6 +63,38 @@ const JarvisMemory = () => {
     return items;
   }, [memoryItems, debouncedQuery, kindFilter, searchMemory]);
 
+  // Group ChatGPT items by conversation_id
+  const { groupedConversations, nonChatgptItems } = useMemo(() => {
+    const chatgptItems = filteredItems.filter(
+      (item) => item.source === "chatgpt" && (item.metadata as Record<string, unknown>)?.conversation_id
+    );
+    const otherItems = filteredItems.filter(
+      (item) => item.source !== "chatgpt" || !(item.metadata as Record<string, unknown>)?.conversation_id
+    );
+
+    const groups: Map<string, { title: string; items: JarvisMemoryItem[] }> = new Map();
+
+    chatgptItems.forEach((item) => {
+      const convId = String((item.metadata as Record<string, unknown>).conversation_id);
+      if (!groups.has(convId)) {
+        groups.set(convId, { title: item.title || "Conversa", items: [] });
+      }
+      groups.get(convId)!.items.push(item);
+    });
+
+    // Sort groups by most recent item
+    const sortedGroups = Array.from(groups.entries()).sort((a, b) => {
+      const aLatest = Math.max(...a[1].items.map((i) => new Date(i.created_at).getTime()));
+      const bLatest = Math.max(...b[1].items.map((i) => new Date(i.created_at).getTime()));
+      return bLatest - aLatest;
+    });
+
+    return {
+      groupedConversations: sortedGroups,
+      nonChatgptItems: otherItems,
+    };
+  }, [filteredItems]);
+
   const handleCreate = (data: { kind: string; title?: string; content: string }) => {
     createMemoryItem.mutate(data);
   };
@@ -66,8 +103,13 @@ const JarvisMemory = () => {
     deleteMemoryItem.mutate(id);
   };
 
+  const handleDeleteAll = (ids: string[]) => {
+    ids.forEach((id) => deleteMemoryItem.mutate(id));
+  };
+
   const isEmpty = !isLoading && filteredItems.length === 0;
   const isFiltered = kindFilter !== "all" || debouncedQuery.length > 0;
+  const hasChatgptItems = groupedConversations.length > 0;
 
   return (
     <div className="space-y-6">
@@ -93,7 +135,7 @@ const JarvisMemory = () => {
       <ChatGPTImporter open={importerOpen} onOpenChange={setImporterOpen} />
 
       {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <Select value={kindFilter} onValueChange={setKindFilter}>
           <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue />
@@ -116,14 +158,41 @@ const JarvisMemory = () => {
             className="pl-9"
           />
         </div>
+
+        {/* View mode toggle - only show if there are ChatGPT items */}
+        {hasChatgptItems && (
+          <ToggleGroup 
+            type="single" 
+            value={viewMode} 
+            onValueChange={(v) => v && setViewMode(v as "cards" | "grouped")}
+            className="shrink-0"
+          >
+            <ToggleGroupItem value="grouped" aria-label="Agrupar por conversa" title="Agrupar por conversa">
+              <List className="h-4 w-4" />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="cards" aria-label="Ver como cards" title="Ver como cards">
+              <LayoutGrid className="h-4 w-4" />
+            </ToggleGroupItem>
+          </ToggleGroup>
+        )}
       </div>
 
       {/* Content */}
       {isLoading ? (
-        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <MemoryCardSkeleton key={i} />
-          ))}
+        <div className="space-y-4">
+          {viewMode === "grouped" ? (
+            <>
+              {Array.from({ length: 3 }).map((_, i) => (
+                <ConversationGroupSkeleton key={i} />
+              ))}
+            </>
+          ) : (
+            <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <MemoryCardSkeleton key={i} />
+              ))}
+            </div>
+          )}
         </div>
       ) : isEmpty ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -140,6 +209,42 @@ const JarvisMemory = () => {
               ? "Tente ajustar os filtros ou a busca"
               : "Clique em 'Nova Memória' para adicionar"}
           </p>
+        </div>
+      ) : viewMode === "grouped" ? (
+        <div className="space-y-4">
+          {/* Grouped ChatGPT conversations */}
+          {groupedConversations.map(([convId, group]) => (
+            <ConversationGroup
+              key={convId}
+              conversationId={convId}
+              title={group.title}
+              items={group.items}
+              onDeleteItem={handleDelete}
+              onDeleteAll={handleDeleteAll}
+            />
+          ))}
+
+          {/* Non-ChatGPT items as cards */}
+          {nonChatgptItems.length > 0 && (
+            <>
+              {groupedConversations.length > 0 && (
+                <div className="pt-4 border-t border-border">
+                  <h2 className="text-sm font-medium text-muted-foreground mb-4">
+                    Outras memórias
+                  </h2>
+                </div>
+              )}
+              <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                {nonChatgptItems.map((memory) => (
+                  <MemoryCard
+                    key={memory.id}
+                    memory={memory}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </div>
       ) : (
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">

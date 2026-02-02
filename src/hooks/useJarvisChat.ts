@@ -28,6 +28,7 @@ export function useJarvisChat() {
   const { session } = useAuth();
   const queryClient = useQueryClient();
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [wantsNewConversation, setWantsNewConversation] = useState(false);
 
   // Fetch conversation messages
   const { data: messages = [], isLoading } = useQuery({
@@ -64,7 +65,7 @@ export function useJarvisChat() {
     enabled: !!conversationId,
   });
 
-  // Fetch most recent conversation
+  // Fetch most recent conversation (only if not wanting a new one)
   useQuery({
     queryKey: ["jarvis-recent-conversation", tenantId],
     queryFn: async () => {
@@ -85,7 +86,7 @@ export function useJarvisChat() {
       
       return data;
     },
-    enabled: !!tenantId && !conversationId,
+    enabled: !!tenantId && !conversationId && !wantsNewConversation,
   });
 
   // Send message mutation
@@ -125,8 +126,9 @@ export function useJarvisChat() {
       return response.json();
     },
     onSuccess: (data) => {
-      if (data.conversationId && data.conversationId !== conversationId) {
+      if (data.conversationId) {
         setConversationId(data.conversationId);
+        setWantsNewConversation(false); // Reset flag when new conversation is created
       }
       queryClient.invalidateQueries({ queryKey: ["jarvis-chat", data.conversationId] });
     },
@@ -138,7 +140,8 @@ export function useJarvisChat() {
   // Start new conversation
   const startNewConversation = () => {
     setConversationId(null);
-    queryClient.invalidateQueries({ queryKey: ["jarvis-recent-conversation"] });
+    setWantsNewConversation(true);
+    queryClient.setQueryData(["jarvis-chat", null], []); // Clear messages immediately
   };
 
   return {
