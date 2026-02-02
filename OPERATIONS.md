@@ -1,7 +1,7 @@
-# 📋 Documentação de Operações - Sistema Financeiro
+# 📋 Documentação de Operações - Sistema Financeiro v2.0
 
 ## 🎯 Objetivo
-Este documento descreve os procedimentos operacionais principais do sistema de gestão financeira: gerenciamento de períodos, processamento de recorrências e configuração de alertas.
+Este documento descreve os procedimentos operacionais do FRACTTO FLOW: gerenciamento de períodos, processamento de recorrências, configuração de alertas **e operações do JARVIS**.
 
 ---
 
@@ -29,17 +29,17 @@ Períodos fechados **bloqueiam** a criação/edição de transações naquele m�
 ### 🗄️ Via SQL (Para Admins/Emergências)
 
 ```sql
--- Fechar período de Janeiro/2025 para o usuário 'abc-123-def'
-SELECT fechar_mensal('abc-123-def'::uuid, 2025, 1);
+-- Fechar período de Janeiro/2026 para o usuário 'abc-123-def'
+SELECT fechar_mensal('abc-123-def'::uuid, 2026, 1);
 
--- Reabrir período de Janeiro/2025
-SELECT reabrir_mensal('abc-123-def'::uuid, 2025, 1);
+-- Reabrir período de Janeiro/2026
+SELECT reabrir_mensal('abc-123-def'::uuid, 2026, 1);
 
 -- Consultar status de um período
 SELECT status, closed_at, closed_by 
 FROM periods 
 WHERE user_id = 'abc-123-def'::uuid 
-  AND year = 2025 
+  AND year = 2026 
   AND month = 1;
 ```
 
@@ -49,8 +49,8 @@ WHERE user_id = 'abc-123-def'::uuid
 
 **Execução:**
 ```sql
--- Aplicar rollover de Janeiro/2025 → Fevereiro/2025
-SELECT aplicar_rollover('abc-123-def'::uuid, 2025, 1);
+-- Aplicar rollover de Janeiro/2026 → Fevereiro/2026
+SELECT aplicar_rollover('abc-123-def'::uuid, 2026, 1);
 ```
 
 **Políticas:**
@@ -107,53 +107,6 @@ SELECT * FROM process_recurring_transactions();
 -- failed_count: nº de falhas
 ```
 
-**Exemplo de saída:**
-```
-processed_count | failed_count
-----------------+-------------
-             15 |            0
-```
-
-### 📊 Auditoria e Troubleshooting
-
-```sql
--- Ver recorrências ativas pendentes de processamento
-SELECT 
-  rt.id,
-  rt.descricao,
-  rt.valor,
-  rt.frequencia,
-  rt.proxima_ocorrencia,
-  rt.data_fim
-FROM recurring_transactions rt
-WHERE rt.ativo = true
-  AND rt.deleted_at IS NULL
-  AND rt.proxima_ocorrencia <= CURRENT_DATE
-  AND (rt.data_fim IS NULL OR rt.proxima_ocorrencia <= rt.data_fim);
-
--- Ver histórico de geração de uma recorrência específica
-SELECT 
-  rth.data_prevista,
-  rth.status,
-  rth.created_at,
-  rth.erro_msg,
-  t.descricao as transaction_desc,
-  t.valor
-FROM recurring_transaction_history rth
-LEFT JOIN transactions t ON t.id = rth.transaction_id
-WHERE rth.recurring_transaction_id = 'uuid-da-recorrencia'
-ORDER BY rth.data_prevista DESC;
-
--- Forçar atualização de próxima ocorrência (caso fique travado)
-UPDATE recurring_transactions
-SET proxima_ocorrencia = calculate_next_occurrence(
-  proxima_ocorrencia, 
-  frequencia, 
-  dia_referencia
-)
-WHERE id = 'uuid-da-recorrencia';
-```
-
 ---
 
 ## 3️⃣ Configuração de Alertas por Email (send-alerts)
@@ -176,167 +129,298 @@ Edge Function que envia resumo diário por email com:
    ```
    RESEND_API_KEY=re_xxxxxxxxxxxx
    ```
-   *(já deve estar configurado no projeto)*
 
 ### 🧪 Teste Manual
 
 **Via UI:** Página **Configurações** → Seção **Alertas** → Botão **"Enviar Email de Teste"**
 
-**Via SQL/Edge Function:**
-```bash
-# Via curl (substitua USER_ID pelo UUID real)
-curl -X POST \
-  https://uyeqdokcwmcxuxuwwjnj.supabase.co/functions/v1/send-alerts \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  -H "Content-Type: application/json" \
-  -d '{"test": true, "userId": "abc-123-def-456"}'
+---
+
+## 4️⃣ Operações JARVIS 🆕
+
+### 4.1 Edge Function ff-jarvis-chat
+
+**Descrição:** Chat IA com function calling para ações no sistema.
+
+**Endpoint:** `POST /functions/v1/ff-jarvis-chat`
+
+**Seleção Dinâmica de Modelo:**
+```typescript
+// O sistema escolhe o modelo baseado na complexidade:
+- gpt-4o-mini: Chat casual, onboarding (~2s)
+- gpt-4o: Mensagens com imagens (~3s)
+- o3: Análises complexas, planejamento (~15s)
 ```
 
-**Verificar envio:**
-```sql
-SELECT * FROM alert_log 
-WHERE user_id = 'abc-123-def' 
-ORDER BY created_at DESC 
-LIMIT 5;
+**Function Calling Tools (16+):**
+| Tool | Descrição |
+|------|-----------|
+| `get_balance` | Consultar saldo de carteiras |
+| `get_upcoming_bills` | Contas a vencer |
+| `get_budget_status` | Status de orçamentos |
+| `create_transaction` | Criar transação |
+| `create_wallet` | Criar carteira |
+| `create_task` | Criar tarefa |
+| `update_task_status` | Atualizar status de tarefa |
+| `create_event` | Criar evento |
+| `create_habit` | Criar hábito |
+| `log_habit` | Registrar hábito do dia |
+| `create_reminder` | Criar lembrete |
+| `save_memory` | Salvar memória |
+| `search_memory` | Buscar na memória |
+| `update_user_profile` | Atualizar perfil/onboarding |
+| `get_today_summary` | Resumo do dia |
+| `get_financial_analysis` | Análise financeira |
+
+**Verificar logs:**
 ```
-
-### 📅 Agendamento Automático
-
-**⚠️ AÇÃO MANUAL NECESSÁRIA:**
-
-O `pg_cron` **não pode** chamar Edge Functions diretamente via HTTP por questões de segurança.
-
-**Opção 1: Agendamento via Supabase Dashboard (Recomendado)**
-
-1. Acesse: **Lovable Cloud** → **Edge Functions** → `send-alerts`
-2. Configure Cron Schedule:
-   - **Expressão:** `0 10 * * *` (diário às 07:00 BRT = 10:00 UTC)
-   - **Payload:** `{}` (vazio, modo produção)
-3. Salve a configuração
-
-**Opção 2: Via pg_net (Avançado)**
-
-```sql
--- Habilitar pg_net
-CREATE EXTENSION IF NOT EXISTS pg_net;
-
--- Criar função wrapper
-CREATE OR REPLACE FUNCTION trigger_send_alerts_edge()
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_response_id bigint;
-BEGIN
-  SELECT net.http_post(
-    url := 'https://uyeqdokcwmcxuxuwwjnj.supabase.co/functions/v1/send-alerts',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || current_setting('app.settings.anon_key', true)
-    ),
-    body := '{}'::jsonb
-  ) INTO v_response_id;
-  
-  RAISE NOTICE 'Send alerts triggered with response_id: %', v_response_id;
-END;
-$$;
-
--- Agendar para 07:30 BRT (10:30 UTC)
-SELECT cron.schedule(
-  'send_alerts_daily',
-  '30 10 * * *',
-  $$ SELECT trigger_send_alerts_edge(); $$
-);
+Lovable Cloud → Edge Functions → ff-jarvis-chat → Logs
 ```
-
-**⚠️ Limitação:** Requer configurar `app.settings.anon_key` como secret no banco.
-
-### 🔍 Monitoramento
-
-```sql
--- Ver últimos envios
-SELECT 
-  al.user_id,
-  al.alert_date,
-  al.alert_type,
-  al.created_at,
-  p.full_name
-FROM alert_log al
-LEFT JOIN profiles p ON p.id = al.user_id
-ORDER BY al.created_at DESC
-LIMIT 20;
-
--- Ver usuários com alertas habilitados
-SELECT 
-  als.user_id,
-  als.email_enabled,
-  als.alert_time,
-  als.alert_types,
-  p.full_name
-FROM alert_settings als
-LEFT JOIN profiles p ON p.id = als.user_id
-WHERE als.email_enabled = true;
-
--- Verificar Edge Function logs (via Lovable Cloud UI)
--- Cloud → Edge Functions → send-alerts → Logs
-```
-
-### 🚨 Troubleshooting
-
-**Problema:** Email não chega
-
-1. **Verificar Resend:**
-   - Dashboard Resend → Logs → procurar por falhas
-   - Validar domínio está verificado
-
-2. **Verificar `alert_log`:**
-   ```sql
-   -- Se não há registro, a função não executou
-   SELECT * FROM alert_log WHERE alert_date = CURRENT_DATE;
-   ```
-
-3. **Testar Edge Function manualmente:**
-   ```bash
-   curl -X POST https://...supabase.co/functions/v1/send-alerts \
-     -H "Authorization: Bearer ..." \
-     -d '{"test":true,"userId":"..."}'
-   ```
-
-4. **Ver logs da Edge Function:**
-   - Lovable Cloud → Edge Functions → send-alerts → Logs (últimas 24h)
-
-**Problema:** Alertas duplicados
-
-- Sistema possui idempotência: verifica `alert_log` antes de enviar
-- Se houver duplicatas, revisar lógica de agendamento (não agendar 2x)
 
 ---
 
-## 🛠️ Ferramentas Úteis
+### 4.2 Integração WhatsApp
+
+**Edge Functions:**
+- `ff-whatsapp-verify`: Verifica telefone do usuário
+- `ff-whatsapp-ingest`: Processa mensagens recebidas
+
+**Fluxo de Verificação:**
+1. Usuário cadastra telefone em `/jarvis/settings`
+2. Envia "verificar" para o número do JARVIS
+3. n8n chama `ff-whatsapp-verify`
+4. Sistema marca `verified_at` em `ff_user_phones`
+
+**Fluxo de Mensagem:**
+1. Usuário envia mensagem no WhatsApp
+2. n8n recebe via Evolution API
+3. n8n chama `ff-whatsapp-ingest`
+4. Motor IA unificado processa (mesmo do chat web)
+5. Resposta retornada para n8n → WhatsApp
+
+**Verificar status de telefone:**
+```sql
+SELECT phone_e164, verified_at, display_name
+FROM ff_user_phones
+WHERE user_id = 'xxx';
+```
+
+**Secret necessário:**
+```
+N8N_WEBHOOK_TOKEN=seu_token_seguro
+```
+
+---
+
+### 4.3 Google Calendar Sync
+
+**Edge Functions:**
+- `ff-google-oauth-callback`: Callback do OAuth
+- `ff-google-calendar-sync`: Sincronização bidirecional
+- `ff-google-calendar-push`: Webhook de push notifications
+
+**Fluxo de Conexão:**
+1. Usuário clica "Conectar Google" em `/jarvis/settings`
+2. Redirect para OAuth do Google
+3. Callback salva tokens em `ff_integrations_google`
+4. Sync automático a cada 5 minutos
+
+**Verificar status de integração:**
+```sql
+SELECT email, expiry, last_sync_at, sync_token
+FROM ff_integrations_google
+WHERE user_id = 'xxx';
+```
+
+**Secrets necessários:**
+```
+GOOGLE_CLIENT_ID=xxx.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-xxx
+```
+
+---
+
+### 4.4 Notificações Push
+
+**Edge Functions:**
+- `get-vapid-public-key`: Retorna chave pública VAPID
+- `send-push-test`: Envia push de teste
+- `process-reminders`: Processa lembretes pendentes
+- `cron-send-reminders`: Cron job (a cada minuto)
+
+**Fluxo:**
+1. Usuário ativa notificações em `/jarvis/settings`
+2. Frontend registra service worker
+3. Subscription salva em `ff_push_subscriptions`
+4. Lembretes pendentes geram push via `process-reminders`
+
+**Verificar subscriptions:**
+```sql
+SELECT endpoint, is_active, last_seen_at
+FROM ff_push_subscriptions
+WHERE user_id = 'xxx';
+```
+
+**Secrets necessários:**
+```
+VAPID_PUBLIC_KEY=BNxKj...
+VAPID_PRIVATE_KEY=xxx...
+```
+
+---
+
+### 4.5 Onboarding Guiado
+
+**Controle:** Tabela `ff_user_profiles`
+
+**Campos relevantes:**
+- `onboarding_completed`: Se finalizou o setup
+- `onboarding_step`: Etapa atual (`welcome`, `profile`, `wallet_setup`, `first_habit`, `complete`)
+
+**Etapas do fluxo:**
+1. **welcome**: JARVIS pergunta apelido
+2. **profile**: Pergunta objetivos
+3. **wallet_setup**: Cria primeira carteira
+4. **first_habit**: Sugere hábito (opcional)
+5. **complete**: Marca como finalizado
+
+**Forçar finalização (via SQL):**
+```sql
+UPDATE ff_user_profiles
+SET onboarding_completed = true, onboarding_step = 'complete'
+WHERE user_id = 'xxx';
+```
+
+**Via interface:** Botão "Pular configuração" no chat.
+
+---
+
+## 5️⃣ Troubleshooting JARVIS
+
+### Onboarding travado
+
+**Sintoma:** Menu lateral não funciona, sempre volta para chat
+
+**Causa:** `onboarding_completed = false`
+
+**Verificar:**
+```sql
+SELECT nickname, onboarding_completed, onboarding_step
+FROM ff_user_profiles
+WHERE user_id = 'xxx';
+```
+
+**Solução 1:** Clicar em "Pular configuração" no chat
+
+**Solução 2:** SQL
+```sql
+UPDATE ff_user_profiles 
+SET onboarding_completed = true 
+WHERE user_id = 'xxx';
+```
+
+---
+
+### WhatsApp não funciona
+
+**Sintoma:** Mensagens não são processadas
+
+**Verificar:**
+1. Telefone cadastrado?
+   ```sql
+   SELECT * FROM ff_user_phones WHERE user_id = 'xxx';
+   ```
+
+2. Telefone verificado?
+   ```sql
+   SELECT verified_at FROM ff_user_phones WHERE phone_e164 = '+55...';
+   -- Se NULL, não está verificado
+   ```
+
+3. Token n8n configurado?
+   - Verificar secret `N8N_WEBHOOK_TOKEN`
+
+---
+
+### Chat lento
+
+**Sintoma:** Respostas demoram 15-20 segundos
+
+**Causa provável:** Modelo `o3` sendo usado para chat casual
+
+**Verificar logs:**
+```
+Edge Functions → ff-jarvis-chat → Logs
+Buscar por "Selected model:"
+```
+
+**Esperado:**
+- `gpt-4o-mini`: ~2s (chat casual)
+- `o3`: ~15s (análises complexas)
+
+---
+
+### Google Calendar não sincroniza
+
+**Sintoma:** Eventos não aparecem
+
+**Verificar:**
+1. Integração existe?
+   ```sql
+   SELECT * FROM ff_integrations_google WHERE user_id = 'xxx';
+   ```
+
+2. Token expirado?
+   ```sql
+   SELECT expiry FROM ff_integrations_google WHERE user_id = 'xxx';
+   -- Se < now(), precisa refresh
+   ```
+
+**Solução:** Desconectar e reconectar em Configurações.
+
+---
+
+### Notificações não chegam
+
+**Sintoma:** Lembretes não geram push
+
+**Verificar:**
+1. Subscription ativa?
+   ```sql
+   SELECT is_active, last_seen_at 
+   FROM ff_push_subscriptions 
+   WHERE user_id = 'xxx';
+   ```
+
+2. Navegador permitiu?
+   - Deve aparecer ícone de sino na barra de endereço
+
+3. Service Worker registrado?
+   - DevTools → Application → Service Workers
+
+---
+
+## 6️⃣ Ferramentas Úteis
 
 ### Console do Browser (DevTools)
 
 ```javascript
-// Ver status do período atual
+// Ver tenant atual
+const tenant = useTenant().currentTenant;
+console.log(tenant);
+
+// Verificar profile JARVIS
 const { data } = await supabase
-  .from('periods')
+  .from('ff_user_profiles')
   .select('*')
-  .eq('user_id', 'USER_ID')
-  .eq('year', 2025)
-  .eq('month', 1)
   .single();
 console.log(data);
-
-// Testar processamento de recorrências
-const { data: result } = await supabase.rpc('process_recurring_transactions');
-console.log('Processed:', result);
 ```
 
 ### Logs Estruturados
 
 - **Edge Function Logs:** Lovable Cloud → Edge Functions → [nome] → Logs
-- **Database Logs:** Lovable Cloud → Database → Logs (queries, erros)
+- **Database Logs:** Lovable Cloud → Database → Logs
 - **Cron Logs:** `SELECT * FROM cron.job_run_details ORDER BY start_time DESC;`
 
 ---
@@ -350,6 +434,6 @@ console.log('Processed:', result);
 4. Contactar administrador do sistema
 
 **Atualizações:**
-- Versão: 1.0
-- Data: 2025-01-23
+- Versão: 2.0
+- Data: Fevereiro 2026
 - Próxima revisão: Trimestral

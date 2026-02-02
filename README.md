@@ -1,5 +1,40 @@
 # FRACTTO FLOW - Suas Finanças, Peça por Peça
 
+![Version](https://img.shields.io/badge/version-2.0.0-blue)
+![React](https://img.shields.io/badge/React-18.3.1-61DAFB)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6)
+
+Plataforma completa de gestão financeira pessoal com **assistente IA integrado (JARVIS)**.
+
+## 🚀 Módulos Principais
+
+### 💰 Finanças
+- Transações (simples, parceladas, recorrentes)
+- Carteiras (contas e cartões de crédito)
+- Faturas automáticas
+- Orçamentos com rollover
+- Metas financeiras
+- Investimentos
+- Relatórios e projeções
+- Importação CSV
+
+### 🤖 JARVIS (Assistente IA)
+- Chat inteligente com linguagem natural
+- Gestão de tarefas
+- Calendário de eventos (+ Google Calendar)
+- Sistema de hábitos
+- Lembretes com push notifications
+- Memória persistente
+- Integração WhatsApp
+- Onboarding guiado por IA
+
+## 🛠️ Tecnologias
+
+- **Frontend:** React, TypeScript, Vite, Tailwind CSS, shadcn/ui
+- **Backend:** Lovable Cloud (PostgreSQL, Edge Functions/Deno)
+- **IA:** OpenAI (gpt-4o-mini, gpt-4o, o3) via Lovable AI
+- **Integrações:** Google Calendar, WhatsApp (via n8n), Web Push
+
 ## Project info
 
 **URL**: https://lovable.dev/projects/4ed3c99c-e309-45c2-8c33-3e24b57bef45
@@ -59,6 +94,9 @@ This project is built with:
 - React
 - shadcn-ui
 - Tailwind CSS
+- Lovable Cloud (Supabase)
+- Deno (Edge Functions)
+- OpenAI (via Lovable AI)
 
 ## How can I deploy this project?
 
@@ -71,3 +109,17 @@ Yes, you can!
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
 Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+
+## 📚 Documentação
+
+| Documento | Descrição |
+|-----------|-----------|
+| [DOCUMENTATION.md](./DOCUMENTATION.md) | Documentação técnica completa |
+| [OPERATIONS.md](./OPERATIONS.md) | Procedimentos operacionais |
+| [JORNADA_CLIENTE.md](./JORNADA_CLIENTE.md) | Jornada do usuário |
+| [APRESENTACAO_COMERCIAL.md](./APRESENTACAO_COMERCIAL.md) | Apresentação comercial |
+| [docs/WHATSAPP_N8N_INTEGRATION.md](./docs/WHATSAPP_N8N_INTEGRATION.md) | Integração WhatsApp |
+
+---
+
+**URL Produção:** https://fracttoflow.lovable.app
