@@ -1,268 +1,111 @@
 
-# Plano: Sistema Multi-Agente com OpenAI o3 como Orquestrador
+Objetivo: deixar o chat do JARVIS “100%” estável e consistente, eliminando respostas fora de contexto e a mensagem genérica “Desculpe, não consegui processar…”, com o mínimo de mudanças necessárias (para reduzir retrabalho/custo).
 
-## Visao Geral da Arquitetura
+Diagnóstico (com base no código atual + screenshots)
+1) Causa raiz principal (alta confiança): histórico errado enviado para a IA
+- No backend function `supabase/functions/ff-jarvis-chat/index.ts`, a busca do histórico faz:
+  - `.order("created_at", { ascending: true }).limit(15)`
+- Isso pega as PRIMEIRAS 15 mensagens da conversa (as mais antigas), não as últimas.
+- Quando a conversa já tem mais de 15 mensagens, a IA NÃO vê a mensagem atual do usuário (nem as últimas interações), então responde coisas “de trás” (ex.: responde sobre despesa/duplicidade quando você perguntou sobre histórico).
+- Isso explica exatamente o comportamento do print: respostas desconectadas + o usuário repetindo a pergunta e o JARVIS “ignorando”.
 
-O sistema sera implementado no padrao **Manager Pattern** recomendado pela OpenAI, onde o **o3** atua como cerebro/orquestrador que delega tarefas para agentes especializados.
+2) Causa raiz secundária: mensagens “técnicas” de tool-call podem poluir a UX
+- O backend salva mensagens de `assistant` que contêm `tool_calls` com `content` vazio.
+- No frontend (`useJarvisChat`) vocês exibem todas as mensagens com `role === user|assistant` sem filtrar `tool_calls` / `content`.
+- Isso pode gerar bolhas “vazias” ou interações confusas e aumentar a sensação de erro.
 
-```text
-                    ┌─────────────────────────────────────┐
-                    │           USUARIO                   │
-                    └─────────────────┬───────────────────┘
-                                      │
-                                      ▼
-                    ┌─────────────────────────────────────┐
-                    │      ORQUESTRADOR (o3)              │
-                    │   "Cerebro" do JARVIS               │
-                    │   - Analisa intencao                │
-                    │   - Decide qual agente usar         │
-                    │   - Sintetiza respostas             │
-                    │   - Auto-aprendizagem               │
-                    └───────┬─────┬─────┬─────┬───────────┘
-                            │     │     │     │
-         ┌──────────────────┤     │     │     ├──────────────────┐
-         │                  │     │     │     │                  │
-         ▼                  ▼     ▼     ▼     ▼                  ▼
-┌────────────────┐  ┌───────────┐ ┌───────────┐ ┌───────────┐  ┌────────────────┐
-│  AGENTE        │  │  AGENTE   │ │  AGENTE   │ │  AGENTE   │  │  AGENTE        │
-│  FINANCAS      │  │  TAREFAS  │ │  HABITOS  │ │  EVENTOS  │  │  MEMORIA       │
-│  (gpt-5-mini)  │  │ (gpt-5-   │ │ (gpt-5-   │ │ (gpt-5-   │  │  (gpt-5-mini)  │
-│                │  │  mini)    │ │  mini)    │ │  mini)    │  │                │
-│  - Wallets     │  │ - CRUD    │ │ - Logs    │ │ - CRUD    │  │  - Salvar      │
-│  - Transacoes  │  │ - Status  │ │ - Stats   │ │ - Sync    │  │  - Buscar      │
-│  - Relatorios  │  │ - Filtros │ │ - Streak  │ │ - Google  │  │  - Aprender    │
-└────────────────┘  └───────────┘ └───────────┘ └───────────┘  └────────────────┘
-```
+3) Fragilidade que pode causar falha real (intermitente) e custo: parsing e validação de argumentos das tools
+- No loop de tools, faz `JSON.parse(toolCall.function.arguments || "{}")` sem try/catch.
+- Se a IA mandar JSON malformado em algum momento, isso vira erro 500 e quebra o chat.
+- Em `create_transaction`, `category_id` pode vir como nome (ex.: “Alimentação”) em vez de UUID → pode disparar erro e a IA tentar de novo, gerando duplicações/loops.
 
----
+Plano de correção (prioridade: estabilizar chat agora)
+Fase 0 — Validar rapidamente a hipótese (sem mexer em UX ainda)
+- Ação: adicionar logs “cirúrgicos” no backend (edge function) para confirmar que o histórico enviado ao modelo NÃO contém a última mensagem do usuário quando a conversa é longa:
+  - Logar: `convId`, contagem total de mensagens (query rápida), e o `created_at` + conteúdo das 3 últimas mensagens retornadas por `history`.
+- Critério de sucesso: os logs mostrarem que o `history` não inclui a mensagem recém-inserida quando a conversa tem > 15 mensagens.
 
-## Modelos a Serem Utilizados
+Fase 1 — Fix definitivo do histórico (mudança pequena, impacto enorme)
+- Alterar a query do histórico no backend para buscar as ÚLTIMAS 15 mensagens e depois reordenar para cronologia:
+  1) Buscar desc:
+     - `.order("created_at", { ascending: false }).limit(15)`
+  2) Reverter o array antes de montar `messages` (para ficar do mais antigo → mais novo).
+- Garantia adicional:
+  - Validar programaticamente que a última mensagem de `history` é a mensagem do usuário recém-inserida; se não for, forçar inclusão (fallback) para não perder o turno atual.
 
-| Papel | Modelo | Custo | Justificativa |
-|-------|--------|-------|---------------|
-| **Orquestrador** | `openai/o3` | Alto | Raciocinio complexo, decisao de roteamento, sintese |
-| **Agentes Especializados** | `openai/gpt-5-mini` | Medio | Rapido, eficiente para tarefas especificas |
-| **Fallback** | `openai/gpt-5-nano` | Baixo | Tarefas simples, alta velocidade |
+Por que isso resolve:
+- A IA passa a ver exatamente o contexto recente e a pergunta atual → respostas deixam de “voltar no tempo” e o chat para de parecer quebrado.
 
----
+Fase 2 — Evitar “bolhas técnicas” e ruído no chat (frontend)
+- Ajustar `src/hooks/useJarvisChat.ts` para filtrar mensagens exibidas:
+  - Exibir apenas:
+    - `role === "user"`
+    - `role === "assistant"` AND `content.trim().length > 0`
+  - (Opcional) também excluir `assistant` que tenha `tool_calls` preenchido (se esse campo estiver vindo no select).
+- Resultado:
+  - O usuário só vê mensagens “humanas”, não mensagens intermediárias de tool-calling.
 
-## Fluxo de Execucao
+Fase 3 — Robustez “anti-quebra” (backend)
+Essas mudanças evitam erro real e reduzem ciclos de tentativa (custo e confusão):
+1) Safe JSON parse
+- Envolver `JSON.parse(...)` em try/catch.
+- Se falhar:
+  - Salvar um registro do erro no log
+  - Retornar um texto curto para o modelo: “Argumentos inválidos; gere novamente em JSON válido.”
+  - Ou (mais confiável) fazer um “repair pass” com o modelo leve (AGENT_MODEL) pedindo para reemitir os argumentos em JSON válido.
 
-```text
-1. Usuario envia mensagem
-          │
-          ▼
-2. o3 analisa intencao e contexto
-          │
-          ├─ Intencao simples? ──────────► Responde diretamente
-          │
-          ├─ Precisa de dados? ──────────► Delega para agente especializado
-          │
-          └─ Multiplas acoes? ───────────► Orquestra sequencia de agentes
-          │
-          ▼
-3. Agentes executam tools especificas
-          │
-          ▼
-4. o3 sintetiza resultados
-          │
-          ▼
-5. Detecta insight? ─────────────────────► auto_learn() salva
-          │
-          ▼
-6. Responde ao usuario (conciso)
-```
+2) Melhorar `create_transaction` para aceitar `category_id` por nome
+- Se `category_id` não for UUID:
+  - Tentar resolver por `categories.nome ilike %...%` filtrando pelo tipo (despesa/receita).
+  - Se 1 match → usar o UUID encontrado.
+  - Se 0 ou muitos matches → pedir ao usuário para escolher (ou chamar `list_categories` e pedir confirmação).
 
----
+3) Idempotência simples para evitar duplicações
+- Antes de inserir transação, checar se já existe transação muito parecida:
+  - Mesmo `user_id`, `wallet_id`, `tipo`, `valor`, data (e/ou descrição similar) nas últimas 24h/mesma data.
+- Se existir: retornar “Já existe um lançamento igual; não criei outro.” e orientar como editar/corrigir.
+- Isso evita loops do modelo criando a mesma despesa várias vezes.
 
-## Seguranca da API Key
+Fase 4 — Melhorar o erro mostrado ao usuário (sem ficar verboso)
+- Hoje, quando `assistantMessage?.content` vem vazio, o backend devolve: “Desculpe, não consegui processar…”
+- Trocar por:
+  - “Tive um problema para gerar a resposta agora. Quer tentar novamente?” + um `error_id` interno nos logs para rastreio.
+- E garantir que qualquer erro 500 do backend retorne JSON consistente (para o client mostrar toast com mensagem clara).
 
-A chave OpenAI sera armazenada como **secret** no Supabase:
+Plano de teste (para confirmar 100% e evitar nova rodada de ajustes)
+1) Teste de conversa longa (o bug atual)
+- Em uma conversa com mais de 15 mensagens:
+  - Perguntar “Você tem acesso ao histórico?” e “Quais compromissos eu tenho essa semana?”
+- Esperado: respostas coerentes com o turno atual (sem falar de uma despesa antiga do nada).
 
-- Nome: `OPENAI_API_KEY`
-- Valor: `sk-proj-5bDKDN7...` (fornecida por voce)
-- Acesso: Apenas via Edge Function (nunca exposta no frontend)
+2) Teste de tool-calling com finanças
+- “Registra uma despesa de 39,36 de almoço na conta BTG”
+- Esperado:
+  - Se categoria vier por nome, resolve corretamente
+  - Se já existir lançamento igual, não duplica
 
-Melhores praticas aplicadas:
-- Chave nunca exposta no codigo-fonte
-- Chamadas apenas via backend (Edge Function)
-- Monitoramento de uso possivel via dashboard OpenAI
+3) Teste de robustez
+- Fazer 5 envios seguidos (com pausa) e confirmar que não aparece “Desculpe, não consegui…” sem explicação
+- Confirmar que não há bolhas vazias no chat
 
----
+Escopo de mudanças (bem objetivo, para reduzir custo de iteração)
+- Backend:
+  - `supabase/functions/ff-jarvis-chat/index.ts`
+    - Corrigir ordenação/limite do histórico (principal)
+    - Safe parse + melhorias `create_transaction` (categoria por nome + dedupe)
+    - Melhorar mensagens de erro e logs
+- Frontend:
+  - `src/hooks/useJarvisChat.ts`
+    - Filtrar tool-call/assistente vazio no display
 
-## Implementacao Tecnica
+Riscos e mitigação
+- Risco: conversas curtas (<15 msgs) já “funcionam” e podem mascarar o bug.
+  - Mitigação: teste obrigatório em conversa longa.
+- Risco: alteração de histórico mudar um pouco o “tom” do modelo (porque ele verá o contexto correto).
+  - Mitigação: manter o prompt e tools como estão; apenas corrigir a janela de mensagens.
 
-### Fase 1: Adicionar Secret e Configurar Endpoint
-
-1. Adicionar `OPENAI_API_KEY` como secret do Supabase
-2. Configurar endpoint direto da OpenAI: `https://api.openai.com/v1/chat/completions`
-
-### Fase 2: Refatorar Arquitetura Multi-Agente
-
-Novo arquivo de configuracao de agentes:
-
-```typescript
-const AGENTS = {
-  orchestrator: {
-    model: "o3",
-    role: "system",
-    systemPrompt: `Voce e o cerebro do JARVIS. Analise a intencao do usuario e:
-    1. Se for simples: responda diretamente
-    2. Se precisar de dados: chame o agente especializado
-    3. Sintetize resultados de forma concisa
-    Sempre aprenda padroes usando auto_learn.`,
-  },
-  finances: {
-    model: "gpt-5-mini",
-    tools: ["list_wallets", "create_wallet", "create_transaction", "query_finances"],
-  },
-  tasks: {
-    model: "gpt-5-mini", 
-    tools: ["query_tasks", "create_task", "update_task_status"],
-  },
-  habits: {
-    model: "gpt-5-mini",
-    tools: ["query_habits"],
-  },
-  events: {
-    model: "gpt-5-mini",
-    tools: ["query_events", "create_event"],
-  },
-  memory: {
-    model: "gpt-5-mini",
-    tools: ["query_memories", "create_memory", "auto_learn", "search_conversation_history"],
-  },
-};
-```
-
-### Fase 3: Nova Tool de Auto-Aprendizagem
-
-```typescript
-{
-  name: "auto_learn",
-  description: "Salva um insight aprendido sobre o usuario para uso futuro.",
-  parameters: {
-    learned_fact: { type: "string", description: "O que foi aprendido" },
-    confidence: { type: "string", enum: ["low", "medium", "high"] },
-    category: { type: "string", enum: ["preference", "behavior", "goal", "routine", "financial_pattern"] },
-  },
-}
-```
-
-### Fase 4: Busca em Historico Completo
-
-```typescript
-{
-  name: "search_conversation_history",
-  description: "Busca em TODO o historico de conversas do usuario.",
-  parameters: {
-    search_term: { type: "string" },
-    date_from: { type: "string" },
-    limit: { type: "number", default: 50 },
-  },
-}
-```
-
-### Fase 5: Injecao de Aprendizados no Contexto
-
-Modificar `fetchUserContext` para incluir:
-
-```typescript
-// Buscar ultimos 20 aprendizados
-const { data: learnedItems } = await supabase
-  .from("ff_memory_items")
-  .select("content, title, metadata")
-  .eq("tenant_id", tenantId)
-  .eq("kind", "learned")
-  .order("created_at", { ascending: false })
-  .limit(20);
-```
-
-E adicionar ao system prompt do orquestrador:
-
-```
-APRENDIZADOS SOBRE ESTE USUARIO:
-• Prefere pagar contas no inicio do mes
-• Aloca 30% do salario para investimentos
-• Trabalha melhor pela manha
-• Gosta de respostas diretas e sem floreios
-```
-
----
-
-## Arquivos a Modificar
-
-| Arquivo | Alteracao |
-|---------|-----------|
-| Secrets | Adicionar `OPENAI_API_KEY` |
-| `supabase/functions/ff-jarvis-chat/index.ts` | 1. Trocar para API OpenAI direta<br>2. Implementar padrao Manager<br>3. Adicionar tools de auto-learn e search_history<br>4. Injetar aprendizados no contexto |
-
----
-
-## Sistema de Auto-Aprendizagem
-
-```text
-┌──────────────────────────────────────────────────────────────┐
-│                    CICLO DE APRENDIZADO                      │
-│                                                              │
-│  1. Usuario interage normalmente                             │
-│              │                                               │
-│              ▼                                               │
-│  2. o3 detecta padrao ou preferencia                        │
-│     "Usuario sempre pede resumo financeiro no domingo"       │
-│              │                                               │
-│              ▼                                               │
-│  3. Chama auto_learn()                                       │
-│     { learned_fact: "Gosta de revisar financas no domingo",  │
-│       category: "routine", confidence: "high" }              │
-│              │                                               │
-│              ▼                                               │
-│  4. Salvo em ff_memory_items com kind: "learned"            │
-│              │                                               │
-│              ▼                                               │
-│  5. Proxima sessao: o3 recebe esse insight no contexto      │
-│     e pode proativamente oferecer o resumo no domingo       │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Acesso ao Historico Completo
-
-O orquestrador podera buscar em TODAS as conversas anteriores:
-
-```typescript
-case "search_conversation_history": {
-  const { data, error } = await supabase
-    .from("ff_conversation_messages")
-    .select("content, role, created_at")
-    .eq("tenant_id", tenantId)
-    .in("role", ["user", "assistant"])
-    .ilike("content", `%${args.search_term}%`)
-    .order("created_at", { ascending: false })
-    .limit(args.limit || 50);
-    
-  return JSON.stringify(data);
-}
-```
-
----
-
-## Resultado Esperado
-
-1. **Raciocinio Superior**: o3 como cerebro com capacidade de raciocinio estendido
-2. **Auto-Aprendizagem**: JARVIS fica mais inteligente a cada interacao
-3. **Memoria Persistente**: Insights nunca sao perdidos
-4. **Historico Completo**: Pode relembrar qualquer conversa passada
-5. **Delegacao Inteligente**: Agentes especializados para tarefas especificas
-6. **Economia de Custos**: gpt-5-mini para tarefas simples, o3 apenas para orquestracao
-
----
-
-## Proximos Passos Apos Implementacao
-
-1. Testar fluxo completo enviando mensagem complexa
-2. Verificar se auto_learn esta salvando corretamente
-3. Testar busca no historico com "voce lembra quando eu..."
-4. Monitorar uso de tokens e custos no dashboard OpenAI
+Resultado esperado após aplicar
+- O JARVIS sempre responde à mensagem atual (sem “voltar no tempo”)
+- Queda drástica de respostas irrelevantes/“erro genérico”
+- Menos duplicações e menos loops de tool-calling
+- UX do chat limpa (sem mensagens técnicas/vazias)
