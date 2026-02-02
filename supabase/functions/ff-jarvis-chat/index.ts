@@ -11,7 +11,7 @@ const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
 // Orchestrator uses o3 for complex reasoning
 const ORCHESTRATOR_MODEL = "o3";
-// Specialized agents use gpt-5-mini for efficiency
+// Specialized agents use gpt-4o-mini for efficiency
 const AGENT_MODEL = "gpt-4o-mini";
 
 // ==================== SYSTEM PROMPT BUILDER ====================
@@ -296,15 +296,15 @@ const TOOLS = [
     type: "function",
     function: {
       name: "create_transaction",
-      description: "Registra despesa ou receita. Use list_wallets e list_categories antes.",
+      description: "Registra despesa ou receita. Use list_wallets e list_categories antes para obter os IDs corretos.",
       parameters: {
         type: "object",
         properties: {
           tipo: { type: "string", enum: ["despesa", "receita"], description: "Tipo" },
           descricao: { type: "string", description: "Descrição" },
           valor: { type: "number", description: "Valor em reais" },
-          wallet_id: { type: "string", description: "ID da carteira" },
-          category_id: { type: "string", description: "ID da categoria" },
+          wallet_id: { type: "string", description: "ID da carteira (UUID)" },
+          category_id: { type: "string", description: "ID da categoria (UUID) ou nome da categoria" },
           data: { type: "string", description: "Data YYYY-MM-DD" },
           status: { type: "string", enum: ["paga", "pendente"], description: "Status" },
         },
@@ -376,7 +376,7 @@ const TOOLS = [
       },
     },
   },
-  // === AUTO-APRENDIZAGEM (NOVO) ===
+  // === AUTO-APRENDIZAGEM ===
   {
     type: "function",
     function: {
@@ -393,7 +393,7 @@ const TOOLS = [
       },
     },
   },
-  // === BUSCA NO HISTÓRICO (NOVO) ===
+  // === BUSCA NO HISTÓRICO ===
   {
     type: "function",
     function: {
@@ -411,6 +411,87 @@ const TOOLS = [
     },
   },
 ];
+
+// ==================== HELPER: Safe JSON Parse ====================
+function safeJsonParse(jsonString: string, fallback: Record<string, unknown> = {}): Record<string, unknown> {
+  try {
+    return JSON.parse(jsonString || "{}");
+  } catch (e) {
+    console.error("JSON parse error:", e, "Input:", jsonString?.substring(0, 200));
+    return fallback;
+  }
+}
+
+// ==================== HELPER: Check if string is UUID ====================
+function isUUID(str: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+}
+
+// ==================== HELPER: Resolve category by name ====================
+async function resolveCategoryId(
+  supabase: any,
+  userId: string,
+  categoryInput: string,
+  tipo: string
+): Promise<{ id: string | null; error: string | null }> {
+  // Already a UUID
+  if (isUUID(categoryInput)) {
+    return { id: categoryInput, error: null };
+  }
+
+  // Try to find by name (case-insensitive)
+  const { data: categories, error } = await supabase
+    .from("categories")
+    .select("id, nome, tipo")
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .ilike("nome", `%${categoryInput}%`);
+
+  if (error) {
+    return { id: null, error: `Erro ao buscar categoria: ${error.message}` };
+  }
+
+  if (!categories || categories.length === 0) {
+    return { id: null, error: `Categoria "${categoryInput}" não encontrada. Use list_categories para ver as disponíveis.` };
+  }
+
+  // Filter by type if possible
+  const matchingType = categories.filter((c: any) => c.tipo === tipo);
+  const filtered = matchingType.length > 0 ? matchingType : categories;
+
+  if (filtered.length === 1) {
+    return { id: filtered[0].id, error: null };
+  }
+
+  // Multiple matches - return first but log
+  console.log(`Multiple categories match "${categoryInput}":`, filtered.map((c: any) => c.nome));
+  return { id: filtered[0].id, error: null };
+}
+
+// ==================== HELPER: Check for duplicate transaction ====================
+async function checkDuplicateTransaction(
+  supabase: any,
+  userId: string,
+  walletId: string,
+  tipo: string,
+  valor: number,
+  data: string,
+  descricao: string
+): Promise<boolean> {
+  const { data: existing } = await supabase
+    .from("transactions")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("wallet_id", walletId)
+    .eq("tipo", tipo)
+    .eq("valor", valor)
+    .eq("data", data)
+    .is("deleted_at", null)
+    .limit(1);
+
+  return existing && existing.length > 0;
+}
 
 // ==================== TOOL EXECUTION ====================
 async function executeTool(
@@ -800,7 +881,21 @@ async function executeTool(
 
     case "create_transaction": {
       let walletId = args.wallet_id as string;
+      const tipo = args.tipo as string;
+      const categoryInput = args.category_id as string;
       
+      // Resolve category (can be UUID or name)
+      const { id: resolvedCategoryId, error: categoryError } = await resolveCategoryId(
+        supabase,
+        userId,
+        categoryInput,
+        tipo
+      );
+
+      if (categoryError) {
+        return categoryError;
+      }
+
       const fetchLatestWallet = async () => {
         const { data: wallets } = await supabase
           .from("wallets")
@@ -822,16 +917,34 @@ async function executeTool(
       }
 
       const transactionDate = (args.data as string) || today;
+      const descricao = args.descricao as string;
+      const valor = args.valor as number;
+
+      // Check for duplicates
+      const isDuplicate = await checkDuplicateTransaction(
+        supabase,
+        userId,
+        walletId,
+        tipo,
+        valor,
+        transactionDate,
+        descricao
+      );
+
+      if (isDuplicate) {
+        return `Já existe uma ${tipo} de R$ ${valor.toFixed(2)} na mesma data e carteira. Não criei duplicata.`;
+      }
+
       const mesReferencia = transactionDate.slice(0, 7);
       const status = args.status || (args.tipo === "despesa" ? "paga" : "pendente");
 
       const transactionData = {
         user_id: userId,
-        tipo: args.tipo,
-        descricao: args.descricao,
-        valor: args.valor,
+        tipo: tipo,
+        descricao: descricao,
+        valor: valor,
         wallet_id: walletId,
-        category_id: args.category_id,
+        category_id: resolvedCategoryId,
         data: transactionDate,
         mes_referencia: mesReferencia,
         status: status,
@@ -1012,7 +1125,7 @@ async function executeTool(
       return `Perfil atualizado: ${updates.join(", ")}`;
     }
 
-    // ==================== AUTO-APRENDIZAGEM (NOVO) ====================
+    // ==================== AUTO-APRENDIZAGEM ====================
     case "auto_learn": {
       const { data, error } = await supabase
         .from("ff_memory_items")
@@ -1037,7 +1150,7 @@ async function executeTool(
       return `Aprendizado salvo: "${args.learned_fact}"`;
     }
 
-    // ==================== BUSCA NO HISTÓRICO (NOVO) ====================
+    // ==================== BUSCA NO HISTÓRICO ====================
     case "search_conversation_history": {
       let query = supabase
         .from("ff_conversation_messages")
@@ -1096,7 +1209,7 @@ async function fetchUserContext(supabase: any, userId: string, tenantId: string)
     pendingBillsTodayResult,
     pendingBillsWeekResult,
     memoriesResult,
-    learnedInsightsResult,  // NEW: Fetch learned insights
+    learnedInsightsResult,
     habitsResult,
     habitLogsResult,
     eventsResult,
@@ -1109,7 +1222,6 @@ async function fetchUserContext(supabase: any, userId: string, tenantId: string)
     supabase.from("transactions").select("id, descricao, valor").eq("user_id", userId).eq("tipo", "despesa").eq("status", "pendente").eq("data", today).is("deleted_at", null).limit(5),
     supabase.from("transactions").select("id, descricao, valor, data").eq("user_id", userId).eq("tipo", "despesa").eq("status", "pendente").gte("data", today).lte("data", new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]).is("deleted_at", null).limit(10),
     supabase.from("ff_memory_items").select("kind, title, content").eq("tenant_id", tenantId).in("kind", ["profile", "preference", "decision"]).order("created_at", { ascending: false }).limit(5),
-    // NEW: Fetch learned insights
     supabase.from("ff_memory_items").select("content, title, metadata").eq("tenant_id", tenantId).eq("kind", "learned").order("created_at", { ascending: false }).limit(15),
     supabase.from("ff_habits").select("id, title, cadence, times_per_cadence, target_value").eq("tenant_id", tenantId).eq("active", true).limit(10),
     supabase.from("ff_habit_logs").select("habit_id, value").eq("tenant_id", tenantId).eq("log_date", today),
@@ -1132,7 +1244,7 @@ async function fetchUserContext(supabase: any, userId: string, tenantId: string)
   const billsWeek = pendingBillsWeekResult.data || [];
   const billsWeekTotal = billsWeek.reduce((sum: number, b: any) => sum + (b.valor || 0), 0);
   const memories = memoriesResult.data || [];
-  const learnedInsights = learnedInsightsResult.data || [];  // NEW
+  const learnedInsights = learnedInsightsResult.data || [];
 
   const habits = habitsResult.data || [];
   const habitLogs = habitLogsResult.data || [];
@@ -1177,7 +1289,7 @@ async function fetchUserContext(supabase: any, userId: string, tenantId: string)
       billsWeekCount: billsWeek.length,
       billsWeekTotal,
       memories,
-      learnedInsights,  // NEW
+      learnedInsights,
       habitsWithProgress,
       habitsCompleted,
       habitsPending,
@@ -1223,6 +1335,8 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const errorId = crypto.randomUUID().slice(0, 8);
 
   try {
     const authHeader = req.headers.get("Authorization");
@@ -1296,29 +1410,63 @@ serve(async (req) => {
       convId = newConv.id;
     }
 
-    await supabase.from("ff_conversation_messages").insert({
+    // Insert user message FIRST
+    const { data: insertedUserMsg } = await supabase.from("ff_conversation_messages").insert({
       conversation_id: convId,
       tenant_id: tenantId,
       role: "user",
       content: message,
-    });
+    }).select("id, created_at").single();
 
-    const { data: history } = await supabase
+    // ==================== FIX: Fetch LAST 15 messages (not first) ====================
+    const { data: historyRaw } = await supabase
       .from("ff_conversation_messages")
-      .select("role, content, tool_calls, tool_call_id")
+      .select("id, role, content, tool_calls, tool_call_id, created_at")
       .eq("conversation_id", convId)
       .in("role", ["user", "assistant"])
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })  // Get most recent first
       .limit(15);
+
+    // Reverse to chronological order (oldest to newest)
+    const history = (historyRaw || []).reverse();
+
+    // Safety check: ensure the just-inserted user message is included
+    const lastHistoryMsg = history[history.length - 1];
+    const userMsgIncluded = lastHistoryMsg && 
+      lastHistoryMsg.role === "user" && 
+      lastHistoryMsg.content === message;
+
+    if (!userMsgIncluded && insertedUserMsg) {
+      console.log("[JARVIS] User message not in history, forcing inclusion");
+      history.push({
+        id: insertedUserMsg.id,
+        role: "user",
+        content: message,
+        tool_calls: null,
+        tool_call_id: null,
+        created_at: insertedUserMsg.created_at,
+      });
+    }
+
+    console.log(`[JARVIS] Conv=${convId}, History count=${history.length}, Last msg role=${history[history.length - 1]?.role}`);
 
     const systemPrompt = buildSystemPrompt(userProfile, userContext);
 
+    // Filter out empty assistant messages (tool-call-only messages)
     const messages: any[] = [
       { role: "system", content: systemPrompt },
-      ...(history || []).map((m: any) => ({
-        role: m.role,
-        content: m.content,
-      })),
+      ...(history || [])
+        .filter((m: any) => {
+          // Include all user messages
+          if (m.role === "user") return true;
+          // Only include assistant messages with actual content
+          if (m.role === "assistant") return m.content && m.content.trim().length > 0;
+          return false;
+        })
+        .map((m: any) => ({
+          role: m.role,
+          content: m.content,
+        })),
     ];
 
     // Call OpenAI API directly with o3 as orchestrator
@@ -1337,7 +1485,7 @@ serve(async (req) => {
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error("OpenAI error:", aiResponse.status, errorText);
+      console.error(`[JARVIS][${errorId}] OpenAI error:`, aiResponse.status, errorText);
       
       if (aiResponse.status === 429) {
         return new Response(
@@ -1358,9 +1506,14 @@ serve(async (req) => {
     let assistantMessage = aiData.choices?.[0]?.message;
 
     // Handle tool calls loop
-    while (assistantMessage?.tool_calls?.length > 0) {
-      console.log("Tool calls:", JSON.stringify(assistantMessage.tool_calls));
+    let toolIterations = 0;
+    const MAX_TOOL_ITERATIONS = 10;
 
+    while (assistantMessage?.tool_calls?.length > 0 && toolIterations < MAX_TOOL_ITERATIONS) {
+      toolIterations++;
+      console.log(`[JARVIS] Tool iteration ${toolIterations}:`, assistantMessage.tool_calls.map((tc: any) => tc.function.name));
+
+      // Save assistant message with tool_calls
       await supabase.from("ff_conversation_messages").insert({
         conversation_id: convId,
         tenant_id: tenantId,
@@ -1371,14 +1524,22 @@ serve(async (req) => {
 
       const toolResults: any[] = [];
       for (const toolCall of assistantMessage.tool_calls) {
-        const args = JSON.parse(toolCall.function.arguments || "{}");
-        const result = await executeTool(
-          toolCall.function.name,
-          args,
-          supabase,
-          tenantId,
-          user.id
-        );
+        // Safe JSON parse
+        const args = safeJsonParse(toolCall.function.arguments);
+        
+        let result: string;
+        try {
+          result = await executeTool(
+            toolCall.function.name,
+            args,
+            supabase,
+            tenantId,
+            user.id
+          );
+        } catch (toolError) {
+          console.error(`[JARVIS][${errorId}] Tool execution error:`, toolError);
+          result = `Erro ao executar ${toolCall.function.name}: ${toolError instanceof Error ? toolError.message : 'Erro desconhecido'}`;
+        }
 
         toolResults.push({
           role: "tool",
@@ -1406,13 +1567,15 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: AGENT_MODEL,  // Use lighter model for tool processing
+          model: AGENT_MODEL,
           messages,
           tools: TOOLS,
         }),
       });
 
       if (!aiResponse.ok) {
+        const errorText = await aiResponse.text();
+        console.error(`[JARVIS][${errorId}] OpenAI tool follow-up error:`, aiResponse.status, errorText);
         throw new Error(`OpenAI error on tool follow-up: ${aiResponse.status}`);
       }
 
@@ -1420,7 +1583,14 @@ serve(async (req) => {
       assistantMessage = aiData.choices?.[0]?.message;
     }
 
-    const finalContent = assistantMessage?.content || "Desculpe, não consegui processar sua solicitação.";
+    // Final response
+    let finalContent = assistantMessage?.content;
+    
+    if (!finalContent || finalContent.trim().length === 0) {
+      console.error(`[JARVIS][${errorId}] Empty response from AI`);
+      finalContent = "Tive um problema ao gerar a resposta. Pode tentar novamente?";
+    }
+
     await supabase.from("ff_conversation_messages").insert({
       conversation_id: convId,
       tenant_id: tenantId,
@@ -1436,9 +1606,12 @@ serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error("Chat error:", error);
+    console.error(`[JARVIS][${errorId}] Chat error:`, error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Erro desconhecido" }),
+      JSON.stringify({ 
+        error: "Ocorreu um erro ao processar sua mensagem. Tente novamente.",
+        errorId: errorId,
+      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

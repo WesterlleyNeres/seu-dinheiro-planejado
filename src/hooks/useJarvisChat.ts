@@ -43,9 +43,17 @@ export function useJarvisChat() {
       
       if (error) throw error;
       
-      // Filter out tool messages for display
+      // Filter out tool messages AND empty assistant messages for display
       return (data as ConversationMessage[])
-        .filter((m) => m.role === "user" || m.role === "assistant")
+        .filter((m) => {
+          // Always show user messages
+          if (m.role === "user") return true;
+          // Only show assistant messages with actual content (not tool-call-only)
+          if (m.role === "assistant") {
+            return m.content && m.content.trim().length > 0 && !m.tool_calls;
+          }
+          return false;
+        })
         .map((m) => ({
           id: m.id,
           role: m.role as "user" | "assistant",
