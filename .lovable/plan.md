@@ -1,66 +1,13 @@
-# JARVIS - Plano de Implementação
 
-## Status das Fases
+# Plano: Fase 4 - Unificação WhatsApp + Web
 
-| Fase | Status | Descrição |
-|------|--------|-----------|
-| Fase 1 | ✅ Concluída | Chat Web com IA básico |
-| Fase 2.1 | ✅ Concluída | Tools de Finanças + Perfil do Usuário |
-| Fase 2.2 | ✅ Concluída | Injeção de Contexto Avançada |
-| Fase 3 | ✅ Concluída | Importador de Histórico ChatGPT |
-| Fase 4 | ⏳ Pendente | Unificação WhatsApp + Web |
+## Objetivo
+
+Substituir o `ff-whatsapp-ingest` baseado em regex por inteligência artificial completa, compartilhando o motor de IA do `ff-jarvis-chat` para que mensagens via WhatsApp tenham a mesma experiência inteligente do chat web.
 
 ---
 
-## Fase 3: Importador de Histórico ChatGPT ✅
-
-### Implementado
-
-1. **Parser (`src/lib/chatgptParser.ts`)**
-   - `parseExportFile()` - Valida e parseia arquivo JSON
-   - `extractMessages()` - Extrai mensagens do mapping
-   - `generateHash()` - Hash djb2 para deduplicação
-   - `mapToMemoryItem()` - Converte para formato ff_memory_items
-
-2. **Hook (`src/hooks/useChatGPTImport.ts`)**
-   - Estado multi-step (upload → select → importing → done)
-   - Seleção de conversas com toggle individual
-   - Verificação de duplicatas por hash
-   - Inserção em batches de 50 mensagens
-   - Progress tracking em tempo real
-
-3. **UI (`src/components/jarvis/ChatGPTImporter.tsx`)**
-   - Dialog com 4 etapas visuais
-   - Drag-and-drop para upload
-   - Lista de conversas com checkboxes
-   - Progress bar durante importação
-   - Resumo final (importadas, duplicatas, erros)
-
-4. **Integração (`src/pages/JarvisMemory.tsx`)**
-   - Botão "Importar ChatGPT" no header
-   - Filtros para tipos chatgpt_user e chatgpt_assistant
-
-### Mapeamento de Dados
-
-| ChatGPT | ff_memory_items |
-|---------|-----------------|
-| `conversation.title` | `title` |
-| `message.content.parts[0]` | `content` |
-| `message.author.role` | `kind` (chatgpt_user / chatgpt_assistant) |
-| - | `source: 'chatgpt'` |
-| `conversation.id` | `metadata.conversation_id` |
-| `message.create_time` | `metadata.original_timestamp` |
-| `hash(content)` | `metadata.content_hash` |
-
----
-
-## Fase 4: Unificação WhatsApp + Web (Próxima)
-
-### Objetivo
-
-Substituir o `ff-whatsapp-ingest` baseado em regex por IA completa, reutilizando o motor do `ff-jarvis-chat`.
-
-### Arquitetura Proposta
+## Arquitetura Atual vs Proposta
 
 ```text
 ANTES (Atual):
@@ -70,15 +17,206 @@ ANTES (Atual):
 +------------+     +---------------------+     +--------+
 
 DEPOIS (Proposto):
-+------------+     +---------------------+     +------------------+     +--------+
-| WhatsApp   | --> | ff-whatsapp-ingest  | --> | ff-jarvis-chat   | --> | DB     |
-| (n8n)      |     | (resolve user)      |     | (motor IA)       |     |        |
-+------------+     +---------------------+     +------------------+     +--------+
++------------+     +---------------------+     +--------+
+| WhatsApp   | --> | ff-whatsapp-ingest  | --> | DB     |
+| (n8n)      |     | (motor IA completo) |     |        |
++------------+     +---------------------+     +--------+
+                          |
+                          v
+                   [Mesmas 16 tools]
+                   [Contexto avançado]
+                   [Histórico unificado]
 ```
 
-### Tarefas
+---
 
-1. Extrair lógica principal do `ff-jarvis-chat` para `_shared/jarvis-engine.ts`
-2. Refatorar `ff-whatsapp-ingest` para usar o motor compartilhado
-3. Unificar histórico em `ff_conversation_messages` com `channel: 'whatsapp'`
-4. Testar fluxo completo WhatsApp → IA → Resposta
+## O que será implementado
+
+| Item | Descrição |
+|------|-----------|
+| Mover lógica de IA para `ff-whatsapp-ingest` | Incorporar motor de IA completo na função |
+| Compartilhar tools | Mesmas 16+ tools do chat web disponíveis |
+| Histórico unificado | Mensagens em `ff_conversation_messages` com `channel: 'whatsapp'` |
+| Contexto avançado | Injeção de memórias, finanças, hábitos, eventos |
+| Resposta inteligente | JARVIS responde com linguagem natural |
+
+---
+
+## Detalhes Técnicos
+
+### Estrutura do ff-whatsapp-ingest Refatorado
+
+O arquivo será refatorado para:
+
+1. **Manter autenticação via x-n8n-token** (não usa JWT)
+2. **Resolver user/tenant pelo telefone** (igual hoje)
+3. **Implementar motor de IA completo** com:
+   - `TOOLS` - Mesma definição de 16+ tools
+   - `executeTool()` - Execução de todas as ferramentas
+   - `buildSystemPrompt()` - Prompt dinâmico com contexto
+   - `fetchUserContext()` - Busca memórias, finanças, hábitos
+4. **Gerenciar conversas por WhatsApp**:
+   - Busca conversa ativa do usuário com `channel: 'whatsapp'`
+   - Cria nova conversa se não existir
+   - Salva mensagens em `ff_conversation_messages`
+5. **Responder via campo `reply`** para o n8n enviar de volta
+
+### Diferenças do Chat Web
+
+| Aspecto | Chat Web | WhatsApp |
+|---------|----------|----------|
+| Autenticação | JWT (Bearer token) | x-n8n-token + telefone |
+| Resolução de usuário | `auth.getUser(token)` | Busca por `ff_user_phones` |
+| Canal da conversa | `channel: 'web'` | `channel: 'whatsapp'` |
+| Resposta | JSON `{ message, conversationId }` | JSON `{ ok, reply }` |
+
+### Fluxo de Mensagem
+
+```text
+1. n8n recebe mensagem do WhatsApp
+         |
+         v
+2. Chama ff-whatsapp-ingest com { phone_e164, text }
+         |
+         v
+3. Valida token n8n
+         |
+         v
+4. Resolve user/tenant pelo telefone verificado
+         |
+         v
+5. Busca ou cria conversa com channel='whatsapp'
+         |
+         v
+6. Salva mensagem do usuário
+         |
+         v
+7. Carrega histórico + contexto avançado
+         |
+         v
+8. Chama Lovable AI com tools
+         |
+         v
+9. Loop de tool calls (se necessário)
+         |
+         v
+10. Salva resposta do assistente
+         |
+         v
+11. Retorna { ok: true, reply: "resposta humanizada" }
+         |
+         v
+12. n8n envia resposta ao WhatsApp
+```
+
+---
+
+## Arquivos a Modificar
+
+| Arquivo | Ação | Descrição |
+|---------|------|-----------|
+| `supabase/functions/ff-whatsapp-ingest/index.ts` | Refatorar | Incorporar motor de IA completo |
+| `.lovable/plan.md` | Atualizar | Marcar Fase 4 como concluída |
+
+### Estrutura do Novo ff-whatsapp-ingest
+
+```typescript
+// 1. Imports e constantes
+import { serve } from "...";
+import { createClient } from "...";
+
+const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const MODEL = "google/gemini-3-flash-preview";
+
+// 2. System Prompt Builder (igual ao ff-jarvis-chat)
+function buildSystemPrompt(userProfile, userContext) { ... }
+
+// 3. Tools (mesma definição)
+const TOOLS = [ ... ];
+
+// 4. Tool Executor (mesmo código)
+async function executeTool(...) { ... }
+
+// 5. Context Fetcher (mesmo código)
+async function fetchUserContext(...) { ... }
+
+// 6. Handler principal
+serve(async (req) => {
+  // Validar token n8n
+  // Resolver user pelo telefone
+  // Buscar/criar conversa WhatsApp
+  // Salvar mensagem
+  // Chamar IA
+  // Processar tool calls
+  // Salvar resposta
+  // Retornar { ok, reply }
+});
+```
+
+---
+
+## Exemplo de Interação
+
+**Antes (regex):**
+```text
+Usuário: "gastei 50 no uber"
+JARVIS: "🤔 Não entendi. Tente: • tarefa: comprar leite..."
+```
+
+**Depois (IA completa):**
+```text
+Usuário: "gastei 50 no uber"
+JARVIS: "Despesa de R$ 50,00 registrada na carteira Principal, 
+         categoria Transporte. Seu saldo atual é R$ 1.205,00. 
+         Vi que você já gastou R$ 320,00 em transporte este mês!"
+```
+
+---
+
+## Histórico Unificado
+
+Após implementação:
+- Chat web verá mensagens enviadas pelo WhatsApp
+- WhatsApp terá contexto do que foi falado no web
+- Todas as conversas ficam em `ff_conversations` com `channel` indicando origem
+
+### Consulta de exemplo:
+```sql
+SELECT * FROM ff_conversation_messages 
+WHERE conversation_id IN (
+  SELECT id FROM ff_conversations 
+  WHERE user_id = 'xxx' 
+  ORDER BY created_at DESC 
+  LIMIT 1
+);
+-- Retorna mensagens de AMBOS os canais (web e whatsapp)
+```
+
+---
+
+## Configurações Mantidas
+
+- `verify_jwt = false` no config.toml (autenticação via x-n8n-token)
+- Validação do `N8N_WEBHOOK_TOKEN` como secret
+- Fluxo de verificação de telefone permanece o mesmo
+
+---
+
+## Tamanho Estimado
+
+O arquivo `ff-whatsapp-ingest` atual tem ~280 linhas.
+O novo arquivo terá ~1200 linhas (semelhante ao `ff-jarvis-chat`), pois incluirá:
+- 500 linhas: Definição de TOOLS
+- 400 linhas: executeTool()
+- 200 linhas: buildSystemPrompt() + fetchUserContext()
+- 100 linhas: Handler principal
+
+---
+
+## Benefícios
+
+1. **Experiência unificada** - Mesma qualidade de resposta em todos os canais
+2. **Contexto completo** - WhatsApp sabe sobre finanças, hábitos, eventos
+3. **Proatividade** - JARVIS pode mencionar contas vencendo, hábitos pendentes
+4. **Histórico compartilhado** - Continuidade entre canais
+5. **Manutenção simplificada** - Um só motor de IA para evoluir
