@@ -9,7 +9,7 @@ const corsHeaders = {
 const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const MODEL = "google/gemini-3-flash-preview";
 
-// Helper to build dynamic system prompt with user context
+// Helper to build dynamic system prompt with user context - FASE 2.2: Contexto Avançado
 function buildSystemPrompt(userProfile: any, userContext: any): string {
   const today = new Date().toLocaleDateString('pt-BR', { 
     weekday: 'long', 
@@ -22,37 +22,106 @@ function buildSystemPrompt(userProfile: any, userContext: any): string {
   const isNewUser = !userProfile || !userProfile.onboarding_completed;
   const interactionCount = userProfile?.interaction_count || 0;
 
-  let userContextSection = '';
+  // Build rich context sections
+  let contextSections = '';
   
+  // === USER PROFILE SECTION ===
   if (userProfile) {
-    userContextSection = `
+    contextSections += `
 SOBRE O USUÁRIO ATUAL:
 - Nome/Apelido: ${nickname}
 - Onboarding completo: ${userProfile.onboarding_completed ? 'Sim' : 'Não'}
 - Etapa do onboarding: ${userProfile.onboarding_step || 'welcome'}
 - Total de interações: ${interactionCount}
 - Última interação: ${userProfile.last_interaction_at ? new Date(userProfile.last_interaction_at).toLocaleDateString('pt-BR') : 'Primeira vez'}
-- Preferências: ${JSON.stringify(userProfile.preferences || {})}
 `;
   }
 
+  // === MEMORIES SECTION (profile, preferences, decisions) ===
+  if (userContext?.memories?.length > 0) {
+    contextSections += `
+MEMÓRIAS RELEVANTES:
+${userContext.memories.map((m: any) => `- [${m.kind}] ${m.title || m.content.substring(0, 50)}`).join('\n')}
+`;
+  }
+
+  // === FINANCIAL SECTION ===
   if (userContext) {
+    contextSections += `
+RESUMO FINANCEIRO:`;
+    
     if (userContext.wallets?.length > 0) {
-      userContextSection += `\nCARTEIRAS DO USUÁRIO:\n${userContext.wallets.map((w: any) => `- ${w.nome} (${w.tipo}): R$ ${(w.saldo || 0).toFixed(2)}`).join('\n')}`;
+      contextSections += `
+- Saldo total: R$ ${userContext.totalBalance?.toFixed(2) || '0.00'}
+- Carteiras: ${userContext.wallets.map((w: any) => `${w.nome} (R$ ${w.saldo?.toFixed(2)})`).join(', ')}`;
     } else {
-      userContextSection += `\nCARTEIRAS: O usuário ainda não tem carteiras cadastradas.`;
+      contextSections += `
+- O usuário ainda não tem carteiras cadastradas.`;
     }
 
-    if (userContext.pendingTasks > 0) {
-      userContextSection += `\n\nTAREFAS PENDENTES HOJE: ${userContext.pendingTasks}`;
+    if (userContext.billsTodayCount > 0) {
+      contextSections += `
+- ⚠️ Contas vencendo HOJE: ${userContext.billsTodayCount} (R$ ${userContext.billsTodayTotal?.toFixed(2)})`;
+      if (userContext.billsToday?.length > 0) {
+        contextSections += ` - ${userContext.billsToday.slice(0, 3).map((b: any) => b.descricao).join(', ')}`;
+      }
     }
 
-    if (userContext.pendingBills > 0) {
-      userContextSection += `\nCONTAS A VENCER HOJE: ${userContext.pendingBills}`;
+    if (userContext.billsWeekCount > 0 && userContext.billsWeekCount > userContext.billsTodayCount) {
+      contextSections += `
+- Contas vencendo esta semana: ${userContext.billsWeekCount} (R$ ${userContext.billsWeekTotal?.toFixed(2)})`;
+    }
+
+    if (userContext.expenseComparison) {
+      const comp = userContext.expenseComparison;
+      contextSections += `
+- Gastos este mês: R$ ${comp.current?.toFixed(2)} (${Math.abs(comp.percentChange)}% ${comp.trend} do mês anterior)`;
+    } else if (userContext.monthExpenses > 0) {
+      contextSections += `
+- Gastos este mês: R$ ${userContext.monthExpenses?.toFixed(2)}`;
     }
   }
 
+  // === HABITS SECTION ===
+  if (userContext?.habitsWithProgress?.length > 0) {
+    contextSections += `
+
+HÁBITOS DE HOJE:`;
+    userContext.habitsWithProgress.forEach((h: any) => {
+      const status = h.completed ? '✅' : '⏳';
+      contextSections += `
+- ${status} ${h.title}${h.completed ? ' (concluído)' : ' (pendente)'}`;
+    });
+    contextSections += `
+- Resumo: ${userContext.habitsCompleted} concluídos, ${userContext.habitsPending} pendentes`;
+  }
+
+  // === TASKS SECTION ===
+  if (userContext?.tasksToday?.length > 0) {
+    contextSections += `
+
+TAREFAS PARA HOJE:`;
+    userContext.tasksToday.forEach((t: any) => {
+      const priority = t.priority === 'high' ? '🔴' : t.priority === 'medium' ? '🟡' : '🟢';
+      contextSections += `
+- ${priority} ${t.title}`;
+    });
+  }
+
+  // === EVENTS SECTION ===
+  if (userContext?.upcomingEvents?.length > 0) {
+    contextSections += `
+
+PRÓXIMOS EVENTOS (24h):`;
+    userContext.upcomingEvents.forEach((e: any) => {
+      const time = e.all_day ? 'Dia inteiro' : new Date(e.start_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      contextSections += `
+- ${time} - ${e.title}${e.location ? ` (${e.location})` : ''}`;
+    });
+  }
+
   const onboardingInstructions = isNewUser ? `
+
 INSTRUÇÕES DE ONBOARDING (USUÁRIO NOVO):
 Este é um usuário novo ou que ainda não completou o onboarding. Siga estas etapas:
 
@@ -65,17 +134,19 @@ Este é um usuário novo ou que ainda não completou o onboarding. Siga estas et
 Seja acolhedor, não sobrecarregue com muitas perguntas de uma vez.
 ` : '';
 
+  const proactiveHints = !isNewUser && userContext ? buildProactiveHints(userContext) : '';
+
   return `Você é JARVIS (Just A Rather Very Intelligent System), o assistente pessoal inteligente do ${nickname}.
 Você é inspirado no mordomo digital do Tony Stark - refinado, inteligente, e ligeiramente sarcástico.
 
 PERSONALIDADE:
 - Tom britânico refinado, com elegância e precisão
-- Proativo: sugere ações antes que o usuário precise pedir
+- Proativo: mencione informações relevantes do contexto ao cumprimentar
 - Levemente sarcástico, mas sempre respeitoso e prestativo
 - Você conhece profundamente seu usuário através das memórias e contexto
 - NUNCA invente informações - sempre consulte dados reais usando as ferramentas
 
-${userContextSection}
+${contextSections}
 
 CAPACIDADES COMPLETAS:
 📊 FINANÇAS:
@@ -108,8 +179,8 @@ REGRAS FUNDAMENTAIS:
 5. Ao salvar informações pessoais, use create_memory com kind='profile'
 6. Formate valores em R$ com 2 casas decimais
 7. Datas no formato brasileiro (DD/MM/YYYY)
-8. Seja proativo: "Vi que você tem X contas vencendo hoje..."
-
+8. Seja PROATIVO: ao cumprimentar, mencione informações relevantes do contexto
+${proactiveHints}
 ${onboardingInstructions}
 
 FLUXO PARA REGISTRAR DESPESA/RECEITA:
@@ -121,6 +192,40 @@ FLUXO PARA REGISTRAR DESPESA/RECEITA:
 6. Confirme: "Despesa de R$ X registrada na carteira Y, categoria Z"
 
 Hoje é: ${today}`;
+}
+
+// Build proactive hints based on context
+function buildProactiveHints(context: any): string {
+  const hints: string[] = [];
+  
+  if (context.billsTodayCount > 0) {
+    hints.push(`- Se o usuário disser "bom dia/boa tarde/olá", mencione as ${context.billsTodayCount} contas vencendo hoje`);
+  }
+  
+  if (context.habitsPending > 0) {
+    hints.push(`- Pode mencionar que ainda faltam ${context.habitsPending} hábitos para completar hoje`);
+  }
+  
+  if (context.tasksToday?.length > 0) {
+    hints.push(`- O usuário tem ${context.tasksToday.length} tarefas para hoje`);
+  }
+  
+  if (context.upcomingEvents?.length > 0) {
+    hints.push(`- Lembre o usuário sobre os próximos compromissos se relevante`);
+  }
+  
+  if (context.expenseComparison?.percentChange > 20) {
+    hints.push(`- Os gastos estão ${context.expenseComparison.percentChange}% acima do mês anterior - pode sugerir cuidado`);
+  }
+  
+  if (hints.length > 0) {
+    return `
+
+DICAS PROATIVAS (use quando apropriado):
+${hints.join('\n')}`;
+  }
+  
+  return '';
 }
 
 // Tool definitions for the AI
@@ -1014,53 +1119,230 @@ async function executeTool(
   }
 }
 
-// Fetch user context for system prompt
+// Fetch user context for system prompt - FASE 2.2: Contexto Avançado
 async function fetchUserContext(supabase: any, userId: string, tenantId: string) {
   const today = new Date().toISOString().split("T")[0];
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const next24h = tomorrow.toISOString();
+  
+  // Get current month bounds for financial summary
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+  
+  // Get previous month bounds for comparison
+  const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split("T")[0];
+  const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split("T")[0];
 
-  // Fetch user profile
-  const { data: profile } = await supabase
-    .from("ff_user_profiles")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("tenant_id", tenantId)
-    .single();
+  // Parallel fetches for all context data
+  const [
+    profileResult,
+    walletsResult,
+    pendingTasksResult,
+    pendingBillsTodayResult,
+    pendingBillsWeekResult,
+    memoriesResult,
+    habitsResult,
+    habitLogsResult,
+    eventsResult,
+    monthExpensesResult,
+    prevMonthExpensesResult,
+  ] = await Promise.all([
+    // 1. User profile
+    supabase
+      .from("ff_user_profiles")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("tenant_id", tenantId)
+      .single(),
+    
+    // 2. Wallets with balances
+    supabase
+      .from("v_wallet_balance")
+      .select("wallet_id, wallet_nome, wallet_tipo, saldo")
+      .eq("user_id", userId),
+    
+    // 3. Pending tasks for today
+    supabase
+      .from("ff_tasks")
+      .select("id, title, priority, due_at")
+      .eq("tenant_id", tenantId)
+      .eq("due_at", today)
+      .neq("status", "done")
+      .limit(5),
+    
+    // 4. Pending bills for today
+    supabase
+      .from("transactions")
+      .select("id, descricao, valor")
+      .eq("user_id", userId)
+      .eq("tipo", "despesa")
+      .eq("status", "pendente")
+      .eq("data", today)
+      .is("deleted_at", null)
+      .limit(5),
+    
+    // 5. Pending bills for this week
+    supabase
+      .from("transactions")
+      .select("id, descricao, valor, data")
+      .eq("user_id", userId)
+      .eq("tipo", "despesa")
+      .eq("status", "pendente")
+      .gte("data", today)
+      .lte("data", new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
+      .is("deleted_at", null)
+      .limit(10),
+    
+    // 6. Recent memories (profile and preferences)
+    supabase
+      .from("ff_memory_items")
+      .select("kind, title, content")
+      .eq("tenant_id", tenantId)
+      .in("kind", ["profile", "preference", "decision"])
+      .order("created_at", { ascending: false })
+      .limit(5),
+    
+    // 7. Active habits
+    supabase
+      .from("ff_habits")
+      .select("id, title, cadence, times_per_cadence, target_value")
+      .eq("tenant_id", tenantId)
+      .eq("active", true)
+      .limit(10),
+    
+    // 8. Habit logs for today
+    supabase
+      .from("ff_habit_logs")
+      .select("habit_id, value")
+      .eq("tenant_id", tenantId)
+      .eq("log_date", today),
+    
+    // 9. Events in next 24 hours
+    supabase
+      .from("ff_events")
+      .select("id, title, start_at, location, all_day")
+      .eq("tenant_id", tenantId)
+      .eq("status", "scheduled")
+      .gte("start_at", now.toISOString())
+      .lte("start_at", next24h)
+      .order("start_at", { ascending: true })
+      .limit(5),
+    
+    // 10. Total expenses this month
+    supabase
+      .from("transactions")
+      .select("valor")
+      .eq("user_id", userId)
+      .eq("tipo", "despesa")
+      .eq("status", "paga")
+      .gte("data", startOfMonth)
+      .lte("data", endOfMonth)
+      .is("deleted_at", null),
+    
+    // 11. Total expenses previous month (for comparison)
+    supabase
+      .from("transactions")
+      .select("valor")
+      .eq("user_id", userId)
+      .eq("tipo", "despesa")
+      .eq("status", "paga")
+      .gte("data", startOfPrevMonth)
+      .lte("data", endOfPrevMonth)
+      .is("deleted_at", null),
+  ]);
 
-  // Fetch wallets with balances
-  const { data: wallets } = await supabase
-    .from("v_wallet_balance")
-    .select("wallet_id, wallet_nome, wallet_tipo, saldo")
-    .eq("user_id", userId);
+  // Process wallets
+  const wallets = walletsResult.data?.map((w: any) => ({
+    id: w.wallet_id,
+    nome: w.wallet_nome,
+    tipo: w.wallet_tipo,
+    saldo: w.saldo || 0,
+  })) || [];
 
-  // Count pending tasks for today
-  const { count: pendingTasks } = await supabase
-    .from("ff_tasks")
-    .select("*", { count: "exact", head: true })
-    .eq("tenant_id", tenantId)
-    .eq("due_at", today)
-    .neq("status", "done");
+  // Calculate total balance
+  const totalBalance = wallets.reduce((sum: number, w: any) => sum + (w.saldo || 0), 0);
 
-  // Count pending bills for today
-  const { count: pendingBills } = await supabase
-    .from("transactions")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .eq("tipo", "despesa")
-    .eq("status", "pendente")
-    .eq("data", today)
-    .is("deleted_at", null);
+  // Process pending tasks
+  const tasksToday = pendingTasksResult.data || [];
+
+  // Process pending bills
+  const billsToday = pendingBillsTodayResult.data || [];
+  const billsTodayTotal = billsToday.reduce((sum: number, b: any) => sum + (b.valor || 0), 0);
+  
+  const billsWeek = pendingBillsWeekResult.data || [];
+  const billsWeekTotal = billsWeek.reduce((sum: number, b: any) => sum + (b.valor || 0), 0);
+
+  // Process memories
+  const memories = memoriesResult.data || [];
+
+  // Process habits with today's progress
+  const habits = habitsResult.data || [];
+  const habitLogs = habitLogsResult.data || [];
+  const habitLogsMap = new Map(habitLogs.map((l: any) => [l.habit_id, l.value]));
+  
+  const habitsWithProgress = habits.map((h: any) => ({
+    id: h.id,
+    title: h.title,
+    target: h.target_value,
+    completed: habitLogsMap.has(h.id),
+    value: habitLogsMap.get(h.id) || 0,
+  }));
+
+  const habitsCompleted = habitsWithProgress.filter((h: any) => h.completed).length;
+  const habitsPending = habitsWithProgress.filter((h: any) => !h.completed).length;
+
+  // Process events
+  const upcomingEvents = eventsResult.data || [];
+
+  // Calculate expense comparison
+  const monthExpenses = (monthExpensesResult.data || []).reduce((sum: number, t: any) => sum + (t.valor || 0), 0);
+  const prevMonthExpenses = (prevMonthExpensesResult.data || []).reduce((sum: number, t: any) => sum + (t.valor || 0), 0);
+  
+  let expenseComparison = null;
+  if (prevMonthExpenses > 0) {
+    const percentChange = ((monthExpenses - prevMonthExpenses) / prevMonthExpenses) * 100;
+    expenseComparison = {
+      current: monthExpenses,
+      previous: prevMonthExpenses,
+      percentChange: Math.round(percentChange),
+      trend: percentChange > 0 ? "acima" : percentChange < 0 ? "abaixo" : "igual",
+    };
+  }
 
   return {
-    profile,
+    profile: profileResult.data,
     context: {
-      wallets: wallets?.map((w: any) => ({
-        id: w.wallet_id,
-        nome: w.wallet_nome,
-        tipo: w.wallet_tipo,
-        saldo: w.saldo,
-      })),
-      pendingTasks: pendingTasks || 0,
-      pendingBills: pendingBills || 0,
+      // Basic context
+      wallets,
+      totalBalance,
+      
+      // Tasks
+      tasksToday,
+      pendingTasksCount: tasksToday.length,
+      
+      // Bills
+      billsToday,
+      billsTodayCount: billsToday.length,
+      billsTodayTotal,
+      billsWeekCount: billsWeek.length,
+      billsWeekTotal,
+      
+      // Memories (profile, preferences, decisions)
+      memories,
+      
+      // Habits
+      habitsWithProgress,
+      habitsCompleted,
+      habitsPending,
+      
+      // Events
+      upcomingEvents,
+      
+      // Financial summary
+      monthExpenses,
+      expenseComparison,
     },
   };
 }

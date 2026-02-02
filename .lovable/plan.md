@@ -7,8 +7,8 @@
 |------|--------|-----------|
 | Fase 1 | ✅ Concluida | Chat Web com IA basico |
 | Fase 2.1 | ✅ Concluida | Tools de Financas + Perfil do Usuario |
-| **Fase 2.2** | 🎯 Proxima | Injecao de Contexto Avancada |
-| Fase 3 | ⏳ Pendente | Importador de Historico ChatGPT |
+| Fase 2.2 | ✅ Concluida | Injecao de Contexto Avancada |
+| **Fase 3** | 🎯 Proxima | Importador de Historico ChatGPT |
 | Fase 4 | ⏳ Pendente | Unificacao WhatsApp + Web |
 
 ---
