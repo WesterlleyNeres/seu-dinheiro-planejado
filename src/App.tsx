@@ -6,8 +6,8 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { AppLayout } from "@/components/layout/AppLayout";
-import { JarvisLayout } from "@/components/layout/JarvisLayout";
+import { OnboardingGuard } from "@/components/OnboardingGuard";
+import { UnifiedLayout } from "@/components/layout/UnifiedLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Landing from "./pages/Landing";
 import Dashboard from "./pages/Dashboard";
@@ -47,11 +47,35 @@ const LandingOrDashboard = () => {
   }
   
   if (user) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/jarvis/chat" replace />;
   }
   
   return <Landing />;
 };
+
+// Wrapper component for protected routes with unified layout
+const ProtectedPage = ({ children }: { children: React.ReactNode }) => (
+  <ProtectedRoute>
+    <ErrorBoundary>
+      <OnboardingGuard>
+        <UnifiedLayout>
+          {children}
+        </UnifiedLayout>
+      </OnboardingGuard>
+    </ErrorBoundary>
+  </ProtectedRoute>
+);
+
+// Wrapper for onboarding-allowed routes (like chat during onboarding)
+const ProtectedPageNoGuard = ({ children }: { children: React.ReactNode }) => (
+  <ProtectedRoute>
+    <ErrorBoundary>
+      <UnifiedLayout>
+        {children}
+      </UnifiedLayout>
+    </ErrorBoundary>
+  </ProtectedRoute>
+);
 
 const queryClient = new QueryClient();
 
@@ -66,259 +90,33 @@ const App = () => (
             <Routes>
             <Route path="/" element={<LandingOrDashboard />} />
             <Route path="/auth" element={<Auth />} />
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <AppLayout>
-                      <Dashboard />
-                    </AppLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/transactions"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <AppLayout>
-                      <Transactions />
-                    </AppLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/categories"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <AppLayout>
-                      <Categories />
-                    </AppLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/wallets"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <AppLayout>
-                      <Wallets />
-                    </AppLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/calendar"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <AppLayout>
-                      <Calendar />
-                    </AppLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/budget"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <AppLayout>
-                      <Budget />
-                    </AppLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/goals"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <AppLayout>
-                      <Goals />
-                    </AppLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/investments"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <AppLayout>
-                      <Investments />
-                    </AppLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/settings"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <AppLayout>
-                      <Settings />
-                    </AppLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/transfers"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <AppLayout>
-                      <Transfers />
-                    </AppLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/reports"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <AppLayout>
-                      <Reports />
-                    </AppLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/import"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <AppLayout>
-                      <Import />
-                    </AppLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/faq"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <AppLayout>
-                      <FAQ />
-                    </AppLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
+            
+            {/* Finance Routes */}
+            <Route path="/dashboard" element={<ProtectedPage><Dashboard /></ProtectedPage>} />
+            <Route path="/transactions" element={<ProtectedPage><Transactions /></ProtectedPage>} />
+            <Route path="/categories" element={<ProtectedPage><Categories /></ProtectedPage>} />
+            <Route path="/wallets" element={<ProtectedPage><Wallets /></ProtectedPage>} />
+            <Route path="/calendar" element={<ProtectedPage><Calendar /></ProtectedPage>} />
+            <Route path="/budget" element={<ProtectedPage><Budget /></ProtectedPage>} />
+            <Route path="/goals" element={<ProtectedPage><Goals /></ProtectedPage>} />
+            <Route path="/investments" element={<ProtectedPage><Investments /></ProtectedPage>} />
+            <Route path="/settings" element={<ProtectedPageNoGuard><Settings /></ProtectedPageNoGuard>} />
+            <Route path="/transfers" element={<ProtectedPage><Transfers /></ProtectedPage>} />
+            <Route path="/reports" element={<ProtectedPage><Reports /></ProtectedPage>} />
+            <Route path="/import" element={<ProtectedPage><Import /></ProtectedPage>} />
+            <Route path="/faq" element={<ProtectedPage><FAQ /></ProtectedPage>} />
+            
             {/* JARVIS Routes */}
-            <Route
-              path="/jarvis"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <JarvisLayout>
-                      <JarvisDashboard />
-                    </JarvisLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/jarvis/tasks"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <JarvisLayout>
-                      <JarvisTasks />
-                    </JarvisLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/jarvis/calendar"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <JarvisLayout>
-                      <JarvisCalendar />
-                    </JarvisLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/jarvis/habits"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <JarvisLayout>
-                      <JarvisHabits />
-                    </JarvisLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/jarvis/reminders"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <JarvisLayout>
-                      <JarvisReminders />
-                    </JarvisLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/jarvis/settings"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <JarvisLayout>
-                      <JarvisSettings />
-                    </JarvisLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/jarvis/memory"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <JarvisLayout>
-                      <JarvisMemory />
-                    </JarvisLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/jarvis/chat"
-              element={
-                <ProtectedRoute>
-                  <ErrorBoundary>
-                    <JarvisLayout>
-                      <JarvisChat />
-                    </JarvisLayout>
-                  </ErrorBoundary>
-                </ProtectedRoute>
-              }
-            />
+            <Route path="/jarvis" element={<ProtectedPage><JarvisDashboard /></ProtectedPage>} />
+            <Route path="/jarvis/tasks" element={<ProtectedPage><JarvisTasks /></ProtectedPage>} />
+            <Route path="/jarvis/calendar" element={<ProtectedPage><JarvisCalendar /></ProtectedPage>} />
+            <Route path="/jarvis/habits" element={<ProtectedPage><JarvisHabits /></ProtectedPage>} />
+            <Route path="/jarvis/reminders" element={<ProtectedPage><JarvisReminders /></ProtectedPage>} />
+            <Route path="/jarvis/settings" element={<ProtectedPageNoGuard><JarvisSettings /></ProtectedPageNoGuard>} />
+            <Route path="/jarvis/memory" element={<ProtectedPage><JarvisMemory /></ProtectedPage>} />
+            {/* Chat is always accessible (for onboarding) */}
+            <Route path="/jarvis/chat" element={<ProtectedPageNoGuard><JarvisChat /></ProtectedPageNoGuard>} />
+            
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
             </Routes>
