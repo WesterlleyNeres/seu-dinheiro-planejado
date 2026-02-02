@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Lightbulb, Search } from "lucide-react";
+import { Lightbulb, Search, FileJson } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -11,6 +11,7 @@ import {
 import { useJarvisMemory } from "@/hooks/useJarvisMemory";
 import { MemoryCard, MemoryCardSkeleton } from "@/components/jarvis/MemoryCard";
 import { MemoryForm } from "@/components/jarvis/MemoryForm";
+import { ChatGPTImporter, ChatGPTImporterTrigger } from "@/components/jarvis/ChatGPTImporter";
 
 const kindFilterOptions = [
   { value: "all", label: "Todos os tipos" },
@@ -20,6 +21,8 @@ const kindFilterOptions = [
   { value: "project", label: "Projeto" },
   { value: "note", label: "Nota" },
   { value: "message", label: "Mensagem" },
+  { value: "chatgpt_user", label: "ChatGPT (Você)" },
+  { value: "chatgpt_assistant", label: "ChatGPT (IA)" },
 ];
 
 const JarvisMemory = () => {
@@ -34,6 +37,7 @@ const JarvisMemory = () => {
   const [kindFilter, setKindFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [importerOpen, setImporterOpen] = useState(false);
 
   // Debounce search
   useEffect(() => {
@@ -80,8 +84,13 @@ const JarvisMemory = () => {
             </p>
           </div>
         </div>
-        <MemoryForm onSubmit={handleCreate} isLoading={createMemoryItem.isPending} />
+        <div className="flex gap-2">
+          <ChatGPTImporterTrigger onClick={() => setImporterOpen(true)} />
+          <MemoryForm onSubmit={handleCreate} isLoading={createMemoryItem.isPending} />
+        </div>
       </div>
+      
+      <ChatGPTImporter open={importerOpen} onOpenChange={setImporterOpen} />
 
       {/* Filters */}
       <div className="flex flex-col gap-3 sm:flex-row">
