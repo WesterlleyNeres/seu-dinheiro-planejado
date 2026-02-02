@@ -775,6 +775,9 @@ export type Database = {
           birth_date: string | null
           created_at: string
           full_name: string | null
+          guided_tour_completed: boolean | null
+          guided_tour_skipped: boolean | null
+          guided_tour_step: number | null
           id: string
           interaction_count: number
           last_interaction_at: string | null
@@ -792,6 +795,9 @@ export type Database = {
           birth_date?: string | null
           created_at?: string
           full_name?: string | null
+          guided_tour_completed?: boolean | null
+          guided_tour_skipped?: boolean | null
+          guided_tour_step?: number | null
           id?: string
           interaction_count?: number
           last_interaction_at?: string | null
@@ -809,6 +815,9 @@ export type Database = {
           birth_date?: string | null
           created_at?: string
           full_name?: string | null
+          guided_tour_completed?: boolean | null
+          guided_tour_skipped?: boolean | null
+          guided_tour_step?: number | null
           id?: string
           interaction_count?: number
           last_interaction_at?: string | null

@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { TenantProvider } from "@/contexts/TenantContext";
+import { TourProvider } from "@/contexts/TourContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { OnboardingGuard } from "@/components/OnboardingGuard";
 import { UnifiedLayout } from "@/components/layout/UnifiedLayout";
@@ -87,10 +88,11 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <TenantProvider>
-            <Routes>
-            <Route path="/" element={<LandingOrDashboard />} />
-            <Route path="/auth" element={<Auth />} />
-            
+            <TourProvider>
+              <Routes>
+              <Route path="/" element={<LandingOrDashboard />} />
+              <Route path="/auth" element={<Auth />} />
+              
             {/* Finance Routes */}
             <Route path="/dashboard" element={<ProtectedPage><Dashboard /></ProtectedPage>} />
             <Route path="/transactions" element={<ProtectedPage><Transactions /></ProtectedPage>} />
@@ -117,9 +119,10 @@ const App = () => (
             {/* Chat is always accessible (for onboarding) */}
             <Route path="/jarvis/chat" element={<ProtectedPageNoGuard><JarvisChat /></ProtectedPageNoGuard>} />
             
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-            </Routes>
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+              </Routes>
+            </TourProvider>
           </TenantProvider>
         </AuthProvider>
       </BrowserRouter>

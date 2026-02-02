@@ -27,6 +27,10 @@ export interface UserProfile {
   last_interaction_at: string | null;
   created_at: string;
   updated_at: string;
+  // Tour fields
+  guided_tour_completed?: boolean;
+  guided_tour_step?: number;
+  guided_tour_skipped?: boolean;
 }
 
 export function useOnboarding() {
@@ -81,6 +85,11 @@ export function useOnboarding() {
   const needsOnboarding = !isLoading && (!profile || !profile.onboarding_completed);
   const currentStep = (profile?.onboarding_step as OnboardingStep) || "welcome";
   const isNewUser = !profile || profile.interaction_count === 0;
+  
+  // Tour status
+  const tourCompleted = profile?.guided_tour_completed ?? false;
+  const tourStep = profile?.guided_tour_step ?? 0;
+  const tourSkipped = profile?.guided_tour_skipped ?? false;
 
   return {
     profile,
@@ -90,5 +99,9 @@ export function useOnboarding() {
     isNewUser,
     refetch,
     skipOnboarding: skipOnboardingMutation.mutateAsync,
+    // Tour data
+    tourCompleted,
+    tourStep,
+    tourSkipped,
   };
 }

@@ -53,7 +53,7 @@ const JarvisChat = () => {
   };
 
   return (
-    <div className="flex h-[calc(100vh-8rem)]">
+    <div className="flex h-[calc(100vh-8rem)]" data-tour="chat-area">
       {/* Sidebar */}
       {!isMobile && (
         <ChatSidebar
