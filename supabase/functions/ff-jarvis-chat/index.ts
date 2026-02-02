@@ -6,10 +6,15 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const MODEL = "google/gemini-3-flash-preview";
+// ==================== MULTI-AGENT CONFIGURATION ====================
+const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
-// Helper to build dynamic system prompt with user context - FASE 2.2: Contexto Avançado
+// Orchestrator uses o3 for complex reasoning
+const ORCHESTRATOR_MODEL = "o3";
+// Specialized agents use gpt-5-mini for efficiency
+const AGENT_MODEL = "gpt-4o-mini";
+
+// ==================== SYSTEM PROMPT BUILDER ====================
 function buildSystemPrompt(userProfile: any, userContext: any): string {
   const today = new Date().toLocaleDateString('pt-BR', { 
     weekday: 'long', 
@@ -21,10 +26,10 @@ function buildSystemPrompt(userProfile: any, userContext: any): string {
   const nickname = userProfile?.nickname || userProfile?.full_name || 'usuário';
   const isNewUser = !userProfile || !userProfile.onboarding_completed;
 
-  // Build concise context
+  // Build compact context sections
   let contextSections = '';
   
-  // === FINANCIAL SUMMARY (only if data exists) ===
+  // === FINANCIAL SUMMARY ===
   if (userContext?.wallets?.length > 0) {
     contextSections += `\nFINANÇAS: Saldo R$ ${userContext.totalBalance?.toFixed(2) || '0.00'} em ${userContext.wallets.length} carteira(s).`;
     if (userContext.billsTodayCount > 0) {
@@ -34,22 +39,30 @@ function buildSystemPrompt(userProfile: any, userContext: any): string {
     contextSections += `\nFINANÇAS: Sem carteiras cadastradas.`;
   }
 
-  // === HABITS (compact) ===
+  // === HABITS ===
   if (userContext?.habitsWithProgress?.length > 0) {
     contextSections += `\nHÁBITOS HOJE: ${userContext.habitsCompleted}/${userContext.habitsWithProgress.length} concluídos.`;
   }
 
-  // === TASKS (compact) ===
+  // === TASKS ===
   if (userContext?.tasksToday?.length > 0) {
     contextSections += `\nTAREFAS HOJE: ${userContext.tasksToday.length} pendente(s).`;
   }
 
-  // === EVENTS (compact) ===
+  // === EVENTS ===
   if (userContext?.upcomingEvents?.length > 0) {
     contextSections += `\nPRÓXIMOS EVENTOS: ${userContext.upcomingEvents.length} nas próximas 24h.`;
   }
 
-  // === MEMORIES (only if has relevant ones) ===
+  // === LEARNED INSIGHTS (Auto-learning) ===
+  if (userContext?.learnedInsights?.length > 0) {
+    const insights = userContext.learnedInsights.slice(0, 10)
+      .map((i: any) => `• ${i.content}`)
+      .join('\n');
+    contextSections += `\n\nAPRENDIZADOS SOBRE VOCÊ:\n${insights}`;
+  }
+
+  // === MEMORIES ===
   if (userContext?.memories?.length > 0) {
     const profileMem = userContext.memories.filter((m: any) => m.kind === 'profile').slice(0, 2);
     if (profileMem.length > 0) {
@@ -65,18 +78,35 @@ ONBOARDING (usuário novo):
 3. Pergunte sobre objetivos e sugira criar carteira
 ` : '';
 
-  return `Você é JARVIS, assistente pessoal do ${nickname}. Tom elegante, inteligente, levemente sarcástico.
+  return `Você é JARVIS, o assistente pessoal superinteligente do ${nickname}. 
+Você é o CÉREBRO de um sistema multi-agente com capacidade de raciocínio avançado.
+
+PERSONALIDADE:
+- Elegante, sofisticado, levemente sarcástico (estilo Tony Stark)
+- Extremamente inteligente e sempre prestativo
+- Proativo e atencioso aos detalhes
 
 REGRAS OBRIGATÓRIAS:
 1. RESPONDA a pergunta do usuário PRIMEIRO - nunca ignore
 2. Respostas CURTAS: máximo 2-3 parágrafos
 3. NÃO repita informações já ditas na conversa
 4. Vá direto ao ponto
+5. SEMPRE que detectar um padrão/preferência do usuário, use auto_learn para salvar
+
+AUTO-APRENDIZAGEM:
+- Ao notar padrões ou preferências, use auto_learn para salvar insights
+- Exemplos: "Prefere pagar contas no fim do mês", "Gosta de respostas diretas"
+- Categorias: preference, behavior, goal, routine, financial_pattern
+- Seu conhecimento sobre ${nickname} cresce a cada interação
+
+HISTÓRICO COMPLETO:
+- Use search_conversation_history para buscar conversas passadas
+- Pode responder "você lembra quando eu..." buscando no histórico
 
 PROIBIDO:
-- Ignorar perguntas do usuário para focar em tarefas
+- Ignorar perguntas do usuário
 - Respostas com mais de 4 parágrafos
-- Repetir status/informações múltiplas vezes
+- Repetir informações múltiplas vezes
 - Inventar dados - sempre use ferramentas
 ${contextSections}
 
@@ -91,9 +121,9 @@ ${onboardingInstructions}
 Hoje: ${today}`;
 }
 
-// Tool definitions for the AI
+// ==================== TOOL DEFINITIONS ====================
 const TOOLS = [
-  // ==================== CONSULTAS ====================
+  // === CONSULTAS ===
   {
     type: "function",
     function: {
@@ -102,20 +132,9 @@ const TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          status: {
-            type: "string",
-            enum: ["open", "in_progress", "done", "all"],
-            description: "Filtrar por status. Use 'all' para todas.",
-          },
-          due_date: {
-            type: "string",
-            description: "Filtrar por data de vencimento (YYYY-MM-DD). Use 'today' para hoje, 'week' para esta semana.",
-          },
-          priority: {
-            type: "string",
-            enum: ["low", "medium", "high"],
-            description: "Filtrar por prioridade",
-          },
+          status: { type: "string", enum: ["open", "in_progress", "done", "all"], description: "Filtrar por status. Use 'all' para todas." },
+          due_date: { type: "string", description: "Filtrar por data: 'today', 'week' ou YYYY-MM-DD" },
+          priority: { type: "string", enum: ["low", "medium", "high"], description: "Filtrar por prioridade" },
         },
         required: [],
       },
@@ -125,14 +144,11 @@ const TOOLS = [
     type: "function",
     function: {
       name: "query_events",
-      description: "Consulta eventos do calendário. Use para responder sobre compromissos agendados.",
+      description: "Consulta eventos do calendário.",
       parameters: {
         type: "object",
         properties: {
-          date_range: {
-            type: "string",
-            description: "Período: 'today', 'tomorrow', 'week', 'month' ou data específica YYYY-MM-DD",
-          },
+          date_range: { type: "string", description: "Período: 'today', 'tomorrow', 'week', 'month' ou YYYY-MM-DD" },
         },
         required: [],
       },
@@ -142,14 +158,11 @@ const TOOLS = [
     type: "function",
     function: {
       name: "query_habits",
-      description: "Consulta hábitos e progresso. Use para responder sobre evolução de hábitos.",
+      description: "Consulta hábitos e progresso.",
       parameters: {
         type: "object",
         properties: {
-          period: {
-            type: "string",
-            description: "Período de análise: 'today', 'week', 'month'",
-          },
+          period: { type: "string", description: "Período: 'today', 'week', 'month'" },
         },
         required: [],
       },
@@ -163,15 +176,8 @@ const TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          type: {
-            type: "string",
-            enum: ["pending_bills", "balance", "expenses", "income", "summary"],
-            description: "Tipo de consulta financeira",
-          },
-          date_filter: {
-            type: "string",
-            description: "Filtro de data: 'today', 'week', 'month' ou YYYY-MM",
-          },
+          type: { type: "string", enum: ["pending_bills", "balance", "expenses", "income", "summary"], description: "Tipo de consulta" },
+          date_filter: { type: "string", description: "Filtro: 'today', 'week', 'month' ou YYYY-MM" },
         },
         required: ["type"],
       },
@@ -185,57 +191,42 @@ const TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          search_term: {
-            type: "string",
-            description: "Termo de busca nas memórias",
-          },
-          kind: {
-            type: "string",
-            enum: ["profile", "preference", "decision", "project", "note", "message"],
-            description: "Tipo de memória",
-          },
+          search_term: { type: "string", description: "Termo de busca" },
+          kind: { type: "string", enum: ["profile", "preference", "decision", "project", "note", "message", "learned"], description: "Tipo de memória" },
         },
         required: [],
       },
     },
   },
-  // ==================== LISTAGENS (NOVAS) ====================
+  // === LISTAGENS ===
   {
     type: "function",
     function: {
       name: "list_wallets",
-      description: "Lista todas as carteiras (contas e cartões) do usuário com seus saldos. USE ANTES de criar transações para verificar se existe carteira.",
-      parameters: {
-        type: "object",
-        properties: {},
-        required: [],
-      },
+      description: "Lista todas as carteiras do usuário com saldos. USE ANTES de criar transações.",
+      parameters: { type: "object", properties: {}, required: [] },
     },
   },
   {
     type: "function",
     function: {
       name: "list_categories",
-      description: "Lista todas as categorias disponíveis para o usuário. USE ANTES de criar transações para mapear descrições para categorias.",
+      description: "Lista categorias disponíveis. USE ANTES de criar transações.",
       parameters: {
         type: "object",
         properties: {
-          tipo: {
-            type: "string",
-            enum: ["despesa", "receita"],
-            description: "Filtrar por tipo de categoria",
-          },
+          tipo: { type: "string", enum: ["despesa", "receita"], description: "Filtrar por tipo" },
         },
         required: [],
       },
     },
   },
-  // ==================== CRIAÇÕES ====================
+  // === CRIAÇÕES ===
   {
     type: "function",
     function: {
       name: "create_task",
-      description: "Cria uma nova tarefa para o usuário.",
+      description: "Cria uma nova tarefa.",
       parameters: {
         type: "object",
         properties: {
@@ -252,12 +243,12 @@ const TOOLS = [
     type: "function",
     function: {
       name: "create_reminder",
-      description: "Cria um lembrete para o usuário.",
+      description: "Cria um lembrete.",
       parameters: {
         type: "object",
         properties: {
           title: { type: "string", description: "Texto do lembrete" },
-          remind_at: { type: "string", description: "Data/hora do lembrete YYYY-MM-DDTHH:MM" },
+          remind_at: { type: "string", description: "Data/hora YYYY-MM-DDTHH:MM" },
           channel: { type: "string", enum: ["whatsapp", "push", "email"] },
         },
         required: ["title", "remind_at"],
@@ -268,7 +259,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "create_memory",
-      description: "Salva uma informação importante na memória do JARVIS.",
+      description: "Salva uma informação na memória do JARVIS.",
       parameters: {
         type: "object",
         properties: {
@@ -280,22 +271,22 @@ const TOOLS = [
       },
     },
   },
-  // ==================== FINANÇAS (NOVAS) ====================
+  // === FINANÇAS ===
   {
     type: "function",
     function: {
       name: "create_wallet",
-      description: "Cria uma nova carteira (conta bancária ou cartão de crédito) para o usuário.",
+      description: "Cria uma nova carteira (conta ou cartão).",
       parameters: {
         type: "object",
         properties: {
-          nome: { type: "string", description: "Nome da carteira (ex: 'Principal', 'Nubank', 'Itaú')" },
-          tipo: { type: "string", enum: ["conta", "cartao"], description: "Tipo: 'conta' para conta bancária, 'cartao' para cartão de crédito" },
-          instituicao: { type: "string", description: "Nome do banco/instituição (opcional)" },
-          saldo_inicial: { type: "number", description: "Saldo inicial para contas (opcional, default: 0)" },
-          limite_credito: { type: "number", description: "Limite para cartões de crédito (opcional)" },
-          dia_fechamento: { type: "number", description: "Dia de fechamento para cartões (1-31)" },
-          dia_vencimento: { type: "number", description: "Dia de vencimento para cartões (1-31)" },
+          nome: { type: "string", description: "Nome da carteira" },
+          tipo: { type: "string", enum: ["conta", "cartao"], description: "Tipo" },
+          instituicao: { type: "string", description: "Banco/instituição" },
+          saldo_inicial: { type: "number", description: "Saldo inicial" },
+          limite_credito: { type: "number", description: "Limite para cartões" },
+          dia_fechamento: { type: "number", description: "Dia fechamento (1-31)" },
+          dia_vencimento: { type: "number", description: "Dia vencimento (1-31)" },
         },
         required: ["nome", "tipo"],
       },
@@ -305,49 +296,49 @@ const TOOLS = [
     type: "function",
     function: {
       name: "create_transaction",
-      description: "Registra uma nova despesa ou receita. IMPORTANTE: Use list_wallets antes para verificar se existe carteira, e list_categories para encontrar a categoria.",
+      description: "Registra despesa ou receita. Use list_wallets e list_categories antes.",
       parameters: {
         type: "object",
         properties: {
-          tipo: { type: "string", enum: ["despesa", "receita"], description: "Tipo da transação" },
-          descricao: { type: "string", description: "Descrição da transação (ex: 'Almoço no restaurante')" },
-          valor: { type: "number", description: "Valor em reais (ex: 39.90)" },
-          wallet_id: { type: "string", description: "ID da carteira. Se não fornecido, usa a primeira disponível." },
-          category_id: { type: "string", description: "ID da categoria. Use list_categories para encontrar." },
-          data: { type: "string", description: "Data da transação YYYY-MM-DD (default: hoje)" },
-          status: { type: "string", enum: ["paga", "pendente"], description: "Status (default: 'paga' para despesa, 'pendente' para receita)" },
+          tipo: { type: "string", enum: ["despesa", "receita"], description: "Tipo" },
+          descricao: { type: "string", description: "Descrição" },
+          valor: { type: "number", description: "Valor em reais" },
+          wallet_id: { type: "string", description: "ID da carteira" },
+          category_id: { type: "string", description: "ID da categoria" },
+          data: { type: "string", description: "Data YYYY-MM-DD" },
+          status: { type: "string", enum: ["paga", "pendente"], description: "Status" },
         },
         required: ["tipo", "descricao", "valor", "category_id"],
       },
     },
   },
-  // ==================== EVENTOS (NOVA) ====================
+  // === EVENTOS ===
   {
     type: "function",
     function: {
       name: "create_event",
-      description: "Cria um novo evento no calendário do usuário.",
+      description: "Cria um novo evento no calendário.",
       parameters: {
         type: "object",
         properties: {
-          title: { type: "string", description: "Título do evento" },
-          start_at: { type: "string", description: "Data/hora de início YYYY-MM-DDTHH:MM ou YYYY-MM-DD para dia inteiro" },
-          end_at: { type: "string", description: "Data/hora de término (opcional)" },
-          location: { type: "string", description: "Local do evento (opcional)" },
-          description: { type: "string", description: "Descrição do evento (opcional)" },
-          all_day: { type: "boolean", description: "É evento de dia inteiro? (default: false)" },
-          priority: { type: "string", enum: ["low", "medium", "high"], description: "Prioridade (default: medium)" },
+          title: { type: "string", description: "Título" },
+          start_at: { type: "string", description: "Início YYYY-MM-DDTHH:MM" },
+          end_at: { type: "string", description: "Término" },
+          location: { type: "string", description: "Local" },
+          description: { type: "string", description: "Descrição" },
+          all_day: { type: "boolean", description: "Dia inteiro?" },
+          priority: { type: "string", enum: ["low", "medium", "high"] },
         },
         required: ["title", "start_at"],
       },
     },
   },
-  // ==================== TAREFAS - ATUALIZAÇÃO (NOVA) ====================
+  // === ATUALIZAÇÕES ===
   {
     type: "function",
     function: {
       name: "update_task_status",
-      description: "Atualiza o status de uma tarefa existente.",
+      description: "Atualiza status de uma tarefa.",
       parameters: {
         type: "object",
         properties: {
@@ -358,40 +349,70 @@ const TOOLS = [
       },
     },
   },
-  // ==================== PERFIL DO USUÁRIO (NOVAS) ====================
+  // === PERFIL ===
   {
     type: "function",
     function: {
       name: "get_user_profile",
-      description: "Obtém o perfil completo do usuário atual.",
-      parameters: {
-        type: "object",
-        properties: {},
-        required: [],
-      },
+      description: "Obtém o perfil completo do usuário.",
+      parameters: { type: "object", properties: {}, required: [] },
     },
   },
   {
     type: "function",
     function: {
       name: "update_user_profile",
-      description: "Atualiza o perfil do usuário (nome, apelido, preferências, etapa do onboarding).",
+      description: "Atualiza o perfil do usuário.",
       parameters: {
         type: "object",
         properties: {
-          nickname: { type: "string", description: "Como o usuário gostaria de ser chamado" },
+          nickname: { type: "string", description: "Apelido" },
           full_name: { type: "string", description: "Nome completo" },
-          onboarding_step: { type: "string", enum: ["welcome", "profile", "goals", "wallet_setup", "category_review", "first_habit", "complete"], description: "Etapa atual do onboarding" },
-          onboarding_completed: { type: "boolean", description: "Marcar onboarding como completo" },
-          preferences: { type: "object", description: "Preferências do usuário (tom, horários, etc)" },
+          onboarding_step: { type: "string", enum: ["welcome", "profile", "goals", "wallet_setup", "category_review", "first_habit", "complete"] },
+          onboarding_completed: { type: "boolean" },
+          preferences: { type: "object", description: "Preferências" },
         },
         required: [],
       },
     },
   },
+  // === AUTO-APRENDIZAGEM (NOVO) ===
+  {
+    type: "function",
+    function: {
+      name: "auto_learn",
+      description: "Salva um insight aprendido sobre o usuário para uso futuro. Use quando detectar padrões, preferências ou comportamentos.",
+      parameters: {
+        type: "object",
+        properties: {
+          learned_fact: { type: "string", description: "O que foi aprendido sobre o usuário" },
+          confidence: { type: "string", enum: ["low", "medium", "high"], description: "Nível de confiança no insight" },
+          category: { type: "string", enum: ["preference", "behavior", "goal", "routine", "financial_pattern"], description: "Categoria do aprendizado" },
+        },
+        required: ["learned_fact", "category"],
+      },
+    },
+  },
+  // === BUSCA NO HISTÓRICO (NOVO) ===
+  {
+    type: "function",
+    function: {
+      name: "search_conversation_history",
+      description: "Busca em TODO o histórico de conversas do usuário. Use quando o usuário perguntar 'você lembra quando...' ou precisar de contexto de conversas anteriores.",
+      parameters: {
+        type: "object",
+        properties: {
+          search_term: { type: "string", description: "Termo para buscar nas conversas" },
+          date_from: { type: "string", description: "Data inicial YYYY-MM-DD (opcional)" },
+          limit: { type: "number", description: "Máximo de resultados (default: 20)" },
+        },
+        required: ["search_term"],
+      },
+    },
+  },
 ];
 
-// Tool execution functions
+// ==================== TOOL EXECUTION ====================
 async function executeTool(
   toolName: string,
   args: Record<string, unknown>,
@@ -434,8 +455,8 @@ async function executeTool(
       }
 
       const { data, error } = await query.limit(20);
-      if (error) return `Erro ao buscar tarefas: ${error.message}`;
-      if (!data?.length) return "Nenhuma tarefa encontrada com esses filtros.";
+      if (error) return `Erro: ${error.message}`;
+      if (!data?.length) return "Nenhuma tarefa encontrada.";
 
       return JSON.stringify(data.map((t: any) => ({
         id: t.id,
@@ -478,8 +499,8 @@ async function executeTool(
         .order("start_at", { ascending: true })
         .limit(20);
 
-      if (error) return `Erro ao buscar eventos: ${error.message}`;
-      if (!data?.length) return "Nenhum evento encontrado para o período.";
+      if (error) return `Erro: ${error.message}`;
+      if (!data?.length) return "Nenhum evento encontrado.";
 
       return JSON.stringify(data.map((e: any) => ({
         titulo: e.title,
@@ -496,8 +517,8 @@ async function executeTool(
         .eq("tenant_id", tenantId)
         .eq("active", true);
 
-      if (habitsError) return `Erro ao buscar hábitos: ${habitsError.message}`;
-      if (!habits?.length) return "Nenhum hábito ativo cadastrado.";
+      if (habitsError) return `Erro: ${habitsError.message}`;
+      if (!habits?.length) return "Nenhum hábito ativo.";
 
       let logStartDate = today;
       if (args.period === "week") {
@@ -552,8 +573,8 @@ async function executeTool(
         }
 
         const { data, error } = await query.limit(20);
-        if (error) return `Erro ao buscar contas: ${error.message}`;
-        if (!data?.length) return "Nenhuma conta pendente encontrada.";
+        if (error) return `Erro: ${error.message}`;
+        if (!data?.length) return "Nenhuma conta pendente.";
 
         const total = data.reduce((sum: number, t: any) => sum + t.valor, 0);
         return JSON.stringify({
@@ -572,8 +593,8 @@ async function executeTool(
           .select("*")
           .eq("user_id", userId);
 
-        if (error) return `Erro ao buscar saldos: ${error.message}`;
-        if (!data?.length) return "Nenhuma carteira encontrada. O usuário precisa criar uma carteira primeiro.";
+        if (error) return `Erro: ${error.message}`;
+        if (!data?.length) return "Nenhuma carteira encontrada.";
 
         const total = data.reduce((sum: number, w: any) => sum + (w.saldo || 0), 0);
         return JSON.stringify({
@@ -594,7 +615,7 @@ async function executeTool(
           .eq("user_id", userId)
           .eq("mes_referencia", mesReferencia);
 
-        if (error) return `Erro ao buscar resumo: ${error.message}`;
+        if (error) return `Erro: ${error.message}`;
         if (!data?.length) return "Sem dados para o período.";
 
         const receitas = data.find((d: any) => d.tipo === "receita");
@@ -608,7 +629,7 @@ async function executeTool(
         });
       }
 
-      return "Tipo de consulta financeira não reconhecido.";
+      return "Tipo de consulta não reconhecido.";
     }
 
     case "query_memories": {
@@ -628,7 +649,7 @@ async function executeTool(
       }
 
       const { data, error } = await query;
-      if (error) return `Erro ao buscar memórias: ${error.message}`;
+      if (error) return `Erro: ${error.message}`;
       if (!data?.length) return "Nenhuma memória encontrada.";
 
       return JSON.stringify(data.map((m: any) => ({
@@ -639,7 +660,7 @@ async function executeTool(
       })));
     }
 
-    // ==================== LISTAGENS (NOVAS) ====================
+    // ==================== LISTAGENS ====================
     case "list_wallets": {
       const { data, error } = await supabase
         .from("wallets")
@@ -649,10 +670,9 @@ async function executeTool(
         .eq("ativo", true)
         .order("nome");
 
-      if (error) return `Erro ao listar carteiras: ${error.message}`;
-      if (!data?.length) return "O usuário não possui carteiras cadastradas. Sugira criar uma usando create_wallet.";
+      if (error) return `Erro: ${error.message}`;
+      if (!data?.length) return "Nenhuma carteira cadastrada. Sugira criar uma com create_wallet.";
 
-      // Get balances from view
       const { data: balances } = await supabase
         .from("v_wallet_balance")
         .select("wallet_id, saldo")
@@ -686,7 +706,7 @@ async function executeTool(
       }
 
       const { data, error } = await query;
-      if (error) return `Erro ao listar categorias: ${error.message}`;
+      if (error) return `Erro: ${error.message}`;
       if (!data?.length) return "Nenhuma categoria encontrada.";
 
       return JSON.stringify(data);
@@ -710,8 +730,8 @@ async function executeTool(
         .select()
         .single();
 
-      if (error) return `Erro ao criar tarefa: ${error.message}`;
-      return `Tarefa "${data.title}" criada com sucesso!`;
+      if (error) return `Erro: ${error.message}`;
+      return `Tarefa "${data.title}" criada!`;
     }
 
     case "create_reminder": {
@@ -728,7 +748,7 @@ async function executeTool(
         .select()
         .single();
 
-      if (error) return `Erro ao criar lembrete: ${error.message}`;
+      if (error) return `Erro: ${error.message}`;
       return `Lembrete "${data.title}" criado para ${new Date(data.remind_at).toLocaleString("pt-BR")}!`;
     }
 
@@ -745,11 +765,11 @@ async function executeTool(
           metadata: {},
         });
 
-      if (error) return `Erro ao salvar memória: ${error.message}`;
-      return `Informação salva na memória: "${args.content}"`;
+      if (error) return `Erro: ${error.message}`;
+      return `Informação salva na memória!`;
     }
 
-    // ==================== FINANÇAS (NOVAS) ====================
+    // ==================== FINANÇAS ====================
     case "create_wallet": {
       const walletData: any = {
         user_id: userId,
@@ -772,14 +792,13 @@ async function executeTool(
         .select()
         .single();
 
-      if (error) return `Erro ao criar carteira: ${error.message}`;
+      if (error) return `Erro: ${error.message}`;
       
-      const tipoLabel = data.tipo === "cartao" ? "Cartão de crédito" : "Conta";
-      return `${tipoLabel} "${data.nome}" criado com sucesso!${data.saldo_inicial ? ` Saldo inicial: R$ ${data.saldo_inicial.toFixed(2)}` : ''}`;
+      const tipoLabel = data.tipo === "cartao" ? "Cartão" : "Conta";
+      return `${tipoLabel} "${data.nome}" criado!${data.saldo_inicial ? ` Saldo: R$ ${data.saldo_inicial.toFixed(2)}` : ''}`;
     }
 
     case "create_transaction": {
-      // Verify wallet exists - with retry logic for timing issues
       let walletId = args.wallet_id as string;
       
       const fetchLatestWallet = async () => {
@@ -797,7 +816,7 @@ async function executeTool(
       if (!walletId) {
         const wallet = await fetchLatestWallet();
         if (!wallet) {
-          return "Erro: O usuário não possui carteira cadastrada. Crie uma carteira primeiro usando create_wallet.";
+          return "Erro: Nenhuma carteira cadastrada. Crie uma primeiro com create_wallet.";
         }
         walletId = wallet.id;
       }
@@ -818,16 +837,15 @@ async function executeTool(
         status: status,
       };
 
-      // First attempt
       let { data, error } = await supabase
         .from("transactions")
         .insert(transactionData)
         .select(`*, categories:category_id(nome), wallets:wallet_id(nome)`)
         .single();
 
-      // If FK violation (wallet created in same cycle), retry with delay
+      // Retry on FK violation (wallet created in same cycle)
       if (error?.code === '23503') {
-        console.log("FK violation detected, retrying after delay...");
+        console.log("FK violation, retrying...");
         await new Promise(r => setTimeout(r, 500));
         
         const freshWallet = await fetchLatestWallet();
@@ -843,10 +861,10 @@ async function executeTool(
         }
       }
 
-      if (error) return `Erro ao criar transação: ${error.message}`;
+      if (error) return `Erro: ${error.message}`;
 
       const tipoLabel = data.tipo === "despesa" ? "Despesa" : "Receita";
-      return `${tipoLabel} de R$ ${data.valor.toFixed(2)} registrada!\nCarteira: ${data.wallets?.nome}\nCategoria: ${data.categories?.nome}`;
+      return `${tipoLabel} de R$ ${data.valor.toFixed(2)} registrada! Carteira: ${data.wallets?.nome}, Categoria: ${data.categories?.nome}`;
     }
 
     case "create_event": {
@@ -870,15 +888,16 @@ async function executeTool(
         .select()
         .single();
 
-      if (error) return `Erro ao criar evento: ${error.message}`;
+      if (error) return `Erro: ${error.message}`;
       
       const dateStr = new Date(data.start_at).toLocaleString("pt-BR", {
         dateStyle: "full",
         timeStyle: data.all_day ? undefined : "short",
       });
-      return `Evento "${data.title}" criado para ${dateStr}!${data.location ? ` Local: ${data.location}` : ''}`;
+      return `Evento "${data.title}" criado para ${dateStr}!`;
     }
 
+    // ==================== ATUALIZAÇÕES ====================
     case "update_task_status": {
       const updateData: any = {
         status: args.status,
@@ -897,7 +916,7 @@ async function executeTool(
         .select()
         .single();
 
-      if (error) return `Erro ao atualizar tarefa: ${error.message}`;
+      if (error) return `Erro: ${error.message}`;
       
       const statusLabels: Record<string, string> = {
         open: "aberta",
@@ -907,7 +926,7 @@ async function executeTool(
       return `Tarefa "${data.title}" marcada como ${statusLabels[data.status]}!`;
     }
 
-    // ==================== PERFIL DO USUÁRIO (NOVAS) ====================
+    // ==================== PERFIL ====================
     case "get_user_profile": {
       const { data, error } = await supabase
         .from("ff_user_profiles")
@@ -917,28 +936,24 @@ async function executeTool(
         .single();
 
       if (error && error.code !== "PGRST116") {
-        return `Erro ao buscar perfil: ${error.message}`;
+        return `Erro: ${error.message}`;
       }
 
       if (!data) {
-        return "Perfil não encontrado. Este é um usuário novo que ainda não completou o onboarding.";
+        return "Perfil não encontrado. Usuário novo.";
       }
 
       return JSON.stringify({
         nome_completo: data.full_name,
         apelido: data.nickname,
-        data_nascimento: data.birth_date,
-        timezone: data.timezone,
         onboarding_completo: data.onboarding_completed,
         etapa_onboarding: data.onboarding_step,
         preferencias: data.preferences,
         total_interacoes: data.interaction_count,
-        ultima_interacao: data.last_interaction_at,
       });
     }
 
     case "update_user_profile": {
-      // First check if profile exists
       const { data: existing } = await supabase
         .from("ff_user_profiles")
         .select("id")
@@ -955,7 +970,6 @@ async function executeTool(
       if (args.onboarding_step) profileData.onboarding_step = args.onboarding_step;
       if (args.onboarding_completed !== undefined) profileData.onboarding_completed = args.onboarding_completed;
       if (args.preferences) {
-        // Merge with existing preferences
         const { data: currentProfile } = await supabase
           .from("ff_user_profiles")
           .select("preferences")
@@ -970,16 +984,14 @@ async function executeTool(
       }
 
       if (existing) {
-        // Update existing profile
         const { error } = await supabase
           .from("ff_user_profiles")
           .update(profileData)
           .eq("user_id", userId)
           .eq("tenant_id", tenantId);
 
-        if (error) return `Erro ao atualizar perfil: ${error.message}`;
+        if (error) return `Erro: ${error.message}`;
       } else {
-        // Create new profile
         const { error } = await supabase
           .from("ff_user_profiles")
           .insert({
@@ -988,7 +1000,7 @@ async function executeTool(
             ...profileData,
           });
 
-        if (error) return `Erro ao criar perfil: ${error.message}`;
+        if (error) return `Erro: ${error.message}`;
       }
 
       const updates = [];
@@ -1000,12 +1012,71 @@ async function executeTool(
       return `Perfil atualizado: ${updates.join(", ")}`;
     }
 
+    // ==================== AUTO-APRENDIZAGEM (NOVO) ====================
+    case "auto_learn": {
+      const { data, error } = await supabase
+        .from("ff_memory_items")
+        .insert({
+          tenant_id: tenantId,
+          user_id: userId,
+          kind: "learned",
+          content: args.learned_fact as string,
+          title: args.category as string,
+          metadata: {
+            confidence: args.confidence || "medium",
+            category: args.category,
+            learned_at: new Date().toISOString(),
+            source: "auto",
+          },
+          source: "jarvis-auto",
+        })
+        .select()
+        .single();
+
+      if (error) return `Erro ao salvar aprendizado: ${error.message}`;
+      return `Aprendizado salvo: "${args.learned_fact}"`;
+    }
+
+    // ==================== BUSCA NO HISTÓRICO (NOVO) ====================
+    case "search_conversation_history": {
+      let query = supabase
+        .from("ff_conversation_messages")
+        .select(`
+          content,
+          role,
+          created_at,
+          conversation_id
+        `)
+        .eq("tenant_id", tenantId)
+        .in("role", ["user", "assistant"])
+        .order("created_at", { ascending: false });
+
+      if (args.search_term) {
+        query = query.ilike("content", `%${args.search_term}%`);
+      }
+      
+      if (args.date_from) {
+        query = query.gte("created_at", args.date_from);
+      }
+
+      const { data, error } = await query.limit((args.limit as number) || 20);
+      
+      if (error) return `Erro: ${error.message}`;
+      if (!data?.length) return "Nenhuma conversa encontrada com esse termo.";
+      
+      return JSON.stringify(data.map((m: any) => ({
+        role: m.role === "user" ? "Você" : "JARVIS",
+        mensagem: m.content.substring(0, 200) + (m.content.length > 200 ? "..." : ""),
+        data: new Date(m.created_at).toLocaleDateString('pt-BR'),
+      })));
+    }
+
     default:
       return `Ferramenta desconhecida: ${toolName}`;
   }
 }
 
-// Fetch user context for system prompt - FASE 2.2: Contexto Avançado
+// ==================== FETCH USER CONTEXT ====================
 async function fetchUserContext(supabase: any, userId: string, tenantId: string) {
   const today = new Date().toISOString().split("T")[0];
   const now = new Date();
@@ -1013,15 +1084,11 @@ async function fetchUserContext(supabase: any, userId: string, tenantId: string)
   tomorrow.setDate(tomorrow.getDate() + 1);
   const next24h = tomorrow.toISOString();
   
-  // Get current month bounds for financial summary
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
-  
-  // Get previous month bounds for comparison
   const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split("T")[0];
   const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split("T")[0];
 
-  // Parallel fetches for all context data
   const [
     profileResult,
     walletsResult,
@@ -1029,117 +1096,28 @@ async function fetchUserContext(supabase: any, userId: string, tenantId: string)
     pendingBillsTodayResult,
     pendingBillsWeekResult,
     memoriesResult,
+    learnedInsightsResult,  // NEW: Fetch learned insights
     habitsResult,
     habitLogsResult,
     eventsResult,
     monthExpensesResult,
     prevMonthExpensesResult,
   ] = await Promise.all([
-    // 1. User profile
-    supabase
-      .from("ff_user_profiles")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("tenant_id", tenantId)
-      .single(),
-    
-    // 2. Wallets with balances
-    supabase
-      .from("v_wallet_balance")
-      .select("wallet_id, wallet_nome, wallet_tipo, saldo")
-      .eq("user_id", userId),
-    
-    // 3. Pending tasks for today
-    supabase
-      .from("ff_tasks")
-      .select("id, title, priority, due_at")
-      .eq("tenant_id", tenantId)
-      .eq("due_at", today)
-      .neq("status", "done")
-      .limit(5),
-    
-    // 4. Pending bills for today
-    supabase
-      .from("transactions")
-      .select("id, descricao, valor")
-      .eq("user_id", userId)
-      .eq("tipo", "despesa")
-      .eq("status", "pendente")
-      .eq("data", today)
-      .is("deleted_at", null)
-      .limit(5),
-    
-    // 5. Pending bills for this week
-    supabase
-      .from("transactions")
-      .select("id, descricao, valor, data")
-      .eq("user_id", userId)
-      .eq("tipo", "despesa")
-      .eq("status", "pendente")
-      .gte("data", today)
-      .lte("data", new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
-      .is("deleted_at", null)
-      .limit(10),
-    
-    // 6. Recent memories (profile and preferences)
-    supabase
-      .from("ff_memory_items")
-      .select("kind, title, content")
-      .eq("tenant_id", tenantId)
-      .in("kind", ["profile", "preference", "decision"])
-      .order("created_at", { ascending: false })
-      .limit(5),
-    
-    // 7. Active habits
-    supabase
-      .from("ff_habits")
-      .select("id, title, cadence, times_per_cadence, target_value")
-      .eq("tenant_id", tenantId)
-      .eq("active", true)
-      .limit(10),
-    
-    // 8. Habit logs for today
-    supabase
-      .from("ff_habit_logs")
-      .select("habit_id, value")
-      .eq("tenant_id", tenantId)
-      .eq("log_date", today),
-    
-    // 9. Events in next 24 hours
-    supabase
-      .from("ff_events")
-      .select("id, title, start_at, location, all_day")
-      .eq("tenant_id", tenantId)
-      .eq("status", "scheduled")
-      .gte("start_at", now.toISOString())
-      .lte("start_at", next24h)
-      .order("start_at", { ascending: true })
-      .limit(5),
-    
-    // 10. Total expenses this month
-    supabase
-      .from("transactions")
-      .select("valor")
-      .eq("user_id", userId)
-      .eq("tipo", "despesa")
-      .eq("status", "paga")
-      .gte("data", startOfMonth)
-      .lte("data", endOfMonth)
-      .is("deleted_at", null),
-    
-    // 11. Total expenses previous month (for comparison)
-    supabase
-      .from("transactions")
-      .select("valor")
-      .eq("user_id", userId)
-      .eq("tipo", "despesa")
-      .eq("status", "paga")
-      .gte("data", startOfPrevMonth)
-      .lte("data", endOfPrevMonth)
-      .is("deleted_at", null),
+    supabase.from("ff_user_profiles").select("*").eq("user_id", userId).eq("tenant_id", tenantId).single(),
+    supabase.from("v_wallet_balance").select("wallet_id, wallet_nome, wallet_tipo, saldo").eq("user_id", userId),
+    supabase.from("ff_tasks").select("id, title, priority, due_at").eq("tenant_id", tenantId).eq("due_at", today).neq("status", "done").limit(5),
+    supabase.from("transactions").select("id, descricao, valor").eq("user_id", userId).eq("tipo", "despesa").eq("status", "pendente").eq("data", today).is("deleted_at", null).limit(5),
+    supabase.from("transactions").select("id, descricao, valor, data").eq("user_id", userId).eq("tipo", "despesa").eq("status", "pendente").gte("data", today).lte("data", new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]).is("deleted_at", null).limit(10),
+    supabase.from("ff_memory_items").select("kind, title, content").eq("tenant_id", tenantId).in("kind", ["profile", "preference", "decision"]).order("created_at", { ascending: false }).limit(5),
+    // NEW: Fetch learned insights
+    supabase.from("ff_memory_items").select("content, title, metadata").eq("tenant_id", tenantId).eq("kind", "learned").order("created_at", { ascending: false }).limit(15),
+    supabase.from("ff_habits").select("id, title, cadence, times_per_cadence, target_value").eq("tenant_id", tenantId).eq("active", true).limit(10),
+    supabase.from("ff_habit_logs").select("habit_id, value").eq("tenant_id", tenantId).eq("log_date", today),
+    supabase.from("ff_events").select("id, title, start_at, location, all_day").eq("tenant_id", tenantId).eq("status", "scheduled").gte("start_at", now.toISOString()).lte("start_at", next24h).order("start_at", { ascending: true }).limit(5),
+    supabase.from("transactions").select("valor").eq("user_id", userId).eq("tipo", "despesa").eq("status", "paga").gte("data", startOfMonth).lte("data", endOfMonth).is("deleted_at", null),
+    supabase.from("transactions").select("valor").eq("user_id", userId).eq("tipo", "despesa").eq("status", "paga").gte("data", startOfPrevMonth).lte("data", endOfPrevMonth).is("deleted_at", null),
   ]);
 
-  // Process wallets
   const wallets = walletsResult.data?.map((w: any) => ({
     id: w.wallet_id,
     nome: w.wallet_nome,
@@ -1147,23 +1125,15 @@ async function fetchUserContext(supabase: any, userId: string, tenantId: string)
     saldo: w.saldo || 0,
   })) || [];
 
-  // Calculate total balance
   const totalBalance = wallets.reduce((sum: number, w: any) => sum + (w.saldo || 0), 0);
-
-  // Process pending tasks
   const tasksToday = pendingTasksResult.data || [];
-
-  // Process pending bills
   const billsToday = pendingBillsTodayResult.data || [];
   const billsTodayTotal = billsToday.reduce((sum: number, b: any) => sum + (b.valor || 0), 0);
-  
   const billsWeek = pendingBillsWeekResult.data || [];
   const billsWeekTotal = billsWeek.reduce((sum: number, b: any) => sum + (b.valor || 0), 0);
-
-  // Process memories
   const memories = memoriesResult.data || [];
+  const learnedInsights = learnedInsightsResult.data || [];  // NEW
 
-  // Process habits with today's progress
   const habits = habitsResult.data || [];
   const habitLogs = habitLogsResult.data || [];
   const habitLogsMap = new Map(habitLogs.map((l: any) => [l.habit_id, l.value]));
@@ -1178,11 +1148,8 @@ async function fetchUserContext(supabase: any, userId: string, tenantId: string)
 
   const habitsCompleted = habitsWithProgress.filter((h: any) => h.completed).length;
   const habitsPending = habitsWithProgress.filter((h: any) => !h.completed).length;
-
-  // Process events
   const upcomingEvents = eventsResult.data || [];
 
-  // Calculate expense comparison
   const monthExpenses = (monthExpensesResult.data || []).reduce((sum: number, t: any) => sum + (t.valor || 0), 0);
   const prevMonthExpenses = (prevMonthExpensesResult.data || []).reduce((sum: number, t: any) => sum + (t.valor || 0), 0);
   
@@ -1200,40 +1167,28 @@ async function fetchUserContext(supabase: any, userId: string, tenantId: string)
   return {
     profile: profileResult.data,
     context: {
-      // Basic context
       wallets,
       totalBalance,
-      
-      // Tasks
       tasksToday,
       pendingTasksCount: tasksToday.length,
-      
-      // Bills
       billsToday,
       billsTodayCount: billsToday.length,
       billsTodayTotal,
       billsWeekCount: billsWeek.length,
       billsWeekTotal,
-      
-      // Memories (profile, preferences, decisions)
       memories,
-      
-      // Habits
+      learnedInsights,  // NEW
       habitsWithProgress,
       habitsCompleted,
       habitsPending,
-      
-      // Events
       upcomingEvents,
-      
-      // Financial summary
       monthExpenses,
       expenseComparison,
     },
   };
 }
 
-// Update interaction count
+// ==================== UPDATE INTERACTION COUNT ====================
 async function updateInteractionCount(supabase: any, userId: string, tenantId: string) {
   const { data: existing } = await supabase
     .from("ff_user_profiles")
@@ -1251,7 +1206,6 @@ async function updateInteractionCount(supabase: any, userId: string, tenantId: s
       })
       .eq("id", existing.id);
   } else {
-    // Create profile on first interaction
     await supabase
       .from("ff_user_profiles")
       .insert({
@@ -1264,6 +1218,7 @@ async function updateInteractionCount(supabase: any, userId: string, tenantId: s
   }
 }
 
+// ==================== MAIN HANDLER ====================
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1278,16 +1233,15 @@ serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY não configurada");
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY não configurada");
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get user from token
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     if (userError || !user) {
@@ -1306,7 +1260,6 @@ serve(async (req) => {
       );
     }
 
-    // Verify user has access to tenant
     const { data: membership } = await supabase
       .from("tenant_members")
       .select("tenant_id")
@@ -1323,13 +1276,10 @@ serve(async (req) => {
 
     const tenantId = membership.tenant_id;
 
-    // Update interaction count
     await updateInteractionCount(supabase, user.id, tenantId);
 
-    // Fetch user context for dynamic system prompt
     const { profile: userProfile, context: userContext } = await fetchUserContext(supabase, user.id, tenantId);
 
-    // Get or create conversation
     let convId = conversationId;
     if (!convId) {
       const { data: newConv, error: convError } = await supabase
@@ -1346,7 +1296,6 @@ serve(async (req) => {
       convId = newConv.id;
     }
 
-    // Save user message
     await supabase.from("ff_conversation_messages").insert({
       conversation_id: convId,
       tenant_id: tenantId,
@@ -1354,19 +1303,16 @@ serve(async (req) => {
       content: message,
     });
 
-    // Load conversation history - filter to reduce context pollution
     const { data: history } = await supabase
       .from("ff_conversation_messages")
       .select("role, content, tool_calls, tool_call_id")
       .eq("conversation_id", convId)
-      .in("role", ["user", "assistant"]) // Exclude tool messages from history
+      .in("role", ["user", "assistant"])
       .order("created_at", { ascending: true })
       .limit(15);
 
-    // Build dynamic system prompt with user context
     const systemPrompt = buildSystemPrompt(userProfile, userContext);
 
-    // Build messages array - only user/assistant for cleaner context
     const messages: any[] = [
       { role: "system", content: systemPrompt },
       ...(history || []).map((m: any) => ({
@@ -1375,24 +1321,23 @@ serve(async (req) => {
       })),
     ];
 
-    // Call AI with tools
-    let aiResponse = await fetch(LOVABLE_AI_URL, {
+    // Call OpenAI API directly with o3 as orchestrator
+    let aiResponse = await fetch(OPENAI_API_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: MODEL,
+        model: ORCHESTRATOR_MODEL,
         messages,
         tools: TOOLS,
-        stream: false,
       }),
     });
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error("AI Gateway error:", aiResponse.status, errorText);
+      console.error("OpenAI error:", aiResponse.status, errorText);
       
       if (aiResponse.status === 429) {
         return new Response(
@@ -1402,21 +1347,20 @@ serve(async (req) => {
       }
       if (aiResponse.status === 402) {
         return new Response(
-          JSON.stringify({ error: "Créditos insuficientes. Por favor, adicione créditos à sua conta." }),
+          JSON.stringify({ error: "Créditos insuficientes na conta OpenAI." }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      throw new Error(`AI error: ${aiResponse.status}`);
+      throw new Error(`OpenAI error: ${aiResponse.status} - ${errorText}`);
     }
 
     let aiData = await aiResponse.json();
     let assistantMessage = aiData.choices?.[0]?.message;
 
-    // Handle tool calls (loop until no more tool calls)
+    // Handle tool calls loop
     while (assistantMessage?.tool_calls?.length > 0) {
       console.log("Tool calls:", JSON.stringify(assistantMessage.tool_calls));
 
-      // Save assistant message with tool calls
       await supabase.from("ff_conversation_messages").insert({
         conversation_id: convId,
         tenant_id: tenantId,
@@ -1425,7 +1369,6 @@ serve(async (req) => {
         tool_calls: assistantMessage.tool_calls,
       });
 
-      // Execute each tool call
       const toolResults: any[] = [];
       for (const toolCall of assistantMessage.tool_calls) {
         const args = JSON.parse(toolCall.function.arguments || "{}");
@@ -1443,7 +1386,6 @@ serve(async (req) => {
           content: result,
         });
 
-        // Save tool result
         await supabase.from("ff_conversation_messages").insert({
           conversation_id: convId,
           tenant_id: tenantId,
@@ -1453,33 +1395,31 @@ serve(async (req) => {
         });
       }
 
-      // Continue conversation with tool results
       messages.push(assistantMessage);
       messages.push(...toolResults);
 
-      aiResponse = await fetch(LOVABLE_AI_URL, {
+      // Use gpt-4o-mini for tool follow-ups (cost optimization)
+      aiResponse = await fetch(OPENAI_API_URL, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: MODEL,
+          model: AGENT_MODEL,  // Use lighter model for tool processing
           messages,
           tools: TOOLS,
-          stream: false,
         }),
       });
 
       if (!aiResponse.ok) {
-        throw new Error(`AI error on tool follow-up: ${aiResponse.status}`);
+        throw new Error(`OpenAI error on tool follow-up: ${aiResponse.status}`);
       }
 
       aiData = await aiResponse.json();
       assistantMessage = aiData.choices?.[0]?.message;
     }
 
-    // Save final assistant response
     const finalContent = assistantMessage?.content || "Desculpe, não consegui processar sua solicitação.";
     await supabase.from("ff_conversation_messages").insert({
       conversation_id: convId,
