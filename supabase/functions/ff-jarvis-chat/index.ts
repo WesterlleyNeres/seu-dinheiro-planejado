@@ -495,29 +495,81 @@ async function extractDocumentText(
       }
     }
 
-    // PDF files: use pdf-parse via esm.sh
+    // PDF files: use pdfjs-dist legacy build (no canvas dependency)
     if (mimeType === "application/pdf" || fileName.endsWith(".pdf")) {
       try {
         const arrayBuffer = await response.arrayBuffer();
         const uint8Array = new Uint8Array(arrayBuffer);
         
-        // Dynamic import of pdf-parse
-        const pdfParse = (await import("https://esm.sh/pdf-parse@1.1.1")).default;
+        // Use legacy build which doesn't require canvas
+        const pdfjsLib = await import("https://esm.sh/pdfjs-dist@3.11.174/legacy/build/pdf.mjs");
         
-        // pdf-parse expects a Buffer, convert Uint8Array
-        const data = await pdfParse(uint8Array);
-        const text = data.text || "";
+        // CRITICAL: Disable worker (not available in edge functions)
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "";
         
-        console.log(`[JARVIS] Extracted ${text.length} chars from PDF (${data.numpages} pages)`);
+        // Load PDF document with minimal options
+        const loadingTask = pdfjsLib.getDocument({
+          data: uint8Array,
+          useWorkerFetch: false,
+          isEvalSupported: false,
+          useSystemFonts: false,
+        });
         
-        if (text.trim().length === 0) {
-          return `[PDF "${fileName}" contém ${data.numpages} página(s), mas não foi possível extrair texto. O PDF pode ser baseado em imagens/escaneado. Para melhor análise, envie como imagem/screenshot.]`;
+        const pdf = await loadingTask.promise;
+        const numPages = pdf.numPages;
+        const maxPages = Math.min(numPages, 10); // Process up to 10 pages
+        
+        let fullText = "";
+        let pagesWithText = 0;
+        let visualPages: number[] = [];
+        
+        console.log(`[JARVIS] Processing PDF: ${numPages} total pages, extracting up to ${maxPages}`);
+        
+        for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+          try {
+            const page = await pdf.getPage(pageNum);
+            const textContent = await page.getTextContent();
+            
+            const pageText = textContent.items
+              .map((item: any) => item.str || "")
+              .join(" ")
+              .trim();
+            
+            if (pageText && pageText.length > 10) {
+              pagesWithText++;
+              fullText += `\n[Página ${pageNum}]\n${pageText}\n`;
+            } else {
+              visualPages.push(pageNum);
+            }
+          } catch (pageError) {
+            console.error(`[JARVIS] Error extracting page ${pageNum}:`, pageError);
+            visualPages.push(pageNum);
+          }
         }
         
-        return text;
+        console.log(`[JARVIS] PDF extraction complete: ${pagesWithText} pages with text, ${visualPages.length} visual pages`);
+        
+        // Build response based on what was extracted
+        if (pagesWithText === 0) {
+          return `[PDF "${fileName}" contém ${numPages} página(s), mas sem texto extraível. Este PDF parece ser baseado em imagens/diagrama visual. Para análise completa, envie as páginas como imagens/screenshots.]`;
+        }
+        
+        let result = fullText.trim();
+        
+        if (visualPages.length > 0 && numPages <= 10) {
+          result += `\n\n[Nota: Página(s) ${visualPages.join(", ")} parecem ser visuais/imagens e não puderam ser lidas como texto.]`;
+        }
+        
+        if (numPages > 10) {
+          result += `\n\n[Nota: PDF tem ${numPages} páginas, foram processadas apenas as primeiras 10.]`;
+        }
+        
+        console.log(`[JARVIS] Extracted ${result.length} chars from PDF`);
+        return result;
+        
       } catch (pdfError) {
         console.error(`[JARVIS] PDF parse error:`, pdfError);
-        return `[PDF "${fileName}" recebido, mas não foi possível extrair o texto. Erro: ${pdfError instanceof Error ? pdfError.message : 'desconhecido'}. Para documentos visuais/diagramas, envie como imagem.]`;
+        return `[PDF "${fileName}" recebido, mas não foi possível processar. Erro: ${pdfError instanceof Error ? pdfError.message : 'desconhecido'}. Tente enviar como imagem/screenshot.]`;
       }
     }
 
