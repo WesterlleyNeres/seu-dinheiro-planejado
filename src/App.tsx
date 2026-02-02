@@ -32,6 +32,7 @@ import JarvisHabits from "./pages/JarvisHabits";
 import JarvisReminders from "./pages/JarvisReminders";
 import JarvisSettings from "./pages/JarvisSettings";
 import JarvisMemory from "./pages/JarvisMemory";
+import JarvisChat from "./pages/JarvisChat";
 
 // Component to redirect logged users from landing to dashboard
 const LandingOrDashboard = () => {
@@ -301,6 +302,18 @@ const App = () => (
                   <ErrorBoundary>
                     <JarvisLayout>
                       <JarvisMemory />
+                    </JarvisLayout>
+                  </ErrorBoundary>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/jarvis/chat"
+              element={
+                <ProtectedRoute>
+                  <ErrorBoundary>
+                    <JarvisLayout>
+                      <JarvisChat />
                     </JarvisLayout>
                   </ErrorBoundary>
                 </ProtectedRoute>
