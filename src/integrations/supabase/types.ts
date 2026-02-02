@@ -479,8 +479,10 @@ export type Database = {
           email: string | null
           expiry: string | null
           id: string
+          last_sync_at: string | null
           refresh_token: string | null
           scope: string | null
+          sync_token: string | null
           tenant_id: string
           updated_at: string
           user_id: string
@@ -491,8 +493,10 @@ export type Database = {
           email?: string | null
           expiry?: string | null
           id?: string
+          last_sync_at?: string | null
           refresh_token?: string | null
           scope?: string | null
+          sync_token?: string | null
           tenant_id: string
           updated_at?: string
           user_id: string
@@ -503,8 +507,10 @@ export type Database = {
           email?: string | null
           expiry?: string | null
           id?: string
+          last_sync_at?: string | null
           refresh_token?: string | null
           scope?: string | null
+          sync_token?: string | null
           tenant_id?: string
           updated_at?: string
           user_id?: string
