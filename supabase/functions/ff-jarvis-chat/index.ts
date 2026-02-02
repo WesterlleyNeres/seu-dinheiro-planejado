@@ -422,6 +422,72 @@ function safeJsonParse(jsonString: string, fallback: Record<string, unknown> = {
   }
 }
 
+// ==================== HELPER: Transcribe Audio with Whisper ====================
+async function transcribeAudio(audioUrl: string, apiKey: string): Promise<string> {
+  // Download the audio file
+  const audioResponse = await fetch(audioUrl);
+  if (!audioResponse.ok) {
+    throw new Error(`Failed to download audio: ${audioResponse.status}`);
+  }
+  
+  const audioBlob = await audioResponse.blob();
+  
+  // Prepare form data for Whisper API
+  const formData = new FormData();
+  formData.append("file", audioBlob, "audio.webm");
+  formData.append("model", "whisper-1");
+  formData.append("language", "pt");
+  
+  const whisperResponse = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: formData,
+  });
+  
+  if (!whisperResponse.ok) {
+    const errorText = await whisperResponse.text();
+    throw new Error(`Whisper API error: ${whisperResponse.status} - ${errorText}`);
+  }
+  
+  const result = await whisperResponse.json();
+  return result.text || "";
+}
+
+// ==================== HELPER: Build message with attachments for OpenAI ====================
+interface Attachment {
+  type: "image" | "audio" | "document";
+  url: string;
+  name: string;
+  size?: number;
+  mime_type?: string;
+}
+
+function buildMessageWithAttachments(
+  message: string,
+  attachments: Attachment[]
+): any {
+  const imageAttachments = attachments.filter((a) => a.type === "image");
+  
+  // If there are images, use multimodal format
+  if (imageAttachments.length > 0) {
+    return {
+      role: "user",
+      content: [
+        { type: "text", text: message || "Analise esta imagem." },
+        ...imageAttachments.map((img) => ({
+          type: "image_url",
+          image_url: { url: img.url, detail: "auto" },
+        })),
+      ],
+    };
+  }
+  
+  // Text-only message
+  return { role: "user", content: message };
+}
+
 // ==================== HELPER: Check if string is UUID ====================
 function isUUID(str: string): boolean {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -1365,11 +1431,11 @@ serve(async (req) => {
       );
     }
 
-    const { message, conversationId, tenantId: reqTenantId } = await req.json();
+    const { message, conversationId, tenantId: reqTenantId, attachments } = await req.json();
 
-    if (!message || !reqTenantId) {
+    if ((!message && (!attachments || attachments.length === 0)) || !reqTenantId) {
       return new Response(
-        JSON.stringify({ error: "Mensagem e tenantId são obrigatórios" }),
+        JSON.stringify({ error: "Mensagem ou anexo e tenantId são obrigatórios" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -1410,12 +1476,33 @@ serve(async (req) => {
       convId = newConv.id;
     }
 
-    // Insert user message FIRST
+    // ==================== PROCESS ATTACHMENTS ====================
+    let processedMessage = message || "";
+    const processedAttachments = attachments || [];
+    
+    // Transcribe audio attachments with Whisper
+    for (const att of processedAttachments) {
+      if (att.type === "audio") {
+        try {
+          console.log(`[JARVIS] Transcribing audio: ${att.name}`);
+          const transcription = await transcribeAudio(att.url, OPENAI_API_KEY);
+          if (transcription) {
+            processedMessage = `[Áudio transcrito: "${transcription}"]\n\n${processedMessage}`.trim();
+          }
+        } catch (e) {
+          console.error(`[JARVIS] Audio transcription failed:`, e);
+          processedMessage = `[Áudio enviado: ${att.name} - transcrição falhou]\n\n${processedMessage}`.trim();
+        }
+      }
+    }
+
+    // Insert user message FIRST with attachments
     const { data: insertedUserMsg } = await supabase.from("ff_conversation_messages").insert({
       conversation_id: convId,
       tenant_id: tenantId,
       role: "user",
-      content: message,
+      content: processedMessage,
+      attachments: processedAttachments.length > 0 ? processedAttachments : null,
     }).select("id, created_at").single();
 
     // ==================== FIX: Fetch LAST 15 messages (not first) ====================
@@ -1434,32 +1521,37 @@ serve(async (req) => {
     const lastHistoryMsg = history[history.length - 1];
     const userMsgIncluded = lastHistoryMsg && 
       lastHistoryMsg.role === "user" && 
-      lastHistoryMsg.content === message;
+      lastHistoryMsg.content === processedMessage;
 
     if (!userMsgIncluded && insertedUserMsg) {
       console.log("[JARVIS] User message not in history, forcing inclusion");
       history.push({
         id: insertedUserMsg.id,
         role: "user",
-        content: message,
+        content: processedMessage,
         tool_calls: null,
         tool_call_id: null,
         created_at: insertedUserMsg.created_at,
       });
     }
 
-    console.log(`[JARVIS] Conv=${convId}, History count=${history.length}, Last msg role=${history[history.length - 1]?.role}`);
+    console.log(`[JARVIS] Conv=${convId}, History count=${history.length}, Last msg role=${history[history.length - 1]?.role}, Attachments=${processedAttachments.length}`);
 
     const systemPrompt = buildSystemPrompt(userProfile, userContext);
 
-    // Filter out empty assistant messages (tool-call-only messages)
+    // Determine if we have images in this request
+    const hasImages = processedAttachments.some((a: Attachment) => a.type === "image");
+    
+    // Use GPT-4o for vision (when images present), otherwise use o3 orchestrator
+    const modelToUse = hasImages ? "gpt-4o" : ORCHESTRATOR_MODEL;
+
+    // Build messages array
     const messages: any[] = [
       { role: "system", content: systemPrompt },
       ...(history || [])
+        .slice(0, -1) // All history except the last one (current message)
         .filter((m: any) => {
-          // Include all user messages
           if (m.role === "user") return true;
-          // Only include assistant messages with actual content
           if (m.role === "assistant") return m.content && m.content.trim().length > 0;
           return false;
         })
@@ -1469,7 +1561,14 @@ serve(async (req) => {
         })),
     ];
 
-    // Call OpenAI API directly with o3 as orchestrator
+    // Add current user message with multimodal support
+    if (hasImages) {
+      messages.push(buildMessageWithAttachments(processedMessage, processedAttachments));
+    } else {
+      messages.push({ role: "user", content: processedMessage });
+    }
+
+    // Call OpenAI API
     let aiResponse = await fetch(OPENAI_API_URL, {
       method: "POST",
       headers: {
@@ -1477,7 +1576,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: ORCHESTRATOR_MODEL,
+        model: modelToUse,
         messages,
         tools: TOOLS,
       }),
