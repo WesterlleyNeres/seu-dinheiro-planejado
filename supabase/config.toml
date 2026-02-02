@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.ff-whatsapp-ingest]
 verify_jwt = false
+
+[functions.ff-jarvis-chat]
+verify_jwt = false
