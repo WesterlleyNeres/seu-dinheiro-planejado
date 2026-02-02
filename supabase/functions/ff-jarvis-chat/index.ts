@@ -455,6 +455,86 @@ async function transcribeAudio(audioUrl: string, apiKey: string): Promise<string
   return result.text || "";
 }
 
+// ==================== HELPER: Extract text from documents ====================
+async function extractDocumentText(
+  documentUrl: string,
+  mimeType: string,
+  fileName: string
+): Promise<string> {
+  try {
+    console.log(`[JARVIS] Downloading document: ${fileName} (${mimeType})`);
+    const response = await fetch(documentUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download document: ${response.status}`);
+    }
+
+    // Plain text files: read directly
+    if (mimeType === "text/plain" || fileName.endsWith(".txt")) {
+      const text = await response.text();
+      console.log(`[JARVIS] Extracted ${text.length} chars from text file`);
+      return text;
+    }
+
+    // CSV files: read directly  
+    if (mimeType === "text/csv" || fileName.endsWith(".csv")) {
+      const text = await response.text();
+      console.log(`[JARVIS] Extracted ${text.length} chars from CSV file`);
+      return text;
+    }
+
+    // JSON files: read and format
+    if (mimeType === "application/json" || fileName.endsWith(".json")) {
+      const text = await response.text();
+      try {
+        const json = JSON.parse(text);
+        const formatted = JSON.stringify(json, null, 2);
+        console.log(`[JARVIS] Extracted ${formatted.length} chars from JSON file`);
+        return formatted;
+      } catch {
+        return text;
+      }
+    }
+
+    // PDF files: use pdf-parse via esm.sh
+    if (mimeType === "application/pdf" || fileName.endsWith(".pdf")) {
+      try {
+        const arrayBuffer = await response.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        
+        // Dynamic import of pdf-parse
+        const pdfParse = (await import("https://esm.sh/pdf-parse@1.1.1")).default;
+        
+        // pdf-parse expects a Buffer, convert Uint8Array
+        const data = await pdfParse(uint8Array);
+        const text = data.text || "";
+        
+        console.log(`[JARVIS] Extracted ${text.length} chars from PDF (${data.numpages} pages)`);
+        
+        if (text.trim().length === 0) {
+          return `[PDF "${fileName}" contém ${data.numpages} página(s), mas não foi possível extrair texto. O PDF pode ser baseado em imagens/escaneado. Para melhor análise, envie como imagem/screenshot.]`;
+        }
+        
+        return text;
+      } catch (pdfError) {
+        console.error(`[JARVIS] PDF parse error:`, pdfError);
+        return `[PDF "${fileName}" recebido, mas não foi possível extrair o texto. Erro: ${pdfError instanceof Error ? pdfError.message : 'desconhecido'}. Para documentos visuais/diagramas, envie como imagem.]`;
+      }
+    }
+
+    // Word documents (.docx): inform limitation
+    if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || fileName.endsWith(".docx")) {
+      return `[Documento Word "${fileName}" recebido. Para análise completa, exporte como PDF ou copie o texto diretamente.]`;
+    }
+
+    // Other formats: not supported
+    return `[Documento "${fileName}" (${mimeType}) anexado. Formato não suportado para extração automática de texto.]`;
+
+  } catch (e) {
+    console.error(`[JARVIS] Document extraction failed for ${fileName}:`, e);
+    return `[Documento "${fileName}" anexado - não foi possível extrair texto: ${e instanceof Error ? e.message : 'erro desconhecido'}]`;
+  }
+}
+
 // ==================== HELPER: Build message with attachments for OpenAI ====================
 interface Attachment {
   type: "image" | "audio" | "document";
@@ -1492,6 +1572,32 @@ serve(async (req) => {
         } catch (e) {
           console.error(`[JARVIS] Audio transcription failed:`, e);
           processedMessage = `[Áudio enviado: ${att.name} - transcrição falhou]\n\n${processedMessage}`.trim();
+        }
+      }
+    }
+
+    // Extract text from document attachments
+    for (const att of processedAttachments) {
+      if (att.type === "document") {
+        try {
+          console.log(`[JARVIS] Extracting text from document: ${att.name}`);
+          const documentText = await extractDocumentText(
+            att.url,
+            att.mime_type || "application/pdf",
+            att.name
+          );
+          
+          if (documentText && documentText.length > 0) {
+            // Limit size to avoid context overflow (8000 chars ~2000 tokens)
+            const truncatedText = documentText.substring(0, 8000);
+            const isTruncated = documentText.length > 8000;
+            
+            processedMessage = `[Documento "${att.name}":\n${truncatedText}${isTruncated ? '\n... (texto truncado, documento completo tem ' + documentText.length + ' caracteres)' : ''}]\n\n${processedMessage}`.trim();
+            console.log(`[JARVIS] Document text extracted: ${truncatedText.length} chars (truncated: ${isTruncated})`);
+          }
+        } catch (e) {
+          console.error(`[JARVIS] Document extraction failed:`, e);
+          processedMessage = `[Documento enviado: ${att.name} - extração de texto falhou]\n\n${processedMessage}`.trim();
         }
       }
     }
