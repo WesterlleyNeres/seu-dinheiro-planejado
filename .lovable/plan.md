@@ -1,240 +1,193 @@
 
 
-# Plano: Corrigir Processamento de Documentos no Chat JARVIS
+# Plano: Corrigir Leitura de PDFs no JARVIS
 
 ## Problema Identificado
 
-O PDF "Diagrama de Pacotes Invext.pdf" está sendo enviado corretamente para o storage, mas a edge function **não extrai o conteúdo** do documento. Apenas o link é passado para a IA, que não consegue "ler" URLs de PDFs.
+A biblioteca `pdf-parse` (via esm.sh) não funciona em Deno/Edge Functions porque depende de `fs.readFileSync` do Node.js, que não existe nesse ambiente.
 
-**Fluxo atual (com bug):**
-```text
-Usuário envia PDF
-      ↓
-Upload para storage ✓
-      ↓
-Edge function recebe {type: "document", url: "https://..."} 
-      ↓
-Mensagem enviada ao GPT: "leia o documento"
-      ↓
-GPT não tem acesso à URL do PDF ← PROBLEMA
-      ↓
-JARVIS diz "não recebi arquivo"
+Erro nos logs:
+```
+[JARVIS] PDF parse error: Error: [unenv] fs.readFileSync is not implemented yet!
 ```
 
-## Solução
+## Solução: Usar pdf.js (Mozilla) via Deno
 
-Adicionar extração de texto de documentos na edge function, similar ao que fazemos com áudio (Whisper):
+O `pdf.js` da Mozilla tem uma versão que funciona em browsers/Deno sem dependências de Node.js. Vamos usar `pdfjs-dist` via esm.sh com a opção `legacy` que não depende de workers ou filesystem.
+
+## Arquitetura da Solução
 
 ```text
-Usuário envia PDF
-      ↓
-Upload para storage ✓
-      ↓
-Edge function recebe {type: "document", url: "https://..."}
-      ↓
-NOVA ETAPA: Baixar PDF e extrair texto
-      ↓
-Texto extraído adicionado à mensagem: "[Documento: conteúdo...]"
-      ↓
-GPT processa o texto ✓
+PDF Upload
+    ↓
+Edge Function recebe URL do PDF
+    ↓
+┌─────────────────────────────────────────┐
+│ 1. Baixar PDF como ArrayBuffer          │
+│ 2. Carregar com pdf.js (pdfjs-dist)     │
+│ 3. Para cada página (até 10):           │
+│    a. Extrair texto da página           │
+│    b. Se texto vazio → converter em     │
+│       imagem (canvas) para Vision       │
+│ 4. Combinar texto + imagens             │
+└─────────────────────────────────────────┘
+    ↓
+Texto extraído OU imagens para GPT-4o Vision
 ```
-
----
 
 ## Implementacao
 
-### Edge Function - Processar Documentos
-
-Adicionar função para extrair texto de PDFs e outros documentos:
+### Nova Funcao: `extractPDFContent`
 
 ```typescript
-// Para PDFs: usar pdf-parse (biblioteca Deno)
-// Para TXT: ler diretamente
-// Para outros: mencionar que foi anexado
+// Usar pdfjs-dist com configuração específica para Deno
+import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.0.379/build/pdf.min.mjs";
 
-async function extractDocumentText(
-  documentUrl: string, 
-  mimeType: string, 
-  fileName: string
-): Promise<string> {
-  try {
-    const response = await fetch(documentUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to download: ${response.status}`);
+async function extractPDFContent(
+  pdfUrl: string,
+  maxPages: number = 10
+): Promise<{ text: string; pageImages: string[] }> {
+  // Baixar PDF
+  const response = await fetch(pdfUrl);
+  const arrayBuffer = await response.arrayBuffer();
+  
+  // Configurar pdf.js para não usar workers (edge functions)
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+  
+  // Carregar documento
+  const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+  const pdf = await loadingTask.promise;
+  
+  const totalPages = Math.min(pdf.numPages, maxPages);
+  let fullText = "";
+  const pageImages: string[] = [];
+  
+  for (let i = 1; i <= totalPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items
+      .map((item: any) => item.str)
+      .join(" ");
+    
+    if (pageText.trim()) {
+      fullText += `\n--- Página ${i} ---\n${pageText}`;
+    } else {
+      // Página sem texto: renderizar como imagem (se possível)
+      // Nota: Em Deno sem canvas, vamos informar que é visual
+      pageImages.push(`Página ${i}: conteúdo visual/imagem`);
     }
-    
-    if (mimeType === "text/plain") {
-      // Arquivos de texto: ler diretamente
-      return await response.text();
-    }
-    
-    if (mimeType === "application/pdf") {
-      // PDFs: usar pdf-parse ou alternativa
-      // Como pdf-parse requer Node, usaremos uma abordagem alternativa
-      
-      // Opção 1: Converter para imagem e usar Vision
-      // Opção 2: Usar API externa de extração
-      // Opção 3: Usar biblioteca Deno compatível
-      
-      // Implementação com mozilla/pdf.js via CDN
-      const pdfBuffer = await response.arrayBuffer();
-      const text = await extractPDFText(pdfBuffer);
-      return text;
-    }
-    
-    // Outros formatos: não suportado
-    return `[Documento ${fileName} anexado - formato não suportado para leitura]`;
-    
-  } catch (e) {
-    console.error("[JARVIS] Document extraction failed:", e);
-    return `[Documento ${fileName} anexado - não foi possível extrair texto]`;
   }
+  
+  return { text: fullText.trim(), pageImages };
 }
 ```
 
-### Integração no Fluxo Principal
+### Fallback: Converter PDFs Visuais em Imagem
 
-No handler principal, após processar áudios:
+Como Deno não tem `canvas` nativo para renderizar páginas PDF como imagens, para PDFs visuais/diagramas usaremos uma abordagem alternativa:
+
+1. Tentar extrair texto com pdf.js
+2. Se não houver texto suficiente, informar ao usuário para enviar como imagem/screenshot
+3. OU usar um serviço externo (ConvertAPI, CloudConvert) para converter PDF → PNG
+
+### Implementação Simplificada (sem dependências de canvas)
 
 ```typescript
-// Process documents
-for (const att of processedAttachments) {
-  if (att.type === "document") {
-    try {
-      console.log(`[JARVIS] Extracting text from document: ${att.name}`);
-      const documentText = await extractDocumentText(
-        att.url, 
-        att.mime_type || "application/pdf", 
-        att.name
-      );
-      
-      if (documentText && documentText.length > 0) {
-        // Limitar tamanho para não estourar contexto
-        const truncatedText = documentText.substring(0, 8000);
-        const isTruncated = documentText.length > 8000;
-        
-        processedMessage = `[Documento "${att.name}":\n${truncatedText}${isTruncated ? '\n... (texto truncado)' : ''}]\n\n${processedMessage}`.trim();
-      }
-    } catch (e) {
-      console.error(`[JARVIS] Document extraction failed:`, e);
-      processedMessage = `[Documento enviado: ${att.name} - extração de texto falhou]\n\n${processedMessage}`.trim();
+import { getDocument, GlobalWorkerOptions } from "https://esm.sh/pdfjs-dist@4.0.379/build/pdf.min.mjs?target=deno";
+
+GlobalWorkerOptions.workerSrc = ""; // Desabilitar worker
+
+async function extractPDFText(pdfUrl: string, maxPages: number = 10): Promise<string> {
+  const response = await fetch(pdfUrl);
+  const arrayBuffer = await response.arrayBuffer();
+  const uint8Array = new Uint8Array(arrayBuffer);
+  
+  const pdf = await getDocument({ data: uint8Array }).promise;
+  const numPages = Math.min(pdf.numPages, maxPages);
+  
+  let fullText = "";
+  let hasAnyText = false;
+  
+  for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const content = await page.getTextContent();
+    const pageText = content.items
+      .map((item: any) => item.str || "")
+      .join(" ")
+      .trim();
+    
+    if (pageText) {
+      hasAnyText = true;
+      fullText += `\n[Página ${pageNum}]\n${pageText}\n`;
     }
   }
+  
+  if (!hasAnyText) {
+    return `[PDF com ${pdf.numPages} página(s), mas sem texto extraível. Parece ser um documento visual/escaneado. Para análise, envie como imagem ou screenshot.]`;
+  }
+  
+  return fullText.trim();
 }
 ```
 
----
-
-## Abordagem para PDFs em Deno/Edge Functions
-
-Como estamos em Deno (edge functions), precisamos de uma biblioteca compatível. Opções:
-
-### Opção A: Usar PDF como Imagem (Vision)
-- Converter primeira página para imagem
-- Enviar ao GPT-4o Vision
-- Limitação: apenas primeira página, depende de OCR
-
-### Opção B: pdf-lib para extração básica
-- Biblioteca Deno compatível
-- Extrai texto embedded em PDFs
-- Limitação: não funciona com PDFs escaneados
-
-### Opção C: API externa (recomendada para produção)
-- Usar serviço como Adobe PDF Extract, AWS Textract, etc.
-- Requer configuração adicional
-
-### Opção D: Fallback simples (implementação inicial)
-- Tentar ler como texto
-- Se for PDF, informar ao usuário que PDFs complexos precisam de OCR
-- Sugerir enviar como imagem (screenshot)
-
-**Recomendação**: Implementar Opção D primeiro (fallback) e depois evoluir para Opção A (Vision) ou C (API externa).
-
----
-
-## Arquivos a Modificar
+## Arquivo a Modificar
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `supabase/functions/ff-jarvis-chat/index.ts` | Adicionar `extractDocumentText` e processar documentos no loop |
+| `supabase/functions/ff-jarvis-chat/index.ts` | Substituir `pdf-parse` por `pdfjs-dist`, implementar `extractPDFText` |
 
 ---
 
-## Implementação Detalhada
+## Seção Técnica
 
-Para a versão inicial, usaremos uma abordagem híbrida:
+### Por que pdf.js funciona e pdf-parse não
 
-1. **PDFs**: Converter para data URL e enviar como imagem ao GPT-4o Vision
-2. **TXT/Plain text**: Ler diretamente
-3. **Outros**: Informar que formato não é suportado
+| Biblioteca | Problema em Deno |
+|------------|------------------|
+| `pdf-parse` | Usa `fs.readFileSync` internamente |
+| `pdfjs-dist` | Versão pura JavaScript, funciona em browsers/Deno |
 
-### Código para PDF como Imagem
-
-```typescript
-async function processPDFAsImage(
-  pdfUrl: string,
-  apiKey: string
-): Promise<{ type: "text" | "image_url"; content: any }> {
-  // Baixar PDF e converter para base64
-  const response = await fetch(pdfUrl);
-  const buffer = await response.arrayBuffer();
-  const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-  
-  // PDFs não podem ser enviados diretamente como imagem ao Vision
-  // Precisamos de um serviço de conversão ou usar biblioteca
-  
-  // Fallback: informar que PDF foi recebido mas precisa de conversão
-  return {
-    type: "text",
-    content: `[Documento PDF recebido. Para PDFs complexos, considere enviar como screenshot/imagem para melhor análise.]`
-  };
-}
-```
-
-### Solução Prática
-
-Para PDFs, vamos usar uma abordagem que funciona no Deno:
+### Configuração do pdf.js para Edge Functions
 
 ```typescript
-import * as pdfParse from "https://esm.sh/pdf-parse@1.1.1";
+// Importar versão minificada (menor bundle)
+import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.0.379/build/pdf.min.mjs?target=deno";
 
-async function extractPDFContent(pdfUrl: string): Promise<string> {
-  const response = await fetch(pdfUrl);
-  const buffer = await response.arrayBuffer();
-  
-  try {
-    const data = await pdfParse(buffer);
-    return data.text || "";
-  } catch (e) {
-    console.error("PDF parse error:", e);
-    return "";
-  }
-}
+// CRÍTICO: Desabilitar worker (não funciona em edge functions)
+pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+
+// Carregar PDF a partir de ArrayBuffer
+const loadingTask = pdfjsLib.getDocument({ 
+  data: new Uint8Array(arrayBuffer),
+  // Opções adicionais para melhorar compatibilidade
+  disableFontFace: true,
+  useSystemFonts: false,
+});
 ```
 
----
+### Limite de Páginas
+
+Conforme solicitado, processaremos até **10 páginas** por padrão para balancear contexto vs. performance.
+
+### Fluxo Atualizado
+
+```text
+1. Usuário envia PDF
+2. Edge function baixa o PDF
+3. Carrega com pdfjs-dist (sem workers)
+4. Para cada página (1 a 10):
+   - Extrai texto com getTextContent()
+   - Se tem texto: adiciona ao buffer
+   - Se não tem texto: marca como "visual"
+5. Se extraiu texto: adiciona ao processedMessage
+6. Se não extraiu: sugere enviar como imagem
+7. Continua com o fluxo normal de IA
+```
 
 ## Resultado Esperado
 
-1. Usuário envia PDF
-2. Edge function extrai texto do documento
-3. Texto é incluído na mensagem: `[Documento "nome.pdf": conteúdo extraído...]`
-4. JARVIS consegue analisar e responder sobre o documento
-5. Se extração falhar, JARVIS informa claramente e sugere alternativas
-
----
-
-## Seção Técnica: Limitações de PDFs em Edge Functions
-
-Edge functions Deno têm limitações para parsing de PDFs:
-- Timeout de 30-60 segundos
-- Memória limitada
-- Bibliotecas Node.js não funcionam diretamente
-
-**Estratégia de fallback:**
-1. Tentar extrair texto simples
-2. Se falhar, informar usuário
-3. Para PDFs complexos (diagramas como o enviado), sugerir enviar como imagem
-
-O PDF do usuário "Diagrama de Pacotes Invext" é um **diagrama visual** - mesmo extraindo texto, seria melhor enviá-lo como imagem para o Vision analisar o layout.
+1. PDFs com texto embutido são lidos corretamente (ex: documentos Word convertidos)
+2. PDFs visuais/escaneados informam claramente que precisam ser enviados como imagem
+3. Limite de 10 páginas garante performance adequada
+4. Sem erros de `fs.readFileSync`
 
