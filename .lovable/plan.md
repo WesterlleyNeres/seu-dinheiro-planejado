@@ -1,371 +1,234 @@
 
 
-# Plano: Unificacao de Layout + Onboarding Guiado por IA
+# Plano: Corrigir Menu Lateral + Otimizar Velocidade de Resposta
 
-## Visao Geral
+## Problemas Identificados
 
-Este plano aborda tres solicitacoes principais:
+### 1. Menu Lateral Sempre Volta para Chat
 
-1. **Unificar o tema visual** - Ambos modulos (JARVIS e Financas) usarao o mesmo tema
-2. **Unificar a barra lateral** - Uma unica sidebar para toda a aplicacao
-3. **Onboarding guiado por IA** - Novos usuarios serao guiados pelo JARVIS de forma humanizada
+**Causa raiz encontrada:**
+- O campo `onboarding_completed` está `false` no banco de dados
+- O campo `onboarding_step` está travado em `wallet_setup` (não progrediu para `complete`)
+- O `OnboardingGuard` redireciona TODAS as rotas para `/jarvis/chat` enquanto `onboarding_completed = false`
+- O JARVIS não está chamando `update_user_profile` com `onboarding_completed: true` ao finalizar
+
+**Evidência do banco de dados:**
+```
+nickname: Westerlley
+onboarding_completed: false   ← PROBLEMA
+onboarding_step: wallet_setup  ← Deveria ser 'complete'
+```
+
+### 2. Respostas Lentas
+
+**Causa raiz encontrada:**
+- O modelo `o3` está sendo usado como orquestrador principal
+- O `o3` é um modelo de "raciocínio" que "pensa" antes de responder (chain-of-thought interno)
+- Isso causa latência de 10-30 segundos mesmo para perguntas simples
+- O `o3` é ideal para tarefas complexas, mas excessivo para chat casual
 
 ---
 
-## Parte 1: Unificacao do Tema
+## Solucao Parte 1: Corrigir Onboarding
 
-### Problema Atual
-- `JarvisLayout` aplica classe `jarvis-theme` (tema escuro com cyan)
-- `AppLayout` usa tema padrao (claro com verde)
-- Isso causa "choque visual" ao navegar entre modulos
+### Alteracoes no Sistema de Prompt
 
-### Solucao
-Unificar o tema usando **apenas o tema verde/emerald** (atual do Financas), que e mais agradavel e profissional. O tema jarvis-theme sera removido.
+O prompt atual instrui o JARVIS a marcar `onboarding_completed: true` na etapa COMPLETE, mas ele não está fazendo isso consistentemente. Vamos:
 
-### Arquivos a Modificar
+1. **Adicionar deteccao automatica de finalizacao**: Quando o JARVIS completa a etapa `first_habit` (opcional), ele deve automaticamente marcar como completo
+2. **Ser mais explicito no prompt**: Reforcar que APOS criar habito OU se usuario recusar, DEVE marcar onboarding como completo
+3. **Adicionar fallback**: Se conversa ja tem mais de 5 turnos E usuario ja tem carteira, considerar onboarding completo
 
-| Arquivo | Alteracao |
-|---------|-----------|
-| `src/index.css` | Manter apenas os temas `:root` (claro) e `.dark` (escuro), remover `.jarvis-theme` |
-| `src/components/layout/JarvisLayout.tsx` | Remover o `useEffect` que aplica `jarvis-theme` |
+### Alteracoes no OnboardingGuard
 
----
+Atualmente o guard é muito restritivo. Vamos ajustar:
 
-## Parte 2: Sidebar Unificada
+1. **Verificar se usuario ja tem dados basicos**: Se tem carteira criada, considerar onboarding "funcional"
+2. **Permitir mais rotas durante onboarding**: Dashboard, Wallets (para visualizar carteira criada)
+3. **Adicionar botao "Pular Onboarding"**: No chat, permitir que usuario pule manualmente
 
-### Problema Atual
-- `AppLayout` tem sidebar de 264px com menu expandido
-- `JarvisLayout` tem sidebar de 64px com icones apenas
-- Sao componentes completamente diferentes
+### Alteracao Imediata no Banco
 
-### Solucao
-Criar uma **nova sidebar unificada** que combine os dois modulos em um menu unico e coeso. O novo layout sera reutilizado por todas as paginas.
-
-### Nova Estrutura de Arquivos
-
-```text
-src/components/layout/
-  UnifiedLayout.tsx        ← NOVO: Layout unico para toda app
-  UnifiedSidebar.tsx       ← NOVO: Sidebar unificada
-  UnifiedHeader.tsx        ← NOVO: Header com saudacao + tenant switcher
-```
-
-### Estrutura da Nova Sidebar
-
-```text
-┌─────────────────────────┐
-│  🧩 FRACTTO FLOW        │  ← Logo + Nome
-│  Suas financas          │
-├─────────────────────────┤
-│  [Tenant Switcher]      │  ← Dropdown de workspaces
-├─────────────────────────┤
-│  ASSISTENTE             │
-│  🧠 Inicio              │  ← /jarvis
-│  💬 Chat                │  ← /jarvis/chat
-│  ☑️ Tarefas             │  ← /jarvis/tasks
-│  📅 Agenda              │  ← /jarvis/calendar
-│  🔄 Habitos             │  ← /jarvis/habits
-│  🔔 Lembretes           │  ← /jarvis/reminders
-│  💡 Memoria             │  ← /jarvis/memory
-├─────────────────────────┤
-│  FINANCAS               │
-│  📊 Dashboard           │  ← /dashboard
-│  📝 Lancamentos         │  ← /transactions
-│  🏷️ Categorias          │  ← /categories
-│  💳 Carteiras           │  ← /wallets
-│  ↔️ Transferencias      │  ← /transfers
-│  📅 Calendario          │  ← /calendar
-│  📈 Orcamento           │  ← /budget
-│  🎯 Metas               │  ← /goals
-│  📉 Investimentos       │  ← /investments
-│  📊 Relatorios          │  ← /reports
-│  📥 Importar            │  ← /import
-│  ❓ Ajuda (FAQ)         │  ← /faq
-├─────────────────────────┤
-│  SISTEMA                │
-│  ⚙️ Configuracoes       │  ← /settings ou /jarvis/settings
-├─────────────────────────┤
-│  👤 email@usuario.com   │
-│  🚪 Sair                │
-└─────────────────────────┘
-```
-
-### Alteracoes em App.tsx
-
-Todas as rotas passarao a usar `UnifiedLayout` em vez de `AppLayout` ou `JarvisLayout`:
-
-```tsx
-// ANTES
-<AppLayout><Dashboard /></AppLayout>
-<JarvisLayout><JarvisDashboard /></JarvisLayout>
-
-// DEPOIS
-<UnifiedLayout><Dashboard /></UnifiedLayout>
-<UnifiedLayout><JarvisDashboard /></UnifiedLayout>
+Para o usuario "Westerlley" que ja completou o onboarding mas esta travado:
+```sql
+UPDATE ff_user_profiles 
+SET onboarding_completed = true, onboarding_step = 'complete'
+WHERE nickname = 'Westerlley';
 ```
 
 ---
 
-## Parte 3: Onboarding Guiado por IA
+## Solucao Parte 2: Otimizar Velocidade
 
-### Conceito
+### Estrategia: Modelo Dinamico baseado em Complexidade
 
-O JARVIS sera o "host" do onboarding. Quando um usuario novo acessa o sistema pela primeira vez, ele e automaticamente redirecionado para o chat do JARVIS, onde o assistente:
-
-1. **Da boas-vindas** de forma humanizada
-2. **Pergunta o apelido** do usuario
-3. **Explica as funcionalidades** do sistema (overview)
-4. **Faz perguntas** para entender o perfil e objetivos
-5. **Sugere proximos passos** (criar carteira, primeiro habito, etc.)
-6. **Marca onboarding como completo** quando finalizado
-
-### Deteccao de Usuario Novo
-
-A tabela `ff_user_profiles` ja possui:
-- `onboarding_completed` (boolean, default false)
-- `onboarding_step` (text, default 'welcome')
-
-### Fluxo de Onboarding
+Em vez de usar `o3` para tudo, vamos implementar um sistema que escolhe o modelo baseado na complexidade da mensagem:
 
 ```text
-Usuario faz login pela primeira vez
-           ↓
-TenantContext cria tenant + verifica perfil
-           ↓
-┌─────────────────────────────────────┐
-│ Se onboarding_completed = false:    │
-│   → Redirecionar para /jarvis/chat  │
-│   → JARVIS inicia conversa          │
-└─────────────────────────────────────┘
-           ↓
-JARVIS conduz onboarding em etapas:
-  - welcome: Boas-vindas + pergunta apelido
-  - profile: Pergunta objetivos
-  - wallet_setup: Sugere criar carteira
-  - first_habit: Sugere criar primeiro habito
-  - complete: Marca onboarding_completed = true
-           ↓
-Usuario tem acesso livre ao sistema
+Mensagem simples (saudacao, pergunta direta)
+   ↓
+gpt-4o-mini (rapido, ~1-2s)
+
+Mensagem complexa (analise financeira, planejamento)
+   ↓
+o3 (raciocinio, ~10-20s)
 ```
 
-### Componente de Controle de Onboarding
-
-Novo hook `useOnboarding` para gerenciar estado:
+### Heuristica de Complexidade
 
 ```typescript
-// src/hooks/useOnboarding.ts
-export function useOnboarding() {
-  const { tenantId } = useTenant();
+function selectModel(message: string, hasAttachments: boolean): string {
+  // Sempre usar gpt-4o para imagens (Vision)
+  if (hasAttachments) return "gpt-4o";
   
-  // Query para buscar perfil
-  const { data: profile, isLoading } = useQuery({
-    queryKey: ['user-profile', tenantId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('ff_user_profiles')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .single();
-      return data;
-    },
-    enabled: !!tenantId,
-  });
-
-  const needsOnboarding = !isLoading && (!profile || !profile.onboarding_completed);
-
-  return {
-    profile,
-    isLoading,
-    needsOnboarding,
-    currentStep: profile?.onboarding_step || 'welcome',
-  };
+  // Palavras-chave que indicam analise complexa
+  const complexKeywords = [
+    "analise", "planej", "estrateg", "compar", "otimiz",
+    "projec", "simul", "calcul", "organiz", "resumo mensal"
+  ];
+  
+  const isComplex = complexKeywords.some(kw => 
+    message.toLowerCase().includes(kw)
+  );
+  
+  // Mensagens longas provavelmente sao complexas
+  const isLongMessage = message.length > 200;
+  
+  // Primeira mensagem de onboarding deve ser rapida e acolhedora
+  const isSimpleGreeting = message.length < 50;
+  
+  if (isComplex || isLongMessage) {
+    return "o3"; // Modelo de raciocinio para tarefas complexas
+  }
+  
+  return "gpt-4o-mini"; // Modelo rapido para chat casual
 }
 ```
 
-### Redirecionamento Automatico
+### Alternativa: Usar gpt-4o como Padrao
 
-No `ProtectedRoute.tsx` ou em um wrapper dedicado:
+Outra opcao mais simples:
+- Trocar `o3` por `gpt-4o` como modelo principal
+- `gpt-4o` é rapido (~2-5s) e muito capaz
+- Reservar `o3` apenas para um "modo analise" especifico
+
+---
+
+## Arquivos a Modificar
+
+| Arquivo | Alteracao |
+|---------|-----------|
+| `supabase/functions/ff-jarvis-chat/index.ts` | 1. Adicionar funcao `selectModel()` para escolher modelo dinamicamente. 2. Melhorar prompt de onboarding para ser mais explicito sobre finalizacao |
+| `src/components/OnboardingGuard.tsx` | 1. Adicionar verificacao se usuario ja tem carteira. 2. Expandir lista de rotas permitidas |
+| `src/hooks/useOnboarding.ts` | Adicionar query para verificar se usuario tem carteiras (fallback de onboarding) |
+| `src/components/jarvis/chat/ChatWelcome.tsx` | Adicionar botao "Pular configuracao" discreto |
+
+---
+
+## Detalhes Tecnicos
+
+### Nova Funcao selectModel
+
+```typescript
+function selectModel(
+  message: string, 
+  hasImages: boolean,
+  isNewUser: boolean,
+  historyLength: number
+): string {
+  // Vision para imagens
+  if (hasImages) return "gpt-4o";
+  
+  // Onboarding deve ser rapido e acolhedor
+  if (isNewUser && historyLength < 10) return "gpt-4o-mini";
+  
+  // Detectar complexidade
+  const complexPatterns = [
+    /analis[ea]/i,
+    /planej/i,
+    /estrateg/i,
+    /compar/i,
+    /otimiz/i,
+    /projec[aã]/i,
+    /simul/i,
+    /organiz/i,
+    /resumo/i,
+    /relat[oó]rio/i,
+  ];
+  
+  const isComplex = complexPatterns.some(p => p.test(message));
+  const isLong = message.length > 300;
+  
+  if (isComplex || isLong) {
+    return "o3";
+  }
+  
+  // Default: modelo rapido
+  return "gpt-4o-mini";
+}
+```
+
+### Prompt de Onboarding Melhorado
+
+Adicionar ao prompt:
+```
+FINALIZACAO DO ONBOARDING:
+Apos criar a carteira (wallet_setup):
+1. Pergunte sobre habito (first_habit)
+2. Se usuario ACEITAR: crie o habito
+3. Se usuario RECUSAR ou PULAR: tudo bem
+4. IMEDIATAMENTE apos, use update_user_profile com:
+   - onboarding_completed: true
+   - onboarding_step: 'complete'
+5. Parabenize e sugira explorar o sistema
+
+IMPORTANTE: Se o usuario ja tem carteira E ja fez mais de 5 mensagens,
+considere o onboarding COMPLETO mesmo sem finalizacao explicita.
+```
+
+### OnboardingGuard Melhorado
 
 ```tsx
-// src/components/OnboardingGuard.tsx
-export const OnboardingGuard = ({ children }: { children: ReactNode }) => {
-  const location = useLocation();
+export const OnboardingGuard = ({ children }: Props) => {
   const { needsOnboarding, isLoading } = useOnboarding();
-
-  // Permitir acesso ao chat mesmo durante onboarding
-  const isOnboardingRoute = location.pathname === '/jarvis/chat';
-
-  if (isLoading) {
-    return <LoadingSpinner />;
+  const { data: wallets } = useWallets(); // Verificar se tem carteiras
+  
+  const hasSetupComplete = wallets && wallets.length > 0;
+  
+  // Se usuario ja tem carteira, liberar acesso mesmo sem onboarding completo
+  if (hasSetupComplete) {
+    return <>{children}</>;
   }
-
-  // Redirecionar para chat se precisa de onboarding
-  if (needsOnboarding && !isOnboardingRoute) {
-    return <Navigate to="/jarvis/chat" replace />;
-  }
-
-  return <>{children}</>;
+  
+  // Rotas expandidas durante onboarding
+  const allowedRoutes = [
+    "/jarvis/chat", 
+    "/jarvis/settings", 
+    "/settings",
+    "/wallets", // Ver carteira criada
+    "/dashboard", // Ver overview
+  ];
+  
+  // ... resto da logica
 };
 ```
 
-### Prompt do JARVIS para Onboarding
-
-Atualizar o `buildSystemPrompt` na edge function para ser mais robusto:
-
-```typescript
-const onboardingInstructions = isNewUser ? `
-
-🎯 ONBOARDING ATIVO - VOCÊ É O HOST!
-
-IMPORTANTE: Este é um usuário NOVO. Conduza uma experiência de boas-vindas incrível.
-
-ETAPAS DO ONBOARDING:
-1. **welcome**: 
-   - Apresente-se como JARVIS
-   - Pergunte: "Como posso te chamar?"
-   - Use update_user_profile para salvar nickname
-   - Avance para profile
-
-2. **profile**:
-   - Pergunte sobre objetivos principais
-   - "O que te trouxe ao Fractto Flow?"
-   - Opcoes: controlar gastos, criar habitos, organizar agenda
-   - Salve nas preferences
-
-3. **wallet_setup**:
-   - Explique: "Para comecar suas financas..."
-   - Sugira criar primeira carteira (conta bancaria ou dinheiro)
-   - Use create_wallet se usuario concordar
-
-4. **first_habit** (opcional):
-   - Sugira um habito simples para comecar
-   - Ex: "Beber agua", "Revisar gastos"
-   - Use create_habit se aceitar
-
-5. **complete**:
-   - Parabens! Resuma o que foi configurado
-   - Marque onboarding_completed = true
-   - Sugira explorar o sistema
-
-REGRAS:
-- Seja ACOLHEDOR e PACIENTE
-- Explique de forma SIMPLES
-- Nao force acoes - sempre pergunte
-- Use emojis moderadamente
-- Celebre cada pequena conquista
-` : '';
-```
-
-### UI de Onboarding no Chat
-
-Atualizar `ChatWelcome.tsx` para ser mais acolhedor:
-
-```tsx
-export function ChatWelcome({ onQuickAction }: ChatWelcomeProps) {
-  return (
-    <div className="flex flex-col items-center justify-center h-full py-8">
-      <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 mb-6 animate-pulse">
-        <Brain className="h-10 w-10 text-primary" />
-      </div>
-      
-      <h2 className="text-2xl font-bold mb-2 bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-        Bem-vindo ao Fractto Flow!
-      </h2>
-      <p className="text-muted-foreground text-center max-w-md mb-8">
-        Eu sou o <span className="font-semibold text-primary">JARVIS</span>, 
-        seu assistente pessoal. Vou te ajudar a configurar tudo e conhecer o sistema.
-      </p>
-
-      <Button 
-        size="lg"
-        onClick={() => onQuickAction("Olá JARVIS! Vamos começar?")}
-        className="gap-2"
-      >
-        <Sparkles className="h-5 w-5" />
-        Iniciar Configuração
-      </Button>
-    </div>
-  );
-}
-```
-
 ---
 
-## Resumo de Arquivos
+## Impacto Esperado
 
-### Novos Arquivos
+### Velocidade
+- Mensagens simples: de ~15s para ~2s (7x mais rapido)
+- Onboarding: interacoes mais fluidas e naturais
+- Chat casual: resposta quase instantanea
 
-| Arquivo | Descricao |
-|---------|-----------|
-| `src/components/layout/UnifiedLayout.tsx` | Layout unico para toda aplicacao |
-| `src/components/layout/UnifiedSidebar.tsx` | Sidebar unificada com todos os menus |
-| `src/components/layout/UnifiedHeader.tsx` | Header com saudacao + tenant switcher |
-| `src/hooks/useOnboarding.ts` | Hook para gerenciar estado do onboarding |
-| `src/components/OnboardingGuard.tsx` | Componente que redireciona para onboarding |
+### Onboarding
+- Menu lateral funciona apos criar carteira
+- Usuarios nao ficam "presos" no chat
+- Experiencia mais flexivel
 
-### Arquivos a Modificar
-
-| Arquivo | Alteracao |
-|---------|-----------|
-| `src/index.css` | Remover `.jarvis-theme` |
-| `src/App.tsx` | Usar `UnifiedLayout` + adicionar `OnboardingGuard` |
-| `src/components/jarvis/chat/ChatWelcome.tsx` | UI mais acolhedora para onboarding |
-| `supabase/functions/ff-jarvis-chat/index.ts` | Prompt de onboarding mais detalhado |
-
-### Arquivos a Remover/Depreciar
-
-| Arquivo | Acao |
-|---------|------|
-| `src/components/layout/AppLayout.tsx` | Depreciar (substituido por UnifiedLayout) |
-| `src/components/layout/JarvisLayout.tsx` | Depreciar |
-| `src/components/jarvis/JarvisSidebar.tsx` | Depreciar |
-| `src/components/layout/MainLayout.tsx` | Depreciar |
-| `src/components/layout/Sidebar.tsx` | Depreciar |
-
----
-
-## Sugestoes Adicionais para o Onboarding
-
-1. **Indicador de Progresso Visual**: Mostrar as etapas do onboarding no header ou sidebar
-2. **Modo "Tour"**: Apos onboarding, oferecer tour guiado pelas paginas
-3. **Conquistas**: Dar badges ao completar etapas (gamificacao leve)
-4. **Video Welcome**: Opcional - video curto do JARVIS explicando o sistema
-5. **Pular Onboarding**: Botao discreto para usuarios avancados pularem direto
-
----
-
-## Secao Tecnica
-
-### Estrategia de Migracao
-
-Para evitar quebras, a migracao sera feita em fases:
-
-**Fase 1**: Criar novos componentes sem alterar os existentes
-**Fase 2**: Atualizar rotas no App.tsx para usar UnifiedLayout
-**Fase 3**: Adicionar OnboardingGuard
-**Fase 4**: Remover arquivos deprecados
-
-### Consideracoes de Performance
-
-- O hook `useOnboarding` usa React Query com cache
-- O redirecionamento acontece antes de renderizar conteudo pesado
-- A sidebar unificada e memoizada para evitar re-renders
-
-### Tema Unificado - Cores Finais
-
-```css
-/* Verde/Emerald - Tema unificado */
-:root {
-  --primary: 158 64% 42%;       /* Verde emerald */
-  --accent: 177 70% 48%;        /* Cyan para destaques */
-  --background: 0 0% 100%;      /* Branco */
-  --card: 0 0% 100%;            /* Cards brancos */
-}
-
-.dark {
-  --primary: 158 64% 48%;       /* Verde mais vibrante */
-  --background: 158 40% 8%;     /* Fundo escuro esverdeado */
-  --card: 158 35% 12%;          /* Cards escuros */
-}
-```
+### Modelos Utilizados
+- `gpt-4o-mini`: Chat casual, onboarding, perguntas simples (~70% das interacoes)
+- `gpt-4o`: Quando tem imagens/documentos (~10%)
+- `o3`: Analises complexas, planejamento financeiro (~20%)
 
