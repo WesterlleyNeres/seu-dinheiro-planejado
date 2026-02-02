@@ -1,297 +1,135 @@
+# FRACTTO FLOW + JARVIS - Plano de Desenvolvimento
 
+## Fases Concluídas
 
-# Plano: Fase 5 - Integracao Google Calendar Bidirecional
+### ✅ Fase 1: JARVIS Core + Multi-tenancy
+- Sistema multi-tenant com `tenants` e `tenant_members`
+- RLS policies configuradas corretamente
+- Bootstrap automático de workspace
+- Contexto de tenant no React
 
-## Objetivo
+### ✅ Fase 2: Módulos JARVIS (Tasks, Events, Habits, Reminders, Memory)
+- Tabelas: `ff_tasks`, `ff_events`, `ff_habits`, `ff_habit_logs`, `ff_reminders`, `ff_memory_items`
+- Hooks React para cada módulo
+- UI para gestão de tarefas, eventos, hábitos
+- Sistema de memória para preferências e contexto
 
-Implementar sincronizacao real entre o JARVIS e o Google Calendar do usuario, permitindo:
-- Ver eventos do Google Calendar no JARVIS
-- Criar eventos no JARVIS e sincronizar com o Google Calendar
-- Atualizar/deletar eventos em ambas as direcoes
+### ✅ Fase 3: Chat IA com Function Calling
+- Edge function `ff-jarvis-chat` com Lovable AI
+- 16+ tools para tarefas, eventos, finanças, hábitos
+- Histórico de conversas persistido
+- System prompt dinâmico com contexto do usuário
 
----
+### ✅ Fase 4: Unificação WhatsApp + Web
+- `ff-whatsapp-ingest` refatorado com motor de IA completo
+- Mesmas tools disponíveis via WhatsApp
+- Histórico unificado com `channel: 'whatsapp'` ou `'web'`
+- Contexto compartilhado entre canais
 
-## Arquitetura da Solucao
+### ✅ Fase 5: Integração Google Calendar Bidirecional
+- **Edge Functions criadas**:
+  - `ff-google-oauth-callback` - Troca code por tokens
+  - `ff-google-calendar-sync` - Sincroniza eventos do Google → JARVIS
+  - `ff-google-calendar-push` - Envia eventos JARVIS → Google
+- **Migração aplicada**: Colunas `last_sync_at` e `sync_token` na tabela `ff_integrations_google`
+- **Frontend atualizado**:
+  - `useGoogleIntegration.ts` com fluxo OAuth completo
+  - `useJarvisEvents.ts` com push automático para Google
+  - `GoogleCalendarSection.tsx` componente de UI extraído
+  - `JarvisSettings.tsx` refatorado e simplificado
 
-```text
-+-------------------+                      +---------------------+
-|   Frontend        |                      | Google Calendar API |
-|  (JarvisSettings) |                      +---------------------+
-+-------------------+                              ^  |
-        |                                          |  v
-        v                                   +-------------------+
-+-------------------+                       | ff-google-calendar|
-| Lovable Cloud     | ---OAuth2 flow----->  | Edge Functions:   |
-| Auth (Google)     |                       | - oauth-callback  |
-+-------------------+                       | - sync-events     |
-        |                                   | - push-event      |
-        v                                   +-------------------+
-+-------------------+                              |
-| ff_integrations_  |<----- tokens/refresh --------+
-| google            |
-+-------------------+
-        |
-        v
-+-------------------+
-| ff_events         |
-| (google_event_id) |
-+-------------------+
-```
+#### ⚠️ Configuração Pendente para Google Calendar
 
----
+Para ativar o fluxo OAuth, é necessário:
 
-## Componentes a Criar
-
-### 1. Edge Functions (3 novas)
-
-| Funcao | Descricao |
-|--------|-----------|
-| `ff-google-oauth-callback` | Recebe callback do OAuth, salva tokens na tabela `ff_integrations_google` |
-| `ff-google-calendar-sync` | Busca eventos do Google e sincroniza com `ff_events` |
-| `ff-google-calendar-push` | Envia evento do JARVIS para o Google Calendar |
-
-### 2. Modificacoes no Frontend
-
-| Arquivo | Modificacao |
-|---------|-------------|
-| `src/hooks/useGoogleIntegration.ts` | Implementar fluxo OAuth real com Lovable Cloud |
-| `src/pages/JarvisSettings.tsx` | Atualizar UI para fluxo de conexao real |
-| `src/hooks/useJarvisEvents.ts` | Adicionar logica para sync bidirecional |
-
-### 3. Segredos Necessarios
-
-| Secret | Descricao |
-|--------|-----------|
-| `GOOGLE_CLIENT_ID` | OAuth client ID do Google Cloud Console |
-| `GOOGLE_CLIENT_SECRET` | OAuth client secret |
-
----
-
-## Fluxo de OAuth
-
-```text
-1. Usuario clica "Conectar Google Calendar"
-         |
-         v
-2. Lovable Cloud inicia OAuth flow (lovable.auth.signInWithOAuth('google'))
-   - Escopo: calendar.events + calendar.readonly
-         |
-         v
-3. Usuario autoriza no Google
-         |
-         v
-4. Google redireciona para callback com code
-         |
-         v
-5. Edge function `ff-google-oauth-callback`:
-   - Troca code por access_token + refresh_token
-   - Salva na tabela `ff_integrations_google`
-   - Busca email do usuario via userinfo API
-         |
-         v
-6. Frontend detecta conexao bem-sucedida via query
-         |
-         v
-7. Inicia sync inicial de eventos
-```
-
----
-
-## Detalhes das Edge Functions
-
-### ff-google-oauth-callback
-
-```typescript
-// Recebe: { code, tenant_id, user_id }
-// 1. Troca code por tokens via POST https://oauth2.googleapis.com/token
-// 2. Busca email via GET https://www.googleapis.com/oauth2/v2/userinfo
-// 3. Insere/atualiza ff_integrations_google com tokens
-// 4. Retorna { success: true, email }
-```
-
-### ff-google-calendar-sync
-
-```typescript
-// Recebe: { tenant_id, user_id }
-// 1. Busca tokens de ff_integrations_google
-// 2. Se expirado, refresh via POST https://oauth2.googleapis.com/token (grant_type: refresh_token)
-// 3. GET https://www.googleapis.com/calendar/v3/calendars/primary/events
-//    - timeMin: 30 dias atras
-//    - timeMax: 90 dias a frente
-// 4. Para cada evento do Google:
-//    a. Buscar por google_event_id em ff_events
-//    b. Se existe: atualizar (se updated mais recente)
-//    c. Se nao existe: inserir com source='google'
-// 5. Retorna { imported, updated, unchanged }
-```
-
-### ff-google-calendar-push
-
-```typescript
-// Recebe: { tenant_id, user_id, event_id, action: 'create'|'update'|'delete' }
-// 1. Busca tokens e faz refresh se necessario
-// 2. Busca evento em ff_events
-// 3. Se action='create':
-//    POST https://www.googleapis.com/calendar/v3/calendars/primary/events
-// 4. Se action='update':
-//    PATCH https://www.googleapis.com/calendar/v3/calendars/primary/events/{google_event_id}
-// 5. Se action='delete':
-//    DELETE https://www.googleapis.com/calendar/v3/calendars/primary/events/{google_event_id}
-// 6. Atualiza google_event_id no ff_events
-```
-
----
-
-## Mapeamento de Campos
-
-| JARVIS (ff_events) | Google Calendar Event |
-|--------------------|-----------------------|
-| title | summary |
-| description | description |
-| location | location |
-| start_at | start.dateTime (ou start.date se all_day) |
-| end_at | end.dateTime (ou end.date se all_day) |
-| all_day | (se start.date presente em vez de dateTime) |
-| google_event_id | id |
-| google_calendar_id | 'primary' (padrao) |
-
----
-
-## Modificacoes no Hook useGoogleIntegration
-
-```typescript
-// Novo fluxo:
-const initiateConnection = useMutation({
-  mutationFn: async () => {
-    // Usar Lovable Cloud para OAuth
-    const { error } = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: `${window.location.origin}/jarvis/settings`,
-      scopes: [
-        "https://www.googleapis.com/auth/calendar.events",
-        "https://www.googleapis.com/auth/calendar.readonly"
-      ]
-    });
-    if (error) throw error;
-  }
-});
-```
-
----
-
-## Sincronizacao Automatica
-
-### Trigger de Sync
-
-| Evento | Acao |
-|--------|------|
-| Usuario conecta Google | Sync inicial (ultimos 30 dias + proximos 90 dias) |
-| Usuario abre /jarvis/calendar | Verificar se ultima sync > 15 min, se sim: sync |
-| Usuario cria evento manual | Push para Google se conectado |
-| Usuario atualiza evento | Push alteracao para Google |
-| Usuario deleta evento Google | Marcar como cancelled no JARVIS |
-
-### Tabela ff_integrations_google (nova coluna)
-
-```sql
-ALTER TABLE ff_integrations_google
-ADD COLUMN last_sync_at TIMESTAMPTZ;
-```
-
----
-
-## UI no JarvisSettings
-
-Apos conexao bem-sucedida:
-
-```text
-+----------------------------------------------------------+
-| Google Calendar                               [Conectado] |
-| Sincronizado com: usuario@gmail.com                       |
-| Ultima sync: ha 5 minutos                                 |
-|                                                           |
-| [Sincronizar Agora]                     [Desconectar]     |
-+----------------------------------------------------------+
-```
-
----
-
-## Arquivos a Criar/Modificar
-
-| Arquivo | Acao | Descricao |
-|---------|------|-----------|
-| `supabase/functions/ff-google-oauth-callback/index.ts` | Criar | Handler do callback OAuth |
-| `supabase/functions/ff-google-calendar-sync/index.ts` | Criar | Sync de eventos do Google |
-| `supabase/functions/ff-google-calendar-push/index.ts` | Criar | Push de eventos para Google |
-| `src/hooks/useGoogleIntegration.ts` | Modificar | Fluxo OAuth real |
-| `src/hooks/useJarvisEvents.ts` | Modificar | Adicionar push automatico |
-| `src/pages/JarvisSettings.tsx` | Modificar | UI de status de sync |
-| `supabase/config.toml` | Modificar | Adicionar novas functions |
-| `.lovable/plan.md` | Atualizar | Marcar Fase 5 como ativa |
-
----
-
-## Migracao de Banco
-
-```sql
--- Adicionar coluna de ultima sincronizacao
-ALTER TABLE ff_integrations_google
-ADD COLUMN IF NOT EXISTS last_sync_at TIMESTAMPTZ;
-
--- Adicionar coluna de sync_token para incremental sync
-ALTER TABLE ff_integrations_google
-ADD COLUMN IF NOT EXISTS sync_token TEXT;
-```
-
----
-
-## Seguranca
-
-| Aspecto | Implementacao |
-|---------|---------------|
-| Tokens criptografados | Tokens OAuth armazenados com RLS (user so ve os proprios) |
-| Refresh automatico | Access token renovado silenciosamente quando expirado |
-| Revogacao | Ao desconectar, tokens sao removidos do banco |
-| Escopos minimos | Apenas calendar.events e calendar.readonly |
-
----
-
-## Ordem de Implementacao
-
-1. **Solicitar secrets** - GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET
-2. **Migracao de banco** - Adicionar colunas last_sync_at e sync_token
-3. **ff-google-oauth-callback** - Receber tokens do OAuth
-4. **ff-google-calendar-sync** - Importar eventos do Google
-5. **ff-google-calendar-push** - Exportar eventos para Google
-6. **useGoogleIntegration.ts** - Conectar frontend ao OAuth
-7. **useJarvisEvents.ts** - Auto-sync ao criar/atualizar eventos
-8. **JarvisSettings.tsx** - UI de status e acoes
-
----
-
-## Prerequisitos
-
-Antes de comecar a implementacao, o usuario precisa:
-
-1. **Criar projeto no Google Cloud Console**
-   - Ativar Google Calendar API
+1. **No Google Cloud Console**:
+   - Criar projeto e ativar Google Calendar API
    - Configurar OAuth consent screen
-   - Criar OAuth 2.0 credentials (Web application)
-   - Adicionar redirect URIs autorizados
+   - Criar credenciais OAuth 2.0 (Web application)
+   - Adicionar Redirect URI: `https://fracttoflow.lovable.app/jarvis/settings`
 
-2. **Fornecer os secrets**
-   - GOOGLE_CLIENT_ID
-   - GOOGLE_CLIENT_SECRET
+2. **No projeto Lovable**:
+   - Adicionar `VITE_GOOGLE_CLIENT_ID` ao arquivo `.env` com o Client ID do Google
 
 ---
 
-## Resultado Esperado
+## Próximas Evoluções Possíveis
 
-Apos implementacao:
+| Evolução | Descrição |
+|----------|-----------|
+| 🎤 Suporte a Áudio WhatsApp | Transcrição de mensagens de voz recebidas via n8n |
+| 📱 Notificações Proativas WhatsApp | JARVIS envia lembretes e alertas automaticamente |
+| 🔄 Webhook de Sync do Google | Receber notificações push quando eventos mudam no Google |
+| 📊 Dashboard Analytics | Estatísticas de produtividade, hábitos, finanças |
+| 👥 Colaboração Multi-usuário | Compartilhar tarefas e eventos com outros membros |
 
-1. Botao "Conectar Google Calendar" funciona com OAuth real
-2. Eventos do Google aparecem no JARVIS com badge "Google"
-3. Eventos criados no JARVIS sao enviados ao Google Calendar
-4. Edicoes em qualquer lado sincronizam automaticamente
-5. Status de sync visivel nas configuracoes
-6. JARVIS IA tem acesso aos eventos do Google Calendar via tools
+---
 
+## Arquitetura Atual
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                        FRONTEND                              │
+│  React + Vite + TailwindCSS + shadcn/ui                     │
+│  - JarvisLayout (sidebar + content)                         │
+│  - Módulos: Dashboard, Tasks, Calendar, Habits, Chat        │
+│  - Finanças: Dashboard, Transactions, Budget, Investments   │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     SUPABASE (Lovable Cloud)                 │
+│  ┌─────────────────┐  ┌─────────────────┐                   │
+│  │   Edge Functions│  │   Database       │                   │
+│  │   - ff-jarvis-  │  │   - ff_* tables │                   │
+│  │     chat        │  │   - tenants     │                   │
+│  │   - ff-whatsapp-│  │   - transactions│                   │
+│  │     ingest      │  │   - wallets     │                   │
+│  │   - ff-google-* │  │   - categories  │                   │
+│  │   - cron-send-  │  │   - budgets     │                   │
+│  │     reminders   │  │   - investments │                   │
+│  └─────────────────┘  └─────────────────┘                   │
+└─────────────────────────────────────────────────────────────┘
+                              │
+          ┌───────────────────┴───────────────────┐
+          ▼                                       ▼
+┌─────────────────────┐                ┌─────────────────────┐
+│   Lovable AI        │                │   Google Calendar   │
+│   Gateway           │                │   API               │
+│   (gemini-3-flash)  │                │   (OAuth 2.0)       │
+└─────────────────────┘                └─────────────────────┘
+          │
+          ▼
+┌─────────────────────┐
+│   n8n Webhook       │
+│   (WhatsApp via     │
+│    Evolution API)   │
+└─────────────────────┘
+```
+
+---
+
+## Secrets Configurados
+
+| Secret | Usado em |
+|--------|----------|
+| `LOVABLE_API_KEY` | ff-jarvis-chat, ff-whatsapp-ingest |
+| `N8N_WEBHOOK_TOKEN` | ff-whatsapp-ingest, ff-whatsapp-verify |
+| `VAPID_PUBLIC_KEY` | get-vapid-public-key, process-reminders |
+| `VAPID_PRIVATE_KEY` | process-reminders |
+| `VAPID_SUBJECT` | process-reminders |
+| `RESEND_API_KEY` | send-alerts |
+| `GOOGLE_CLIENT_ID` | ff-google-oauth-callback |
+| `GOOGLE_CLIENT_SECRET` | ff-google-oauth-callback, ff-google-calendar-sync, ff-google-calendar-push |
+
+---
+
+## Padrões de Código
+
+1. **RLS obrigatório** em todas as tabelas
+2. **Soft delete** quando aplicável (`deleted_at`)
+3. **Timezone fixo**: `America/Sao_Paulo`
+4. **Moeda**: BRL com `Intl.NumberFormat`
+5. **Componentes focados**: Máximo 300-400 linhas
+6. **Hooks customizados**: Para lógica de dados
+7. **Edge Functions**: CORS habilitado, error handling tipado

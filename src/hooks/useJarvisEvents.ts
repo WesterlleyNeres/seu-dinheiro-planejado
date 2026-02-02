@@ -20,7 +20,7 @@ interface UpdateEventInput extends Partial<CreateEventInput> {
   status?: 'scheduled' | 'cancelled' | 'completed';
 }
 
-// Helper: agrupar eventos por data
+// Helper: group events by date
 const groupEventsByDate = (events: JarvisEvent[]): Record<string, JarvisEvent[]> => {
   const groups: Record<string, JarvisEvent[]> = {};
 
@@ -32,8 +32,8 @@ const groupEventsByDate = (events: JarvisEvent[]): Record<string, JarvisEvent[]>
     groups[dateKey].push(event);
   });
 
-  // Ordenar eventos dentro de cada dia por horário
-  // Eventos "dia inteiro" (all_day) aparecem primeiro
+  // Sort events within each day by time
+  // All-day events appear first
   Object.keys(groups).forEach(key => {
     groups[key].sort((a, b) => {
       if (a.all_day && !b.all_day) return -1;
@@ -43,6 +43,30 @@ const groupEventsByDate = (events: JarvisEvent[]): Record<string, JarvisEvent[]>
   });
 
   return groups;
+};
+
+// Push event to Google Calendar (fire and forget)
+const pushToGoogle = async (
+  tenantId: string, 
+  eventId: string, 
+  action: 'create' | 'update' | 'delete'
+) => {
+  try {
+    const response = await supabase.functions.invoke("ff-google-calendar-push", {
+      body: { tenant_id: tenantId, event_id: eventId, action },
+    });
+    
+    if (response.error) {
+      console.error("Google push error:", response.error);
+    } else if (response.data?.skipped) {
+      console.log("Google push skipped:", response.data.reason);
+    } else {
+      console.log("Google push success:", response.data);
+    }
+  } catch (err) {
+    // Silent fail - don't interrupt user flow
+    console.error("Google push failed:", err);
+  }
 };
 
 export const useJarvisEvents = () => {
@@ -95,11 +119,16 @@ export const useJarvisEvents = () => {
       if (error) throw error;
       return data as JarvisEvent;
     },
-    onSuccess: () => {
+    onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey });
       toast({ title: "Evento criado com sucesso!" });
+      
+      // Push to Google Calendar in background
+      if (tenantId) {
+        pushToGoogle(tenantId, data.id, "create");
+      }
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({ title: "Erro ao criar evento", description: error.message, variant: "destructive" });
     },
   });
@@ -119,34 +148,52 @@ export const useJarvisEvents = () => {
       if (error) throw error;
       return data as JarvisEvent;
     },
-    onSuccess: () => {
+    onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey });
       toast({ title: "Evento atualizado!" });
+      
+      // Push to Google Calendar in background
+      if (tenantId) {
+        pushToGoogle(tenantId, data.id, "update");
+      }
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({ title: "Erro ao atualizar evento", description: error.message, variant: "destructive" });
     },
   });
 
   const deleteEvent = useMutation({
     mutationFn: async (id: string) => {
+      // First get the event to check if it has google_event_id
+      const { data: eventData } = await supabase
+        .from("ff_events")
+        .select("google_event_id")
+        .eq("id", id)
+        .single();
+
+      // Push delete to Google before deleting locally
+      if (tenantId && eventData?.google_event_id) {
+        await pushToGoogle(tenantId, id, "delete");
+      }
+
       const { error } = await supabase
         .from("ff_events")
         .delete()
         .eq("id", id);
 
       if (error) throw error;
+      return id;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
       toast({ title: "Evento removido!" });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({ title: "Erro ao remover evento", description: error.message, variant: "destructive" });
     },
   });
 
-  // Helper para filtrar eventos por período
+  // Helper to filter events by date range
   const getEventsByDateRange = (startDate: Date, endDate: Date) => {
     return events.filter(event => {
       const eventDate = new Date(event.start_at);
@@ -165,9 +212,12 @@ export const useJarvisEvents = () => {
     return getEventsByDateRange(today, future);
   };
 
-  // Eventos da semana agrupados por data
+  // Week events grouped by date
   const weekEvents = getUpcomingEvents(7);
   const groupedWeekEvents = groupEventsByDate(weekEvents);
+
+  // Check if any events are from Google
+  const hasGoogleEvents = events.some(e => e.source === "google");
 
   return {
     events,
@@ -183,5 +233,6 @@ export const useJarvisEvents = () => {
     groupedWeekEvents,
     getEventsByDateRange,
     getUpcomingEvents,
+    hasGoogleEvents,
   };
 };

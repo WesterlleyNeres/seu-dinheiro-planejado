@@ -26,3 +26,12 @@ verify_jwt = false
 
 [functions.ff-jarvis-chat]
 verify_jwt = false
+
+[functions.ff-google-oauth-callback]
+verify_jwt = false
+
+[functions.ff-google-calendar-sync]
+verify_jwt = true
+
+[functions.ff-google-calendar-push]
+verify_jwt = true

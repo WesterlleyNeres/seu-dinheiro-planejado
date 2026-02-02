@@ -137,6 +137,8 @@ export interface GoogleIntegration {
   refresh_token: string | null;
   expiry: string | null;
   scope: string | null;
+  last_sync_at: string | null;
+  sync_token: string | null;
   created_at: string;
   updated_at: string;
 }
