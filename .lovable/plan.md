@@ -1,452 +1,240 @@
 
-# Plano: Suporte a Audio, Imagens e Documentos no Chat JARVIS
 
-## Objetivo
+# Plano: Corrigir Processamento de Documentos no Chat JARVIS
 
-Adicionar capacidade de enviar e receber midia (audio, imagens e documentos) no chat JARVIS, similar ao ChatGPT e WhatsApp.
+## Problema Identificado
 
-## Arquitetura Atual
+O PDF "Diagrama de Pacotes Invext.pdf" está sendo enviado corretamente para o storage, mas a edge function **não extrai o conteúdo** do documento. Apenas o link é passado para a IA, que não consegue "ler" URLs de PDFs.
 
-| Componente | Estado |
-|------------|--------|
-| `ff_conversation_messages` | Apenas campo `content` (texto) |
-| `JarvisChat.tsx` | Input de texto apenas |
-| `ChatMessage.tsx` | Renderiza apenas texto/markdown |
-| `useJarvisChat.ts` | Envia apenas string |
-| `ff-jarvis-chat` | Processa apenas texto |
-| Storage | Bucket `social-images` existe |
+**Fluxo atual (com bug):**
+```text
+Usuário envia PDF
+      ↓
+Upload para storage ✓
+      ↓
+Edge function recebe {type: "document", url: "https://..."} 
+      ↓
+Mensagem enviada ao GPT: "leia o documento"
+      ↓
+GPT não tem acesso à URL do PDF ← PROBLEMA
+      ↓
+JARVIS diz "não recebi arquivo"
+```
 
-## Visao Geral da Solucao
+## Solução
+
+Adicionar extração de texto de documentos na edge function, similar ao que fazemos com áudio (Whisper):
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│                        FRONTEND                                  │
-├─────────────────────────────────────────────────────────────────┤
-│  JarvisChat.tsx                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ [📎] [🎤] [_________ texto _________] [➤]               │   │
-│  │      ^         ^                                        │   │
-│  │  Anexar    Gravar                                       │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  ChatMessage.tsx                                                │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  [IMAGEM preview] ou [AUDIO player] ou [DOC link]        │   │
-│  │  "Texto da mensagem..."                                  │   │
-│  └─────────────────────────────────────────────────────────┘   │
-├─────────────────────────────────────────────────────────────────┤
-│                        STORAGE                                   │
-├─────────────────────────────────────────────────────────────────┤
-│  Bucket: chat-attachments/{tenant_id}/{conversation_id}/       │
-│           {uuid}.{ext}                                          │
-├─────────────────────────────────────────────────────────────────┤
-│                        DATABASE                                  │
-├─────────────────────────────────────────────────────────────────┤
-│  ff_conversation_messages                                        │
-│  + attachments: jsonb  (array de {type, url, name, size})       │
-├─────────────────────────────────────────────────────────────────┤
-│                     EDGE FUNCTION                                │
-├─────────────────────────────────────────────────────────────────┤
-│  ff-jarvis-chat                                                  │
-│  - Recebe attachments[] com URLs                                 │
-│  - Para imagens: envia como image_url ao OpenAI (GPT-4o Vision) │
-│  - Para audio: transcreve via Whisper antes de processar        │
-│  - Para docs: extrai texto ou menciona no contexto              │
-└─────────────────────────────────────────────────────────────────┘
+Usuário envia PDF
+      ↓
+Upload para storage ✓
+      ↓
+Edge function recebe {type: "document", url: "https://..."}
+      ↓
+NOVA ETAPA: Baixar PDF e extrair texto
+      ↓
+Texto extraído adicionado à mensagem: "[Documento: conteúdo...]"
+      ↓
+GPT processa o texto ✓
 ```
 
 ---
 
-## Implementacao Detalhada
+## Implementacao
 
-### 1. Banco de Dados - Nova Coluna
+### Edge Function - Processar Documentos
 
-Adicionar coluna `attachments` na tabela `ff_conversation_messages`:
-
-```sql
-ALTER TABLE ff_conversation_messages 
-ADD COLUMN attachments jsonb DEFAULT NULL;
-
-COMMENT ON COLUMN ff_conversation_messages.attachments IS 
-'Array de anexos: [{type: "image"|"audio"|"document", url: string, name: string, size: number, mime_type: string}]';
-```
-
-### 2. Storage - Novo Bucket
-
-Criar bucket para anexos do chat:
-
-```sql
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('chat-attachments', 'chat-attachments', false)
-ON CONFLICT (id) DO NOTHING;
-
--- RLS: Usuarios podem fazer upload em suas proprias conversas
-CREATE POLICY "Users can upload chat attachments"
-ON storage.objects FOR INSERT
-WITH CHECK (
-  bucket_id = 'chat-attachments' 
-  AND auth.role() = 'authenticated'
-  AND (storage.foldername(name))[1] IN (
-    SELECT tenant_id::text FROM tenants 
-    WHERE user_id = auth.uid()
-  )
-);
-
--- RLS: Usuarios podem ver anexos de suas conversas
-CREATE POLICY "Users can view their chat attachments"
-ON storage.objects FOR SELECT
-USING (
-  bucket_id = 'chat-attachments'
-  AND auth.role() = 'authenticated'
-  AND (storage.foldername(name))[1] IN (
-    SELECT tenant_id::text FROM tenants 
-    WHERE user_id = auth.uid()
-  )
-);
-```
-
-### 3. Frontend - Input de Midia
-
-#### 3.1 Novo Componente: `ChatInput.tsx`
-
-Substituir o input simples por um componente completo:
+Adicionar função para extrair texto de PDFs e outros documentos:
 
 ```typescript
-interface ChatInputProps {
-  onSend: (message: string, attachments?: Attachment[]) => void;
-  isSending: boolean;
-  disabled?: boolean;
-}
+// Para PDFs: usar pdf-parse (biblioteca Deno)
+// Para TXT: ler diretamente
+// Para outros: mencionar que foi anexado
 
-interface Attachment {
-  type: 'image' | 'audio' | 'document';
-  file: File;
-  preview?: string;
-}
-
-export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
-  const [input, setInput] = useState('');
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [isRecording, setIsRecording] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  
-  // ... handlers para anexos, gravacao, etc
-}
-```
-
-Funcionalidades:
-- Botao de anexar (📎) abre seletor de arquivos
-- Botao de gravar audio (🎤) usa MediaRecorder API
-- Preview de anexos antes de enviar
-- Suporte a drag-and-drop
-
-#### 3.2 Atualizar `ChatMessage.tsx`
-
-Adicionar renderizacao de midia:
-
-```typescript
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  created_at: string;
-  attachments?: Attachment[];  // NOVO
-}
-
-// Renderizar anexos
-{message.attachments?.map((att, idx) => (
-  <div key={idx}>
-    {att.type === 'image' && (
-      <img src={att.url} alt={att.name} className="rounded-lg max-w-[300px]" />
-    )}
-    {att.type === 'audio' && (
-      <audio controls src={att.url} className="max-w-full" />
-    )}
-    {att.type === 'document' && (
-      <a href={att.url} target="_blank" className="flex items-center gap-2">
-        <FileText /> {att.name}
-      </a>
-    )}
-  </div>
-))}
-```
-
-### 4. Hook - Upload e Envio
-
-Atualizar `useJarvisChat.ts`:
-
-```typescript
-interface SendMessageParams {
-  message: string;
-  attachments?: Array<{
-    type: 'image' | 'audio' | 'document';
-    file: File;
-  }>;
-}
-
-// Funcao de upload
-const uploadAttachment = async (file: File, conversationId: string) => {
-  const ext = file.name.split('.').pop();
-  const path = `${tenantId}/${conversationId}/${crypto.randomUUID()}.${ext}`;
-  
-  const { data, error } = await supabase.storage
-    .from('chat-attachments')
-    .upload(path, file);
-  
-  if (error) throw error;
-  
-  const { data: urlData } = supabase.storage
-    .from('chat-attachments')
-    .getPublicUrl(path);
-  
-  return {
-    type: getAttachmentType(file.type),
-    url: urlData.publicUrl,
-    name: file.name,
-    size: file.size,
-    mime_type: file.type,
-  };
-};
-
-// Envio atualizado
-const sendMessage = useMutation({
-  mutationFn: async ({ message, attachments }: SendMessageParams) => {
-    let uploadedAttachments = [];
+async function extractDocumentText(
+  documentUrl: string, 
+  mimeType: string, 
+  fileName: string
+): Promise<string> {
+  try {
+    const response = await fetch(documentUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download: ${response.status}`);
+    }
     
-    // Upload dos anexos primeiro
-    if (attachments?.length) {
-      // Se nao tem conversationId, criar uma temp ID
-      const targetConvId = conversationId || 'temp-' + Date.now();
+    if (mimeType === "text/plain") {
+      // Arquivos de texto: ler diretamente
+      return await response.text();
+    }
+    
+    if (mimeType === "application/pdf") {
+      // PDFs: usar pdf-parse ou alternativa
+      // Como pdf-parse requer Node, usaremos uma abordagem alternativa
       
-      uploadedAttachments = await Promise.all(
-        attachments.map(a => uploadAttachment(a.file, targetConvId))
+      // Opção 1: Converter para imagem e usar Vision
+      // Opção 2: Usar API externa de extração
+      // Opção 3: Usar biblioteca Deno compatível
+      
+      // Implementação com mozilla/pdf.js via CDN
+      const pdfBuffer = await response.arrayBuffer();
+      const text = await extractPDFText(pdfBuffer);
+      return text;
+    }
+    
+    // Outros formatos: não suportado
+    return `[Documento ${fileName} anexado - formato não suportado para leitura]`;
+    
+  } catch (e) {
+    console.error("[JARVIS] Document extraction failed:", e);
+    return `[Documento ${fileName} anexado - não foi possível extrair texto]`;
+  }
+}
+```
+
+### Integração no Fluxo Principal
+
+No handler principal, após processar áudios:
+
+```typescript
+// Process documents
+for (const att of processedAttachments) {
+  if (att.type === "document") {
+    try {
+      console.log(`[JARVIS] Extracting text from document: ${att.name}`);
+      const documentText = await extractDocumentText(
+        att.url, 
+        att.mime_type || "application/pdf", 
+        att.name
       );
-    }
-    
-    // Enviar para edge function
-    const response = await fetch(
-      `${SUPABASE_URL}/functions/v1/ff-jarvis-chat`,
-      {
-        method: 'POST',
-        headers: { ... },
-        body: JSON.stringify({
-          message,
-          conversationId,
-          tenantId,
-          attachments: uploadedAttachments,
-        }),
+      
+      if (documentText && documentText.length > 0) {
+        // Limitar tamanho para não estourar contexto
+        const truncatedText = documentText.substring(0, 8000);
+        const isTruncated = documentText.length > 8000;
+        
+        processedMessage = `[Documento "${att.name}":\n${truncatedText}${isTruncated ? '\n... (texto truncado)' : ''}]\n\n${processedMessage}`.trim();
       }
-    );
-    
-    return response.json();
-  },
-});
-```
-
-### 5. Edge Function - Processamento de Midia
-
-Atualizar `ff-jarvis-chat/index.ts`:
-
-```typescript
-// Tipos atualizados
-interface ChatRequest {
-  message: string;
-  conversationId?: string;
-  tenantId: string;
-  attachments?: Array<{
-    type: 'image' | 'audio' | 'document';
-    url: string;
-    name: string;
-    mime_type: string;
-  }>;
-}
-
-// Processar audio com Whisper (via OpenAI)
-async function transcribeAudio(audioUrl: string): Promise<string> {
-  // Baixar o audio
-  const response = await fetch(audioUrl);
-  const audioBlob = await response.blob();
-  
-  // Enviar para Whisper API
-  const formData = new FormData();
-  formData.append('file', audioBlob, 'audio.mp3');
-  formData.append('model', 'whisper-1');
-  formData.append('language', 'pt');
-  
-  const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
-    body: formData,
-  });
-  
-  const result = await whisperRes.json();
-  return result.text;
-}
-
-// Construir mensagem para OpenAI com midia
-function buildMessageWithAttachments(
-  message: string, 
-  attachments: Attachment[]
-): any {
-  // Se tem imagens, usar formato multimodal
-  const imageAttachments = attachments.filter(a => a.type === 'image');
-  
-  if (imageAttachments.length > 0) {
-    return {
-      role: 'user',
-      content: [
-        { type: 'text', text: message },
-        ...imageAttachments.map(img => ({
-          type: 'image_url',
-          image_url: { url: img.url, detail: 'auto' }
-        }))
-      ]
-    };
-  }
-  
-  return { role: 'user', content: message };
-}
-
-// No handler principal
-serve(async (req) => {
-  const { message, attachments, ... } = await req.json();
-  
-  let processedMessage = message;
-  let processedAttachments = attachments || [];
-  
-  // Transcrever audios
-  for (const att of processedAttachments) {
-    if (att.type === 'audio') {
-      const transcription = await transcribeAudio(att.url);
-      processedMessage = `[Audio transcrito: ${transcription}]\n\n${processedMessage}`;
+    } catch (e) {
+      console.error(`[JARVIS] Document extraction failed:`, e);
+      processedMessage = `[Documento enviado: ${att.name} - extração de texto falhou]\n\n${processedMessage}`.trim();
     }
   }
-  
-  // Salvar mensagem com anexos
-  await supabase.from('ff_conversation_messages').insert({
-    conversation_id: convId,
-    tenant_id: tenantId,
-    role: 'user',
-    content: processedMessage,
-    attachments: processedAttachments.length > 0 ? processedAttachments : null,
-  });
-  
-  // Construir mensagem para IA
-  const userMessage = buildMessageWithAttachments(processedMessage, processedAttachments);
-  
-  // Chamar OpenAI com suporte a visao (GPT-4o)
-  const aiResponse = await fetch(OPENAI_API_URL, {
-    method: 'POST',
-    body: JSON.stringify({
-      model: 'gpt-4o', // Modelo com visao
-      messages: [...history, userMessage],
-      tools: TOOLS,
-    }),
-  });
-  
-  // ...
-});
+}
 ```
 
 ---
 
-## Tipos de Midia Suportados
+## Abordagem para PDFs em Deno/Edge Functions
 
-| Tipo | Extensoes | Limite | Processamento |
-|------|-----------|--------|---------------|
-| Imagem | jpg, png, gif, webp | 10MB | Vision (GPT-4o) |
-| Audio | mp3, wav, m4a, ogg | 25MB | Whisper (transcricao) |
-| Documento | pdf, txt, docx | 10MB | Extracao de texto |
+Como estamos em Deno (edge functions), precisamos de uma biblioteca compatível. Opções:
+
+### Opção A: Usar PDF como Imagem (Vision)
+- Converter primeira página para imagem
+- Enviar ao GPT-4o Vision
+- Limitação: apenas primeira página, depende de OCR
+
+### Opção B: pdf-lib para extração básica
+- Biblioteca Deno compatível
+- Extrai texto embedded em PDFs
+- Limitação: não funciona com PDFs escaneados
+
+### Opção C: API externa (recomendada para produção)
+- Usar serviço como Adobe PDF Extract, AWS Textract, etc.
+- Requer configuração adicional
+
+### Opção D: Fallback simples (implementação inicial)
+- Tentar ler como texto
+- Se for PDF, informar ao usuário que PDFs complexos precisam de OCR
+- Sugerir enviar como imagem (screenshot)
+
+**Recomendação**: Implementar Opção D primeiro (fallback) e depois evoluir para Opção A (Vision) ou C (API externa).
 
 ---
 
-## Arquivos a Modificar/Criar
+## Arquivos a Modificar
 
-| Arquivo | Alteracao |
+| Arquivo | Alteração |
 |---------|-----------|
-| **Migracao SQL** | Adicionar coluna `attachments` e bucket |
-| `src/components/jarvis/chat/ChatInput.tsx` | **NOVO** - Input com anexos e gravacao |
-| `src/components/jarvis/chat/ChatMessage.tsx` | Renderizar anexos (imagem/audio/doc) |
-| `src/components/jarvis/chat/AttachmentPreview.tsx` | **NOVO** - Preview antes de enviar |
-| `src/components/jarvis/chat/AudioRecorder.tsx` | **NOVO** - Gravacao de audio |
-| `src/hooks/useJarvisChat.ts` | Upload de arquivos + envio de attachments |
-| `src/pages/JarvisChat.tsx` | Integrar novo ChatInput |
-| `supabase/functions/ff-jarvis-chat/index.ts` | Processar audio/imagem/docs |
+| `supabase/functions/ff-jarvis-chat/index.ts` | Adicionar `extractDocumentText` e processar documentos no loop |
 
 ---
 
-## Fluxo de Usuario
+## Implementação Detalhada
 
-### Enviar Imagem
+Para a versão inicial, usaremos uma abordagem híbrida:
 
-1. Clica no 📎 ou arrasta imagem
-2. Preview aparece abaixo do input
-3. Digita texto opcional
-4. Clica enviar
-5. Imagem e feita upload para Storage
-6. Edge function recebe URL e envia para GPT-4o Vision
-7. JARVIS responde analisando a imagem
+1. **PDFs**: Converter para data URL e enviar como imagem ao GPT-4o Vision
+2. **TXT/Plain text**: Ler diretamente
+3. **Outros**: Informar que formato não é suportado
 
-### Enviar Audio
-
-1. Clica no 🎤 e segura para gravar
-2. Solta para parar
-3. Preview do audio aparece
-4. Clica enviar
-5. Audio e feito upload
-6. Edge function transcreve com Whisper
-7. Texto transcrito e processado pelo JARVIS
-
-### Enviar Documento
-
-1. Clica no 📎 e seleciona PDF/DOCX
-2. Arquivo aparece como card
-3. Envia
-4. Edge function extrai texto (primeiras paginas)
-5. JARVIS processa o conteudo
-
----
-
-## Secao Tecnica Adicional
-
-### Gravacao de Audio com MediaRecorder
+### Código para PDF como Imagem
 
 ```typescript
-// Em AudioRecorder.tsx
-const startRecording = async () => {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  const mediaRecorder = new MediaRecorder(stream, {
-    mimeType: 'audio/webm;codecs=opus'
-  });
+async function processPDFAsImage(
+  pdfUrl: string,
+  apiKey: string
+): Promise<{ type: "text" | "image_url"; content: any }> {
+  // Baixar PDF e converter para base64
+  const response = await fetch(pdfUrl);
+  const buffer = await response.arrayBuffer();
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
   
-  const chunks: Blob[] = [];
-  mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
-  mediaRecorder.onstop = () => {
-    const blob = new Blob(chunks, { type: 'audio/webm' });
-    const file = new File([blob], 'audio.webm', { type: 'audio/webm' });
-    onRecordingComplete(file);
+  // PDFs não podem ser enviados diretamente como imagem ao Vision
+  // Precisamos de um serviço de conversão ou usar biblioteca
+  
+  // Fallback: informar que PDF foi recebido mas precisa de conversão
+  return {
+    type: "text",
+    content: `[Documento PDF recebido. Para PDFs complexos, considere enviar como screenshot/imagem para melhor análise.]`
   };
-  
-  mediaRecorder.start();
-  mediaRecorderRef.current = mediaRecorder;
-};
+}
 ```
 
-### Modelo para Visao
+### Solução Prática
 
-- Usar `gpt-4o` quando houver imagens (suporta vision)
-- Manter `o3` para texto puro (melhor raciocinio)
+Para PDFs, vamos usar uma abordagem que funciona no Deno:
 
-### RLS para Bucket
+```typescript
+import * as pdfParse from "https://esm.sh/pdf-parse@1.1.1";
 
-O bucket sera privado, e o acesso sera via signed URLs ou atraves de RLS que verifica se o usuario pertence ao tenant da conversa.
+async function extractPDFContent(pdfUrl: string): Promise<string> {
+  const response = await fetch(pdfUrl);
+  const buffer = await response.arrayBuffer();
+  
+  try {
+    const data = await pdfParse(buffer);
+    return data.text || "";
+  } catch (e) {
+    console.error("PDF parse error:", e);
+    return "";
+  }
+}
+```
 
 ---
 
 ## Resultado Esperado
 
-1. Usuarios podem enviar imagens e JARVIS as analisa
-2. Usuarios podem gravar audio e JARVIS transcreve + responde
-3. Usuarios podem enviar documentos e JARVIS extrai informacoes
-4. Anexos aparecem nas mensagens do historico
-5. Interface similar ao ChatGPT/WhatsApp com botoes de midia
+1. Usuário envia PDF
+2. Edge function extrai texto do documento
+3. Texto é incluído na mensagem: `[Documento "nome.pdf": conteúdo extraído...]`
+4. JARVIS consegue analisar e responder sobre o documento
+5. Se extração falhar, JARVIS informa claramente e sugere alternativas
+
+---
+
+## Seção Técnica: Limitações de PDFs em Edge Functions
+
+Edge functions Deno têm limitações para parsing de PDFs:
+- Timeout de 30-60 segundos
+- Memória limitada
+- Bibliotecas Node.js não funcionam diretamente
+
+**Estratégia de fallback:**
+1. Tentar extrair texto simples
+2. Se falhar, informar usuário
+3. Para PDFs complexos (diagramas como o enviado), sugerir enviar como imagem
+
+O PDF do usuário "Diagrama de Pacotes Invext" é um **diagrama visual** - mesmo extraindo texto, seria melhor enviá-lo como imagem para o Vision analisar o layout.
+
