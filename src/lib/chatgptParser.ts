@@ -25,7 +25,11 @@ export interface ChatGPTRawMessage {
   create_time?: number;
   content: {
     content_type: string;
-    parts?: (string | null)[];
+    parts?: (string | null | Record<string, unknown>)[];
+  };
+  metadata?: {
+    attachments?: unknown[];
+    [key: string]: unknown;
   };
 }
 
@@ -45,6 +49,8 @@ export interface ParsedMessage {
   hash: string;
   conversationId: string;
   conversationTitle: string;
+  modelSlug?: string;
+  attachmentCount: number;
 }
 
 export interface ImportResult {
@@ -64,11 +70,13 @@ const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
 /**
  * Gera hash simples para deduplicação de conteúdo
  * Usa algoritmo djb2 para velocidade (não precisa ser criptográfico)
+ * Inclui timestamp para evitar colisões em mensagens idênticas
  */
-export function generateHash(content: string): string {
+export function generateHash(content: string, timestamp?: number): string {
+  const input = timestamp ? `${content}:${timestamp}` : content;
   let hash = 5381;
-  for (let i = 0; i < content.length; i++) {
-    hash = ((hash << 5) + hash) ^ content.charCodeAt(i);
+  for (let i = 0; i < input.length; i++) {
+    hash = ((hash << 5) + hash) ^ input.charCodeAt(i);
   }
   // Converter para hex positivo
   return (hash >>> 0).toString(16).padStart(8, '0');
@@ -101,6 +109,7 @@ export function validateFile(file: File): ParseError | null {
 function extractMessages(conversation: ChatGPTExportConversation): ParsedMessage[] {
   const messages: ParsedMessage[] = [];
   const mapping = conversation.mapping || {};
+  const modelSlug = (conversation as unknown as { default_model_slug?: string }).default_model_slug;
 
   for (const nodeId in mapping) {
     const node = mapping[nodeId];
@@ -112,7 +121,7 @@ function extractMessages(conversation: ChatGPTExportConversation): ParsedMessage
     const role = msg.author?.role;
     if (role !== 'user' && role !== 'assistant') continue;
 
-    // Extrair conteúdo das parts
+    // Extrair conteúdo das parts (filtrar strings e ignorar objetos/imagens)
     const parts = msg.content?.parts;
     if (!parts || !Array.isArray(parts)) continue;
 
@@ -125,17 +134,21 @@ function extractMessages(conversation: ChatGPTExportConversation): ParsedMessage
     if (!content) continue;
 
     // Criar timestamp se disponível
-    const timestamp = msg.create_time
-      ? new Date(msg.create_time * 1000)
-      : undefined;
+    const createTime = msg.create_time;
+    const timestamp = createTime ? new Date(createTime * 1000) : undefined;
+
+    // Contar anexos
+    const attachmentCount = msg.metadata?.attachments?.length || 0;
 
     messages.push({
       role,
       content,
       timestamp,
-      hash: generateHash(`${conversation.id}:${role}:${content}`),
+      hash: generateHash(`${conversation.id}:${role}:${content}`, createTime),
       conversationId: conversation.id,
       conversationTitle: conversation.title || 'Conversa sem título',
+      modelSlug: role === 'assistant' ? modelSlug : undefined,
+      attachmentCount,
     });
   }
 
@@ -264,6 +277,9 @@ export function mapToMemoryItem(
       content_hash: message.hash,
       original_timestamp: message.timestamp?.toISOString() || null,
       role: message.role,
+      model_slug: message.modelSlug || null,
+      has_attachments: message.attachmentCount > 0,
+      attachment_count: message.attachmentCount,
     },
   };
 }

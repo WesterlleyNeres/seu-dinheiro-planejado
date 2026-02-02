@@ -32,12 +32,17 @@ const kindConfig: Record<string, { label: string; className: string }> = {
   project: { label: "Projeto", className: "bg-green-500/20 text-green-400 border-green-500/30" },
   note: { label: "Nota", className: "bg-muted text-muted-foreground border-border" },
   message: { label: "Mensagem", className: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" },
+  chatgpt_user: { label: "ChatGPT (Você)", className: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
+  chatgpt_assistant: { label: "ChatGPT (IA)", className: "bg-violet-500/20 text-violet-400 border-violet-500/30" },
+  learned: { label: "Aprendido", className: "bg-amber-500/20 text-amber-400 border-amber-500/30" },
 };
 
 const sourceLabels: Record<string, string> = {
   manual: "Manual",
   whatsapp: "WhatsApp",
   app: "App",
+  chatgpt: "ChatGPT",
+  "jarvis-auto": "Auto-aprendido",
 };
 
 export const MemoryCard = ({ memory, onDelete }: MemoryCardProps) => {
@@ -152,6 +157,21 @@ export const MemoryCard = ({ memory, onDelete }: MemoryCardProps) => {
             <div className="max-h-[300px] overflow-y-auto rounded-lg bg-muted/50 p-4">
               <p className="whitespace-pre-wrap text-sm">{memory.content}</p>
             </div>
+
+            {/* Metadados extras para imports do ChatGPT */}
+            {memory.source === 'chatgpt' && memory.metadata && (
+              <div className="rounded-lg bg-muted/30 p-3 space-y-1 text-xs text-muted-foreground">
+                {(memory.metadata as Record<string, unknown>).model_slug && (
+                  <p>🤖 Modelo: <span className="text-foreground">{String((memory.metadata as Record<string, unknown>).model_slug)}</span></p>
+                )}
+                {(memory.metadata as Record<string, unknown>).original_timestamp && (
+                  <p>📅 Data original: <span className="text-foreground">{format(new Date(String((memory.metadata as Record<string, unknown>).original_timestamp)), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</span></p>
+                )}
+                {Number((memory.metadata as Record<string, unknown>).attachment_count) > 0 && (
+                  <p>📎 Anexos: <span className="text-foreground">{String((memory.metadata as Record<string, unknown>).attachment_count)}</span></p>
+                )}
+              </div>
+            )}
 
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>
