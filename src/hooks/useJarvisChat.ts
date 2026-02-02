@@ -23,12 +23,39 @@ interface ConversationMessage {
   created_at: string;
 }
 
+export interface Conversation {
+  id: string;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export function useJarvisChat() {
   const { tenant, tenantId } = useTenant();
   const { session } = useAuth();
   const queryClient = useQueryClient();
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [wantsNewConversation, setWantsNewConversation] = useState(false);
+
+  // Fetch all conversations for sidebar
+  const { data: conversations = [], isLoading: isLoadingConversations } = useQuery({
+    queryKey: ["jarvis-conversations", tenantId],
+    queryFn: async () => {
+      if (!tenantId) return [];
+      
+      const { data, error } = await supabase
+        .from("ff_conversations")
+        .select("id, title, created_at, updated_at")
+        .eq("tenant_id", tenantId)
+        .eq("channel", "web")
+        .order("updated_at", { ascending: false })
+        .limit(50);
+      
+      if (error) throw error;
+      return (data || []) as Conversation[];
+    },
+    enabled: !!tenantId,
+  });
 
   // Fetch conversation messages
   const { data: messages = [], isLoading } = useQuery({
@@ -65,7 +92,7 @@ export function useJarvisChat() {
     enabled: !!conversationId,
   });
 
-  // Fetch most recent conversation (only if not wanting a new one)
+  // Fetch most recent conversation (only if not wanting a new one and no conversation selected)
   useQuery({
     queryKey: ["jarvis-recent-conversation", tenantId],
     queryFn: async () => {
@@ -131,9 +158,60 @@ export function useJarvisChat() {
         setWantsNewConversation(false); // Reset flag when new conversation is created
       }
       queryClient.invalidateQueries({ queryKey: ["jarvis-chat", data.conversationId] });
+      queryClient.invalidateQueries({ queryKey: ["jarvis-conversations", tenantId] });
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "Erro ao enviar mensagem");
+    },
+  });
+
+  // Rename conversation mutation
+  const renameConversation = useMutation({
+    mutationFn: async ({ id, title }: { id: string; title: string }) => {
+      const { error } = await supabase
+        .from("ff_conversations")
+        .update({ title, updated_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["jarvis-conversations", tenantId] });
+      toast.success("Conversa renomeada");
+    },
+    onError: () => {
+      toast.error("Erro ao renomear conversa");
+    },
+  });
+
+  // Delete conversation mutation
+  const deleteConversation = useMutation({
+    mutationFn: async (id: string) => {
+      // First delete all messages
+      const { error: messagesError } = await supabase
+        .from("ff_conversation_messages")
+        .delete()
+        .eq("conversation_id", id);
+      
+      if (messagesError) throw messagesError;
+
+      // Then delete the conversation
+      const { error } = await supabase
+        .from("ff_conversations")
+        .delete()
+        .eq("id", id);
+      
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: (deletedId) => {
+      queryClient.invalidateQueries({ queryKey: ["jarvis-conversations", tenantId] });
+      if (conversationId === deletedId) {
+        startNewConversation();
+      }
+      toast.success("Conversa excluída");
+    },
+    onError: () => {
+      toast.error("Erro ao excluir conversa");
     },
   });
 
@@ -144,6 +222,16 @@ export function useJarvisChat() {
     queryClient.setQueryData(["jarvis-chat", null], []); // Clear messages immediately
   };
 
+  // Select a conversation
+  const selectConversation = (id: string) => {
+    setConversationId(id);
+    setWantsNewConversation(false);
+    queryClient.invalidateQueries({ queryKey: ["jarvis-chat", id] });
+  };
+
+  // Get current conversation
+  const currentConversation = conversations.find((c) => c.id === conversationId);
+
   return {
     messages,
     isLoading,
@@ -151,5 +239,12 @@ export function useJarvisChat() {
     sendMessage: sendMessage.mutateAsync,
     conversationId,
     startNewConversation,
+    // New exports for sidebar
+    conversations,
+    isLoadingConversations,
+    selectConversation,
+    renameConversation: renameConversation.mutate,
+    deleteConversation: deleteConversation.mutate,
+    currentConversation,
   };
 }

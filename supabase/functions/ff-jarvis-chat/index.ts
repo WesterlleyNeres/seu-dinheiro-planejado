@@ -1598,6 +1598,76 @@ serve(async (req) => {
       content: finalContent,
     });
 
+    // ==================== AUTO-GENERATE TITLE FOR NEW CONVERSATIONS ====================
+    const isNewConversation = !conversationId;
+    if (isNewConversation && message) {
+      try {
+        console.log(`[JARVIS] Generating title for new conversation ${convId}`);
+        
+        const titleRes = await fetch(OPENAI_API_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: AGENT_MODEL,
+            messages: [
+              {
+                role: "system",
+                content: "Gere um título MUITO CURTO (2-5 palavras) que resume o assunto da conversa. Apenas o título, sem aspas ou pontuação final. Seja conciso e direto."
+              },
+              {
+                role: "user",
+                content: `Primeira mensagem do usuário: "${message.substring(0, 150)}"`
+              }
+            ],
+            max_tokens: 20,
+            temperature: 0.7,
+          }),
+        });
+
+        if (titleRes.ok) {
+          const titleData = await titleRes.json();
+          const generatedTitle = titleData.choices?.[0]?.message?.content?.trim();
+
+          if (generatedTitle) {
+            await supabase
+              .from("ff_conversations")
+              .update({ 
+                title: generatedTitle, 
+                updated_at: new Date().toISOString() 
+              })
+              .eq("id", convId);
+            
+            console.log(`[JARVIS] Title generated: "${generatedTitle}"`);
+          }
+        } else {
+          console.error(`[JARVIS] Failed to generate title: ${titleRes.status}`);
+          // Fallback: use first words of the message
+          const fallbackTitle = message.split(' ').slice(0, 4).join(' ');
+          await supabase
+            .from("ff_conversations")
+            .update({ 
+              title: fallbackTitle,
+              updated_at: new Date().toISOString()
+            })
+            .eq("id", convId);
+        }
+      } catch (titleError) {
+        console.error(`[JARVIS] Error generating title:`, titleError);
+        // Fallback: use first words of the message
+        const fallbackTitle = message.split(' ').slice(0, 4).join(' ');
+        await supabase
+          .from("ff_conversations")
+          .update({ 
+            title: fallbackTitle,
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", convId);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         conversationId: convId,
