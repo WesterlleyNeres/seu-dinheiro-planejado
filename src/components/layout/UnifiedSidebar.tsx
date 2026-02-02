@@ -107,7 +107,10 @@ export const UnifiedSidebar = () => {
   const initials = getInitials(user?.email || user?.user_metadata?.full_name || "");
 
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-64 border-r border-border bg-card">
+    <aside 
+      data-tour="sidebar"
+      className="fixed left-0 top-0 z-40 h-screen w-64 border-r border-border bg-card"
+    >
       <div className="flex h-full flex-col">
         {/* Logo */}
         <div className="flex h-16 items-center gap-3 border-b border-border px-6">

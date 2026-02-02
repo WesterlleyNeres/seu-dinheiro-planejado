@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { useTenant } from "@/contexts/TenantContext";
 import { UnifiedSidebar } from "./UnifiedSidebar";
 import { TenantLoadingFallback } from "@/components/tenant/TenantLoadingFallback";
+import { TourOverlay } from "@/components/tour/TourOverlay";
 
 interface UnifiedLayoutProps {
   children: ReactNode;
@@ -19,6 +20,9 @@ export const UnifiedLayout = ({ children }: UnifiedLayoutProps) => {
     <div className="min-h-screen bg-background">
       {/* Sidebar fixa */}
       <UnifiedSidebar />
+
+      {/* Tour Overlay */}
+      <TourOverlay />
 
       {/* Conteúdo principal */}
       <main className="pl-64">

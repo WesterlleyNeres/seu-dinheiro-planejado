@@ -1,6 +1,7 @@
-import { Brain, CheckSquare, Wallet, Repeat, Calendar, Lightbulb, Sparkles } from "lucide-react";
+import { Brain, CheckSquare, Wallet, Repeat, Calendar, Lightbulb, Sparkles, Map } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useOnboarding } from "@/hooks/useOnboarding";
+import { useTour } from "@/contexts/TourContext";
 
 interface ChatWelcomeProps {
   onQuickAction: (action: string) => void;
@@ -41,11 +42,11 @@ const quickActionsRegular = [
 
 export function ChatWelcome({ onQuickAction }: ChatWelcomeProps) {
   const { needsOnboarding, isNewUser, skipOnboarding } = useOnboarding();
+  const { startTour } = useTour();
 
   // Função para pular onboarding
   const handleSkipOnboarding = async () => {
     await skipOnboarding();
-    // Força reload para aplicar mudanças
     window.location.reload();
   };
 
@@ -68,22 +69,33 @@ export function ChatWelcome({ onQuickAction }: ChatWelcomeProps) {
 
         <div className="bg-muted/50 rounded-xl p-4 mb-6 max-w-md text-center">
           <p className="text-sm text-muted-foreground">
-            🎯 Em poucos minutos, vou te conhecer melhor e configurar tudo para você. 
-            É só conversar comigo!
+            🎯 Como você quer começar? Posso te mostrar o sistema ou você pode explorar por conta própria!
           </p>
         </div>
 
-        <Button 
-          size="lg"
-          onClick={() => onQuickAction("Olá JARVIS! Vamos começar?")}
-          className="gap-2 text-base"
-        >
-          <Sparkles className="h-5 w-5" />
-          Iniciar Configuração
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md">
+          <Button 
+            size="lg"
+            onClick={startTour}
+            className="flex-1 gap-2 text-base"
+          >
+            <Map className="h-5 w-5" />
+            Fazer Tour Guiado
+          </Button>
+          
+          <Button 
+            size="lg"
+            variant="outline"
+            onClick={() => onQuickAction("Olá JARVIS! Vamos começar?")}
+            className="flex-1 gap-2 text-base"
+          >
+            <Sparkles className="h-5 w-5" />
+            Conversar com JARVIS
+          </Button>
+        </div>
 
         <p className="mt-4 text-xs text-muted-foreground">
-          Leva menos de 2 minutos ⏱️
+          O tour leva menos de 2 minutos ⏱️
         </p>
 
         {/* Botão de pular discreto */}
@@ -126,6 +138,19 @@ export function ChatWelcome({ onQuickAction }: ChatWelcomeProps) {
               <span className="text-sm text-left">{action.label}</span>
             </Button>
           ))}
+        </div>
+        
+        {/* Tour button for existing users */}
+        <div className="mt-6 pt-4 border-t border-border">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={startTour}
+            className="w-full gap-2 text-muted-foreground hover:text-foreground"
+          >
+            <Map className="h-4 w-4" />
+            Refazer tour pelo sistema
+          </Button>
         </div>
       </div>
     </div>

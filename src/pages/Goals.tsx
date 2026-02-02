@@ -77,7 +77,7 @@ const Goals = () => {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto p-6 space-y-6" data-tour="goals-content">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
