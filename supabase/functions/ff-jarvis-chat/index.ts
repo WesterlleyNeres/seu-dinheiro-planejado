@@ -9,10 +9,54 @@ const corsHeaders = {
 // ==================== MULTI-AGENT CONFIGURATION ====================
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
-// Orchestrator uses o3 for complex reasoning
-const ORCHESTRATOR_MODEL = "o3";
-// Specialized agents use gpt-4o-mini for efficiency
-const AGENT_MODEL = "gpt-4o-mini";
+// Dynamic model selection based on complexity
+const MODEL_FAST = "gpt-4o-mini";     // Quick responses (~2s) - default
+const MODEL_VISION = "gpt-4o";        // For images
+const MODEL_REASONING = "o3";         // Complex analysis (~15s)
+const AGENT_MODEL = MODEL_FAST;       // For tool follow-ups
+
+// ==================== MODEL SELECTOR ====================
+function selectModel(
+  message: string,
+  hasImages: boolean,
+  isNewUser: boolean,
+  historyLength: number
+): string {
+  // Always use vision model for images
+  if (hasImages) return MODEL_VISION;
+  
+  // Onboarding should be fast and welcoming
+  if (isNewUser && historyLength < 10) return MODEL_FAST;
+  
+  // Detect complexity patterns (Portuguese keywords)
+  const complexPatterns = [
+    /analis[ea]/i,
+    /planej/i,
+    /estrateg/i,
+    /compar/i,
+    /otimiz/i,
+    /projec[aã]/i,
+    /simul/i,
+    /organiz.*finan/i,
+    /resumo.*m[eê]s/i,
+    /relat[oó]rio/i,
+    /balan[cç]o/i,
+    /tend[eê]ncia/i,
+    /previs[aã]o/i,
+  ];
+  
+  const isComplex = complexPatterns.some(p => p.test(message));
+  const isLongMessage = message.length > 300;
+  
+  // Use reasoning model only for complex analysis
+  if (isComplex || isLongMessage) {
+    console.log("[JARVIS] Using reasoning model for complex query");
+    return MODEL_REASONING;
+  }
+  
+  // Default: fast model for everything else
+  return MODEL_FAST;
+}
 
 // ==================== SYSTEM PROMPT BUILDER ====================
 function buildSystemPrompt(userProfile: any, userContext: any): string {
@@ -101,13 +145,26 @@ ETAPAS DO ONBOARDING (siga na ordem):
 4. **FIRST_HABIT** (etapa: first_habit - OPCIONAL)
    - Sugira: "Quer criar um hábito para acompanhar? Algo simples como 'Beber água', 'Revisar gastos' ou 'Exercícios'?"
    - Se aceitar: crie o hábito
-   - Se recusar: tudo bem, pule
+   - Se recusar: tudo bem, pule para COMPLETE
 
-5. **COMPLETE** (etapa: complete)
+5. **COMPLETE** (OBRIGATÓRIO - SEMPRE EXECUTAR!)
    - Parabenize: "Pronto! Você está configurado, [nome]! 🎉"
    - Resuma o que foi criado
-   - Use update_user_profile com onboarding_completed: true e onboarding_step: 'complete'
+   - **CRÍTICO**: IMEDIATAMENTE use update_user_profile com:
+     - onboarding_completed: true
+     - onboarding_step: 'complete'
    - Sugira explorar: "Agora você pode explorar o Dashboard, ver suas tarefas, ou simplesmente conversar comigo!"
+
+⚠️ FINALIZAÇÃO OBRIGATÓRIA:
+- Após wallet_setup: pergunte sobre first_habit
+- Se usuário ACEITAR hábito: crie e finalize
+- Se usuário RECUSAR hábito: finalize imediatamente
+- Se usuário disser "pular", "depois", "não precisa": finalize imediatamente
+- SEMPRE chame update_user_profile com onboarding_completed: true ao finalizar
+
+🔄 FALLBACK AUTOMÁTICO:
+Se a conversa já tiver mais de 5 mensagens E o usuário já tiver uma carteira criada,
+considere o onboarding COMPLETO e use update_user_profile para marcar onboarding_completed: true.
 
 REGRAS DO ONBOARDING:
 - Seja ACOLHEDOR e PACIENTE - nunca apresse o usuário
@@ -116,7 +173,6 @@ REGRAS DO ONBOARDING:
 - Use emojis moderadamente (1-2 por mensagem)
 - Celebre cada pequena conquista
 - NÃO force ações - sempre pergunte antes
-- Se o usuário disser "pular" ou "depois", use update_user_profile para marcar onboarding_completed: true
 
 ESTADO ATUAL DO ONBOARDING: ${userProfile?.onboarding_step || 'welcome'}
 ` : '';
@@ -1742,9 +1798,13 @@ serve(async (req) => {
 
     // Determine if we have images in this request
     const hasImages = processedAttachments.some((a: Attachment) => a.type === "image");
+    const isNewUser = !userProfile || !userProfile.onboarding_completed;
+    const historyLength = history?.length || 0;
     
-    // Use GPT-4o for vision (when images present), otherwise use o3 orchestrator
-    const modelToUse = hasImages ? "gpt-4o" : ORCHESTRATOR_MODEL;
+    // Dynamic model selection based on complexity
+    const modelToUse = selectModel(processedMessage, hasImages, isNewUser, historyLength);
+    console.log(`[JARVIS] Selected model: ${modelToUse}`);
+
 
     // Build messages array
     const messages: any[] = [

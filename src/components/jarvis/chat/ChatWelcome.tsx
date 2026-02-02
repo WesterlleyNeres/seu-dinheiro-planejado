@@ -40,7 +40,14 @@ const quickActionsRegular = [
 ];
 
 export function ChatWelcome({ onQuickAction }: ChatWelcomeProps) {
-  const { needsOnboarding, isNewUser } = useOnboarding();
+  const { needsOnboarding, isNewUser, skipOnboarding } = useOnboarding();
+
+  // Função para pular onboarding
+  const handleSkipOnboarding = async () => {
+    await skipOnboarding();
+    // Força reload para aplicar mudanças
+    window.location.reload();
+  };
 
   // UI para novos usuários (onboarding)
   if (needsOnboarding || isNewUser) {
@@ -78,6 +85,14 @@ export function ChatWelcome({ onQuickAction }: ChatWelcomeProps) {
         <p className="mt-4 text-xs text-muted-foreground">
           Leva menos de 2 minutos ⏱️
         </p>
+
+        {/* Botão de pular discreto */}
+        <button
+          onClick={handleSkipOnboarding}
+          className="mt-6 text-xs text-muted-foreground/60 hover:text-muted-foreground underline underline-offset-2 transition-colors"
+        >
+          Pular configuração inicial
+        </button>
       </div>
     );
   }
