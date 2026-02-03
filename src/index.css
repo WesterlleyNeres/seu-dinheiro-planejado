@@ -4,29 +4,30 @@
 
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
 All colors MUST be HSL.
+FRACTTO Brand Colors: Blue-Cyan gradient to Magenta/Pink
 */
 
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 158 60% 15%;
+    --foreground: 220 25% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 158 60% 15%;
+    --card-foreground: 220 25% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 158 60% 15%;
+    --popover-foreground: 220 25% 15%;
 
-    --primary: 158 64% 42%;
+    --primary: 200 85% 50%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 158 30% 96%;
-    --secondary-foreground: 158 64% 25%;
+    --secondary: 220 20% 96%;
+    --secondary-foreground: 220 25% 25%;
 
-    --muted: 158 20% 96%;
-    --muted-foreground: 158 10% 45%;
+    --muted: 220 15% 96%;
+    --muted-foreground: 220 10% 45%;
 
-    --accent: 177 70% 48%;
+    --accent: 300 70% 55%;
     --accent-foreground: 0 0% 100%;
 
     --success: 142 71% 45%;
@@ -38,48 +39,48 @@ All colors MUST be HSL.
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 158 20% 90%;
-    --input: 158 20% 90%;
-    --ring: 158 64% 42%;
+    --border: 220 15% 90%;
+    --input: 220 15% 90%;
+    --ring: 200 85% 50%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 158 35% 98%;
-    --sidebar-foreground: 158 60% 15%;
-    --sidebar-primary: 158 64% 42%;
+    --sidebar-background: 220 20% 98%;
+    --sidebar-foreground: 220 25% 15%;
+    --sidebar-primary: 200 85% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 158 30% 94%;
-    --sidebar-accent-foreground: 158 64% 25%;
-    --sidebar-border: 158 20% 88%;
-    --sidebar-ring: 158 64% 42%;
+    --sidebar-accent: 220 20% 94%;
+    --sidebar-accent-foreground: 220 25% 25%;
+    --sidebar-border: 220 15% 88%;
+    --sidebar-ring: 200 85% 50%;
 
-    --chart-1: 158 64% 42%;
-    --chart-2: 177 70% 48%;
+    --chart-1: 200 85% 50%;
+    --chart-2: 300 70% 55%;
     --chart-3: 142 71% 45%;
-    --chart-4: 200 70% 50%;
-    --chart-5: 38 92% 50%;
+    --chart-4: 38 92% 50%;
+    --chart-5: 260 70% 60%;
   }
 
   .dark {
-    --background: 158 40% 8%;
-    --foreground: 158 20% 95%;
+    --background: 220 40% 8%;
+    --foreground: 220 15% 95%;
 
-    --card: 158 35% 12%;
-    --card-foreground: 158 20% 95%;
+    --card: 220 30% 12%;
+    --card-foreground: 220 15% 95%;
 
-    --popover: 158 35% 12%;
-    --popover-foreground: 158 20% 95%;
+    --popover: 220 30% 12%;
+    --popover-foreground: 220 15% 95%;
 
-    --primary: 158 64% 48%;
-    --primary-foreground: 158 90% 10%;
+    --primary: 200 85% 55%;
+    --primary-foreground: 220 40% 8%;
 
-    --secondary: 158 30% 18%;
-    --secondary-foreground: 158 20% 95%;
+    --secondary: 220 25% 18%;
+    --secondary-foreground: 220 15% 95%;
 
-    --muted: 158 30% 18%;
-    --muted-foreground: 158 10% 65%;
+    --muted: 220 25% 18%;
+    --muted-foreground: 220 10% 65%;
 
-    --accent: 177 70% 48%;
+    --accent: 300 75% 60%;
     --accent-foreground: 0 0% 100%;
 
     --success: 142 71% 45%;
@@ -91,27 +92,25 @@ All colors MUST be HSL.
     --destructive: 0 63% 45%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 158 30% 20%;
-    --input: 158 30% 20%;
-    --ring: 158 64% 48%;
+    --border: 220 25% 20%;
+    --input: 220 25% 20%;
+    --ring: 200 85% 55%;
 
-    --sidebar-background: 158 40% 10%;
-    --sidebar-foreground: 158 20% 90%;
-    --sidebar-primary: 158 64% 48%;
+    --sidebar-background: 220 35% 10%;
+    --sidebar-foreground: 220 15% 90%;
+    --sidebar-primary: 200 85% 55%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 158 30% 16%;
-    --sidebar-accent-foreground: 158 20% 90%;
-    --sidebar-border: 158 30% 18%;
-    --sidebar-ring: 158 64% 48%;
+    --sidebar-accent: 220 25% 16%;
+    --sidebar-accent-foreground: 220 15% 90%;
+    --sidebar-border: 220 25% 18%;
+    --sidebar-ring: 200 85% 55%;
 
-    --chart-1: 158 64% 48%;
-    --chart-2: 177 70% 52%;
+    --chart-1: 200 85% 55%;
+    --chart-2: 300 75% 60%;
     --chart-3: 142 71% 50%;
-    --chart-4: 200 70% 55%;
-    --chart-5: 38 92% 55%;
+    --chart-4: 38 92% 55%;
+    --chart-5: 260 75% 65%;
   }
-
-  /* Tema unificado - remover jarvis-theme separado */
 }
 
 @layer base {
