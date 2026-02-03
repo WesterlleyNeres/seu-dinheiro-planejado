@@ -54,7 +54,12 @@ const handler = async (req: Request): Promise<Response> => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const resend = new Resend(resendApiKey);
 
-    const { test, userId } = await req.json();
+    const body = await req.json();
+    
+    // Input validation - test must be boolean, userId must be valid UUID
+    const isValidUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+    const test = typeof body.test === 'boolean' ? body.test : false;
+    const userId = typeof body.userId === 'string' && isValidUUID(body.userId) ? body.userId : null;
 
     // Test mode: single user
     if (test && userId) {
@@ -159,9 +164,10 @@ const handler = async (req: Request): Promise<Response> => {
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   } catch (error: any) {
+    // Log full error server-side, return generic message to client
     console.error("Error in send-alerts:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: "Failed to process alerts" }),
       { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   }
