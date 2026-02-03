@@ -25,7 +25,7 @@ const JarvisChat = () => {
   } = useJarvisChat();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollViewportRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
 
   // Auto-collapse sidebar on mobile
@@ -35,12 +35,16 @@ const JarvisChat = () => {
     }
   }, [isMobile]);
 
-  // Auto-scroll to bottom when messages change
+  // Auto-scroll to bottom when messages change or finish loading
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, isSending]);
+    const timer = setTimeout(() => {
+      if (scrollViewportRef.current) {
+        scrollViewportRef.current.scrollTop = scrollViewportRef.current.scrollHeight;
+      }
+    }, 50);
+    
+    return () => clearTimeout(timer);
+  }, [messages, isSending, isLoading]);
 
   const handleSend = async (message: string, attachments?: LocalAttachment[]) => {
     if ((!message.trim() && (!attachments || attachments.length === 0)) || isSending) return;
@@ -109,7 +113,7 @@ const JarvisChat = () => {
         </div>
 
         {/* Messages */}
-        <ScrollArea ref={scrollRef} className="flex-1 py-4 px-4">
+        <ScrollArea viewportRef={scrollViewportRef} className="flex-1 py-4 px-4">
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
