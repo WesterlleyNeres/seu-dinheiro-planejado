@@ -53,9 +53,10 @@ serve(async (req) => {
     const tokenData = await tokenResponse.json();
 
     if (!tokenResponse.ok) {
-      console.error("Token exchange failed:", tokenData);
+      const errorId = crypto.randomUUID();
+      console.error(`[${errorId}] Token exchange failed:`, tokenData);
       return new Response(
-        JSON.stringify({ error: "Falha ao trocar código por tokens", details: tokenData }),
+        JSON.stringify({ error: "Falha ao trocar código por tokens", errorId }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -102,9 +103,10 @@ serve(async (req) => {
       );
 
     if (upsertError) {
-      console.error("Failed to save tokens:", upsertError);
+      const errorId = crypto.randomUUID();
+      console.error(`[${errorId}] Failed to save tokens:`, upsertError);
       return new Response(
-        JSON.stringify({ error: "Falha ao salvar tokens", details: upsertError.message }),
+        JSON.stringify({ error: "Falha ao salvar tokens", errorId }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -119,10 +121,10 @@ serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {
-    console.error("OAuth callback error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
+    const errorId = crypto.randomUUID();
+    console.error(`[${errorId}] OAuth callback error:`, error);
     return new Response(
-      JSON.stringify({ error: "Erro interno", details: errorMessage }),
+      JSON.stringify({ error: "Erro interno", errorId }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
