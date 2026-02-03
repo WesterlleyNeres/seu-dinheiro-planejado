@@ -153,13 +153,18 @@ export function useJarvisChat() {
 
     if (uploadError) throw uploadError;
 
-    const { data: urlData } = supabase.storage
+    // Generate a signed URL (valid for 4 hours) since bucket is private
+    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
       .from("chat-attachments")
-      .getPublicUrl(path);
+      .createSignedUrl(path, 60 * 60 * 4); // 4 hours
+
+    if (signedUrlError || !signedUrlData?.signedUrl) {
+      throw new Error("Falha ao gerar URL do arquivo");
+    }
 
     return {
       type: getAttachmentType(file.type),
-      url: urlData.publicUrl,
+      url: signedUrlData.signedUrl,
       name: file.name,
       size: file.size,
       mime_type: file.type,
