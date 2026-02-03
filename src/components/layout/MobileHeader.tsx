@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { getInitials } from "@/lib/jarvis-helpers";
 import { MobileSidebar } from "./MobileSidebar";
+import fracttoLogo from "@/assets/logo-fractto.png";
 
 export function MobileHeader() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -28,7 +29,7 @@ export function MobileHeader() {
           </Button>
 
           <div className="flex items-center gap-2">
-            <img src="/favicon.svg" alt="FRACTTO" className="h-8 w-8" />
+            <img src={fracttoLogo} alt="FRACTTO" className="h-8 w-8 object-contain" />
             <span className="font-semibold text-sm">FRACTTO</span>
           </div>
 

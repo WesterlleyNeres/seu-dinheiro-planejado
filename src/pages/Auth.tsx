@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { DollarSign, TrendingUp, PiggyBank } from "lucide-react";
+import fracttoLogo from "@/assets/logo-fractto.png";
 
 const Auth = () => {
   const { user, signIn, signUp } = useAuth();
@@ -84,7 +85,7 @@ const Auth = () => {
         {/* Left side - Branding */}
         <div className="hidden md:block space-y-6">
           <div className="flex items-center gap-3">
-            <img src="/favicon.svg" alt="FRACTTO FLOW" className="h-12 w-12" />
+            <img src={fracttoLogo} alt="FRACTTO FLOW" className="h-12 w-12 object-contain" />
             <h1 className="text-3xl font-bold text-primary">FRACTTO FLOW</h1>
           </div>
           
