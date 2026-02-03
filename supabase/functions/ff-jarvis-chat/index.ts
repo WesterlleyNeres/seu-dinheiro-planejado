@@ -432,6 +432,25 @@ const TOOLS = [
       },
     },
   },
+  // === HÁBITOS ===
+  {
+    type: "function",
+    function: {
+      name: "create_habit",
+      description: "Cria um novo hábito para rastreamento recorrente. Use quando o usuário quiser criar um hábito diário, semanal ou mensal como meditar, exercitar, beber água, estudar, etc.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Título do hábito (ex: Meditar, Beber água, Exercitar)" },
+          cadence: { type: "string", enum: ["daily", "weekly", "monthly"], description: "Frequência do hábito. Default: daily" },
+          times_per_cadence: { type: "number", description: "Quantas vezes por período deve ser feito. Default: 1" },
+          target_type: { type: "string", enum: ["count", "duration"], description: "Tipo de meta. count = quantidade, duration = minutos. Default: count" },
+          target_value: { type: "number", description: "Valor da meta (quantidade ou minutos). Default: 1" },
+        },
+        required: ["title"],
+      },
+    },
+  },
   // === ATUALIZAÇÕES ===
   {
     type: "function",
@@ -1305,6 +1324,36 @@ async function executeTool(
         timeStyle: data.all_day ? undefined : "short",
       });
       return `Evento "${data.title}" criado para ${dateStr}!`;
+    }
+
+    // ==================== HÁBITOS ====================
+    case "create_habit": {
+      const habitData = {
+        tenant_id: tenantId,
+        created_by: userId,
+        title: args.title as string,
+        cadence: (args.cadence as string) || "daily",
+        times_per_cadence: (args.times_per_cadence as number) || 1,
+        target_type: (args.target_type as string) || "count",
+        target_value: (args.target_value as number) || 1,
+        active: true,
+      };
+
+      const { data, error } = await supabase
+        .from("ff_habits")
+        .insert(habitData)
+        .select()
+        .single();
+
+      if (error) return `Erro ao criar hábito: ${error.message}`;
+
+      const cadenceLabels: Record<string, string> = {
+        daily: "diário",
+        weekly: "semanal",
+        monthly: "mensal",
+      };
+
+      return `Hábito "${data.title}" criado! 🎯 Frequência: ${cadenceLabels[data.cadence] || data.cadence}, Meta: ${data.times_per_cadence}x por período.`;
     }
 
     // ==================== ATUALIZAÇÕES ====================

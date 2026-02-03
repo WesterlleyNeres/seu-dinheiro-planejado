@@ -35,13 +35,15 @@ export const UnifiedLayout = ({ children }: UnifiedLayoutProps) => {
       {/* Conteúdo principal */}
       <main
         className={cn(
-          "min-h-screen",
+          "min-h-screen w-full overflow-x-hidden",
           isMobile
             ? "pt-14 pb-20 px-4" // space for header + bottom nav
-            : "pl-64 p-6" // sidebar padding
+            : "pl-64 pr-4 py-6" // sidebar padding + right padding
         )}
       >
-        {children}
+        <div className="max-w-full">
+          {children}
+        </div>
       </main>
 
       {/* Mobile: Bottom Navigation */}

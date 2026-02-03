@@ -88,50 +88,50 @@ const JarvisHabits = () => {
       </div>
 
       {/* Estatísticas */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="bg-gradient-to-br from-success/10 to-success/5 border-success/20">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+        <Card className="bg-gradient-to-br from-success/10 to-success/5 border-success/20 min-w-0 overflow-hidden">
           <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-3xl font-bold text-success">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-2xl sm:text-3xl font-bold text-success truncate">
                   {completedCount}/{habits.length}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">metas atingidas</p>
+                <p className="text-xs text-muted-foreground mt-1 truncate">metas atingidas</p>
               </div>
-              <div className="h-12 w-12 rounded-xl bg-success/10 flex items-center justify-center">
-                <Trophy className="h-6 w-6 text-success" />
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-success/10 flex items-center justify-center flex-shrink-0">
+                <Trophy className="h-5 w-5 sm:h-6 sm:w-6 text-success" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-warning/10 to-warning/5 border-warning/20">
+        <Card className="bg-gradient-to-br from-warning/10 to-warning/5 border-warning/20 min-w-0 overflow-hidden">
           <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-3xl font-bold text-warning">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-2xl sm:text-3xl font-bold text-warning truncate">
                   {totalProgress}%
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">progresso médio</p>
+                <p className="text-xs text-muted-foreground mt-1 truncate">progresso médio</p>
               </div>
-              <div className="h-12 w-12 rounded-xl bg-warning/10 flex items-center justify-center">
-                <Flame className="h-6 w-6 text-warning" />
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-warning/10 flex items-center justify-center flex-shrink-0">
+                <Flame className="h-5 w-5 sm:h-6 sm:w-6 text-warning" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
+        <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20 min-w-0 overflow-hidden">
           <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-3xl font-bold text-primary">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-2xl sm:text-3xl font-bold text-primary truncate">
                   {habits.length}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">hábitos ativos</p>
+                <p className="text-xs text-muted-foreground mt-1 truncate">hábitos ativos</p>
               </div>
-              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                <Target className="h-6 w-6 text-primary" />
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <Target className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
               </div>
             </div>
           </CardContent>
