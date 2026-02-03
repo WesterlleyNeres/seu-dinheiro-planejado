@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/jarvis-helpers";
+import fracttoLogo from "@/assets/logo-fractto.png";
 
 const jarvisNavigation = [
   { name: "Início", href: "/jarvis", icon: Brain },
@@ -136,7 +137,7 @@ export function MobileSidebar({ open, onOpenChange }: MobileSidebarProps) {
       <SheetContent side="left" className="w-[280px] p-0 flex flex-col">
         <SheetHeader className="p-4 border-b border-border">
           <SheetTitle className="flex items-center gap-3">
-            <img src="/favicon.svg" alt="FRACTTO FLOW" className="h-10 w-10" />
+            <img src={fracttoLogo} alt="FRACTTO FLOW" className="h-10 w-10 object-contain" />
             <div className="flex flex-col text-left">
               <span className="text-sm font-semibold leading-tight">FRACTTO FLOW</span>
               <span className="text-xs text-muted-foreground font-normal">

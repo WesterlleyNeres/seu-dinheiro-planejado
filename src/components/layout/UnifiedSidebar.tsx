@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/jarvis-helpers";
+import fracttoLogo from "@/assets/logo-fractto.png";
 
 const jarvisNavigation = [
   { name: "Início", href: "/jarvis", icon: Brain },
@@ -114,7 +115,7 @@ export const UnifiedSidebar = () => {
       <div className="flex h-full flex-col">
         {/* Logo */}
         <div className="flex h-16 items-center gap-3 border-b border-border px-6">
-          <img src="/favicon.svg" alt="FRACTTO FLOW" className="h-10 w-10" />
+          <img src={fracttoLogo} alt="FRACTTO FLOW" className="h-10 w-10 object-contain" />
           <div className="flex flex-col">
             <span className="text-sm font-semibold leading-tight">FRACTTO FLOW</span>
             <span className="text-xs text-muted-foreground">Suas finanças, peça por peça</span>
