@@ -52,8 +52,8 @@ const Auth = () => {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (signupPassword.length < 6) {
-      toast.error("A senha deve ter pelo menos 6 caracteres");
+    if (signupPassword.length < 8) {
+      toast.error("A senha deve ter pelo menos 8 caracteres");
       return;
     }
 
@@ -202,10 +202,10 @@ const Auth = () => {
                       onChange={(e) => setSignupPassword(e.target.value)}
                       required
                       disabled={isLoading}
-                      minLength={6}
+                      minLength={8}
                     />
                     <p className="text-xs text-muted-foreground">
-                      Mínimo de 6 caracteres
+                      Mínimo de 8 caracteres
                     </p>
                   </div>
                   <Button type="submit" className="w-full" disabled={isLoading}>

@@ -12,11 +12,12 @@ serve(async (req) => {
   }
 
   try {
-    // Validate n8n token
+    // Validate n8n token (MANDATORY - token must be configured)
     const n8nToken = req.headers.get("x-n8n-token");
     const expectedToken = Deno.env.get("N8N_WEBHOOK_TOKEN");
     
-    if (expectedToken && n8nToken !== expectedToken) {
+    if (!expectedToken || n8nToken !== expectedToken) {
+      console.error("Unauthorized: N8N_WEBHOOK_TOKEN not configured or invalid token");
       return new Response(
         JSON.stringify({ ok: false, reply: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
