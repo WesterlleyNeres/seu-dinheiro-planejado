@@ -207,9 +207,17 @@ PROIBIDO:
 - Respostas com mais de 4 parágrafos
 - Repetir informações múltiplas vezes
 - Inventar dados - sempre use ferramentas
+
+REGRAS FINANCEIRAS (OBRIGATÓRIO):
+- Para criar/atualizar/excluir: USE as ferramentas correspondentes (create_*/update_*/delete_*).
+- NUNCA confirme sucesso sem o retorno da ferramenta.
+- Transferência entre carteiras: use create_transfer (NUNCA create_transaction).
+- Orçamento: use create_budget (não registrar como transação).
+- Meta: use create_goal.
+- Categoria: use create_category.
 ${contextSections}
 
-CAPACIDADES: Finanças (carteiras, transações), Tarefas, Eventos, Hábitos, Memórias, Lembretes.
+CAPACIDADES: Finanças (carteiras, transações, categorias, orçamentos, metas, transferências), Tarefas, Eventos, Hábitos, Memórias, Lembretes.
 
 FLUXO PARA DESPESAS:
 1. list_wallets (verificar se existe)
@@ -285,6 +293,95 @@ const TOOLS = [
   {
     type: "function",
     function: {
+      name: "query_transactions",
+      description: "Consulta transações com filtros (data, tipo, status, carteira, categoria).",
+      parameters: {
+        type: "object",
+        properties: {
+          start_date: { type: "string", description: "Data inicial YYYY-MM-DD" },
+          end_date: { type: "string", description: "Data final YYYY-MM-DD" },
+          tipo: { type: "string", enum: ["receita", "despesa"], description: "Tipo de transação" },
+          status: { type: "string", enum: ["paga", "pendente"], description: "Status" },
+          wallet_id: { type: "string", description: "ID da carteira (UUID)" },
+          category_id: { type: "string", description: "ID da categoria (UUID)" },
+          limit: { type: "number", description: "Limite de resultados (default 20)" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "query_transfers",
+      description: "Consulta transferências entre carteiras com filtros.",
+      parameters: {
+        type: "object",
+        properties: {
+          start_date: { type: "string", description: "Data inicial YYYY-MM-DD" },
+          end_date: { type: "string", description: "Data final YYYY-MM-DD" },
+          wallet_id: { type: "string", description: "Filtrar por carteira (ID)" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "query_wallets",
+      description: "Lista carteiras com saldo e alertas de saldo negativo/limite.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "query_categories",
+      description: "Consulta categorias com filtros opcionais.",
+      parameters: {
+        type: "object",
+        properties: {
+          tipo: { type: "string", enum: ["despesa", "receita", "investimento", "divida", "fixa", "variavel"] },
+          search_term: { type: "string", description: "Busca por nome" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "query_budget_status",
+      description: "Consulta status de orçamentos por mês/ano.",
+      parameters: {
+        type: "object",
+        properties: {
+          year: { type: "number", description: "Ano (ex: 2026)" },
+          month: { type: "number", description: "Mês (1-12)" },
+          mode: { type: "string", enum: ["pagas", "pagas_e_pendentes"], description: "Modo de cálculo" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "query_goals",
+      description: "Consulta metas com progresso e contribuições.",
+      parameters: {
+        type: "object",
+        properties: {
+          include_contributions: { type: "boolean", description: "Incluir contribuições" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "query_memories",
       description: "Busca memórias e preferências salvas do usuário.",
       parameters: {
@@ -292,6 +389,23 @@ const TOOLS = [
         properties: {
           search_term: { type: "string", description: "Termo de busca" },
           kind: { type: "string", enum: ["profile", "preference", "decision", "project", "note", "message", "learned"], description: "Tipo de memória" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "query_reminders",
+      description: "Consulta lembretes com filtros.",
+      parameters: {
+        type: "object",
+        properties: {
+          status: { type: "string", enum: ["pending", "sent", "dismissed", "canceled"] },
+          channel: { type: "string", enum: ["whatsapp", "email", "push"] },
+          date_from: { type: "string", description: "Data inicial YYYY-MM-DD" },
+          date_to: { type: "string", description: "Data final YYYY-MM-DD" },
         },
         required: [],
       },
@@ -370,6 +484,72 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "create_category",
+      description: "Cria uma nova categoria financeira.",
+      parameters: {
+        type: "object",
+        properties: {
+          nome: { type: "string", description: "Nome da categoria" },
+          tipo: { type: "string", enum: ["despesa", "receita", "investimento", "divida", "fixa", "variavel"] },
+        },
+        required: ["nome", "tipo"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_budget",
+      description: "Cria um orçamento para uma categoria em um mês.",
+      parameters: {
+        type: "object",
+        properties: {
+          category_id: { type: "string", description: "ID ou nome da categoria" },
+          ano: { type: "number", description: "Ano" },
+          mes: { type: "number", description: "Mês (1-12)" },
+          limite_valor: { type: "number", description: "Valor do orçamento" },
+          rollover_policy: { type: "string", enum: ["none", "carry_over", "clamp"] },
+          rollover_cap: { type: "number", description: "Teto do rollover (opcional)" },
+        },
+        required: ["category_id", "limite_valor"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_goal",
+      description: "Cria uma meta financeira.",
+      parameters: {
+        type: "object",
+        properties: {
+          nome: { type: "string", description: "Nome da meta" },
+          valor_meta: { type: "number", description: "Valor alvo" },
+          prazo: { type: "string", description: "Prazo YYYY-MM-DD (opcional)" },
+        },
+        required: ["nome", "valor_meta"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "add_goal_contribution",
+      description: "Adiciona contribuição a uma meta.",
+      parameters: {
+        type: "object",
+        properties: {
+          goal_id: { type: "string", description: "ID da meta (UUID)" },
+          valor: { type: "number", description: "Valor da contribuição" },
+          data: { type: "string", description: "Data YYYY-MM-DD" },
+        },
+        required: ["goal_id", "valor", "data"],
+      },
+    },
+  },
   // === FINANÇAS ===
   {
     type: "function",
@@ -408,6 +588,24 @@ const TOOLS = [
           status: { type: "string", enum: ["paga", "pendente"], description: "Status" },
         },
         required: ["tipo", "descricao", "valor", "category_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_transfer",
+      description: "Cria uma transferência entre carteiras (origem -> destino).",
+      parameters: {
+        type: "object",
+        properties: {
+          from_wallet_id: { type: "string", description: "Carteira de origem (ID ou nome)" },
+          to_wallet_id: { type: "string", description: "Carteira de destino (ID ou nome)" },
+          valor: { type: "number", description: "Valor da transferência" },
+          data: { type: "string", description: "Data YYYY-MM-DD" },
+          descricao: { type: "string", description: "Descrição opcional" },
+        },
+        required: ["from_wallet_id", "to_wallet_id", "valor"],
       },
     },
   },
@@ -464,6 +662,386 @@ const TOOLS = [
           status: { type: "string", enum: ["open", "in_progress", "done"], description: "Novo status" },
         },
         required: ["task_id", "status"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_task",
+      description: "Atualiza dados de uma tarefa.",
+      parameters: {
+        type: "object",
+        properties: {
+          task_id: { type: "string", description: "ID da tarefa" },
+          title: { type: "string" },
+          description: { type: "string" },
+          priority: { type: "string", enum: ["low", "medium", "high"] },
+          due_at: { type: "string", description: "YYYY-MM-DD" },
+          status: { type: "string", enum: ["open", "in_progress", "done"] },
+        },
+        required: ["task_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_task",
+      description: "Exclui uma tarefa.",
+      parameters: {
+        type: "object",
+        properties: {
+          task_id: { type: "string", description: "ID da tarefa" },
+        },
+        required: ["task_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_event",
+      description: "Atualiza um evento.",
+      parameters: {
+        type: "object",
+        properties: {
+          event_id: { type: "string", description: "ID do evento" },
+          title: { type: "string" },
+          start_at: { type: "string" },
+          end_at: { type: "string" },
+          location: { type: "string" },
+          description: { type: "string" },
+          all_day: { type: "boolean" },
+          priority: { type: "string", enum: ["low", "medium", "high"] },
+          status: { type: "string", enum: ["scheduled", "cancelled", "completed"] },
+        },
+        required: ["event_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_event",
+      description: "Exclui um evento.",
+      parameters: {
+        type: "object",
+        properties: {
+          event_id: { type: "string", description: "ID do evento" },
+        },
+        required: ["event_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_habit",
+      description: "Atualiza um hábito.",
+      parameters: {
+        type: "object",
+        properties: {
+          habit_id: { type: "string", description: "ID do hábito" },
+          title: { type: "string" },
+          cadence: { type: "string", enum: ["daily", "weekly", "monthly"] },
+          times_per_cadence: { type: "number" },
+          target_type: { type: "string", enum: ["count", "duration"] },
+          target_value: { type: "number" },
+          active: { type: "boolean" },
+        },
+        required: ["habit_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_habit",
+      description: "Remove (desativa) um hábito.",
+      parameters: {
+        type: "object",
+        properties: {
+          habit_id: { type: "string", description: "ID do hábito" },
+        },
+        required: ["habit_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "log_habit",
+      description: "Registra um hábito em uma data.",
+      parameters: {
+        type: "object",
+        properties: {
+          habit_id: { type: "string", description: "ID do hábito" },
+          value: { type: "number", description: "Valor registrado" },
+          date: { type: "string", description: "YYYY-MM-DD (opcional)" },
+        },
+        required: ["habit_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_reminder",
+      description: "Atualiza um lembrete.",
+      parameters: {
+        type: "object",
+        properties: {
+          reminder_id: { type: "string", description: "ID do lembrete" },
+          title: { type: "string" },
+          remind_at: { type: "string" },
+          channel: { type: "string", enum: ["whatsapp", "email", "push"] },
+          status: { type: "string", enum: ["pending", "sent", "dismissed", "canceled"] },
+        },
+        required: ["reminder_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_reminder",
+      description: "Exclui um lembrete.",
+      parameters: {
+        type: "object",
+        properties: {
+          reminder_id: { type: "string", description: "ID do lembrete" },
+        },
+        required: ["reminder_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_memory",
+      description: "Atualiza um item de memória.",
+      parameters: {
+        type: "object",
+        properties: {
+          memory_id: { type: "string", description: "ID da memória" },
+          content: { type: "string" },
+          title: { type: "string" },
+          kind: { type: "string" },
+        },
+        required: ["memory_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_memory",
+      description: "Exclui um item de memória.",
+      parameters: {
+        type: "object",
+        properties: {
+          memory_id: { type: "string", description: "ID da memória" },
+        },
+        required: ["memory_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_transfer",
+      description: "Atualiza uma transferência.",
+      parameters: {
+        type: "object",
+        properties: {
+          transfer_id: { type: "string", description: "ID da transferência" },
+          from_wallet_id: { type: "string", description: "Carteira de origem (ID ou nome)" },
+          to_wallet_id: { type: "string", description: "Carteira de destino (ID ou nome)" },
+          valor: { type: "number", description: "Valor" },
+          data: { type: "string", description: "Data YYYY-MM-DD" },
+          descricao: { type: "string", description: "Descrição" },
+        },
+        required: ["transfer_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_transfer",
+      description: "Exclui (soft delete) uma transferência.",
+      parameters: {
+        type: "object",
+        properties: {
+          transfer_id: { type: "string", description: "ID da transferência" },
+        },
+        required: ["transfer_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_wallet",
+      description: "Atualiza uma carteira.",
+      parameters: {
+        type: "object",
+        properties: {
+          wallet_id: { type: "string", description: "ID da carteira" },
+          nome: { type: "string" },
+          tipo: { type: "string", enum: ["conta", "cartao"] },
+          instituicao: { type: "string" },
+          saldo_inicial: { type: "number" },
+          limite_credito: { type: "number" },
+          limite_emergencia: { type: "number" },
+          dia_fechamento: { type: "number" },
+          dia_vencimento: { type: "number" },
+          ativo: { type: "boolean" },
+        },
+        required: ["wallet_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_wallet",
+      description: "Exclui (soft delete) uma carteira.",
+      parameters: {
+        type: "object",
+        properties: {
+          wallet_id: { type: "string", description: "ID da carteira" },
+        },
+        required: ["wallet_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_category",
+      description: "Atualiza uma categoria.",
+      parameters: {
+        type: "object",
+        properties: {
+          category_id: { type: "string", description: "ID da categoria" },
+          nome: { type: "string" },
+          tipo: { type: "string", enum: ["despesa", "receita", "investimento", "divida", "fixa", "variavel"] },
+        },
+        required: ["category_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_category",
+      description: "Exclui (soft delete) uma categoria.",
+      parameters: {
+        type: "object",
+        properties: {
+          category_id: { type: "string", description: "ID da categoria" },
+        },
+        required: ["category_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_budget",
+      description: "Atualiza um orçamento.",
+      parameters: {
+        type: "object",
+        properties: {
+          budget_id: { type: "string", description: "ID do orçamento" },
+          limite_valor: { type: "number" },
+          rollover_policy: { type: "string", enum: ["none", "carry_over", "clamp"] },
+          rollover_cap: { type: "number" },
+        },
+        required: ["budget_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_budget",
+      description: "Exclui (soft delete) um orçamento.",
+      parameters: {
+        type: "object",
+        properties: {
+          budget_id: { type: "string", description: "ID do orçamento" },
+        },
+        required: ["budget_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_goal",
+      description: "Atualiza uma meta financeira.",
+      parameters: {
+        type: "object",
+        properties: {
+          goal_id: { type: "string", description: "ID da meta" },
+          nome: { type: "string" },
+          valor_meta: { type: "number" },
+          prazo: { type: "string" },
+        },
+        required: ["goal_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_goal",
+      description: "Exclui (soft delete) uma meta financeira.",
+      parameters: {
+        type: "object",
+        properties: {
+          goal_id: { type: "string", description: "ID da meta" },
+        },
+        required: ["goal_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_transaction",
+      description: "Atualiza uma transação.",
+      parameters: {
+        type: "object",
+        properties: {
+          transaction_id: { type: "string", description: "ID da transação" },
+          tipo: { type: "string", enum: ["despesa", "receita"] },
+          descricao: { type: "string" },
+          valor: { type: "number" },
+          wallet_id: { type: "string" },
+          category_id: { type: "string" },
+          data: { type: "string" },
+          status: { type: "string", enum: ["paga", "pendente"] },
+          natureza: { type: "string", enum: ["fixa", "variavel"] },
+        },
+        required: ["transaction_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_transaction",
+      description: "Exclui (soft delete) uma transação.",
+      parameters: {
+        type: "object",
+        properties: {
+          transaction_id: { type: "string", description: "ID da transação" },
+        },
+        required: ["transaction_id"],
       },
     },
   },
@@ -785,6 +1363,40 @@ async function resolveCategoryId(
   return { id: filtered[0].id, error: null };
 }
 
+// ==================== HELPER: Resolve wallet by name ====================
+async function resolveWalletId(
+  supabase: any,
+  userId: string,
+  walletInput: string
+): Promise<{ id: string | null; error: string | null }> {
+  if (isUUID(walletInput)) {
+    return { id: walletInput, error: null };
+  }
+
+  const { data: wallets, error } = await supabase
+    .from("wallets")
+    .select("id, nome")
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .eq("ativo", true)
+    .ilike("nome", `%${walletInput}%`);
+
+  if (error) {
+    return { id: null, error: `Erro ao buscar carteira: ${error.message}` };
+  }
+
+  if (!wallets || wallets.length === 0) {
+    return { id: null, error: `Carteira "${walletInput}" não encontrada. Use list_wallets para ver as disponíveis.` };
+  }
+
+  if (wallets.length === 1) {
+    return { id: wallets[0].id, error: null };
+  }
+
+  console.log(`Multiple wallets match "${walletInput}":`, wallets.map((w: any) => w.nome));
+  return { id: wallets[0].id, error: null };
+}
+
 // ==================== HELPER: Check for duplicate transaction ====================
 async function checkDuplicateTransaction(
   supabase: any,
@@ -807,6 +1419,311 @@ async function checkDuplicateTransaction(
     .limit(1);
 
   return existing && existing.length > 0;
+}
+
+// ==================== HELPER: Normalize & Category Suggestions ====================
+function normalizeString(value: string): string {
+  return (value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function matchCategoryByKeywords(
+  description: string,
+  categories: Array<{ id: string; nome: string; tipo: string }>
+): { id: string; nome: string } | null {
+  const keywords: Record<string, string[]> = {
+    mercado: ["mercado", "supermercado", "feira", "hortifruti", "padaria"],
+    transporte: ["uber", "taxi", "99", "transporte", "combustivel", "gasolina"],
+    alimentacao: ["ifood", "restaurante", "lanche", "comida", "delivery"],
+    saude: ["farmacia", "medico", "consulta", "exame", "hospital"],
+    lazer: ["cinema", "streaming", "netflix", "spotify", "entretenimento"],
+    casa: ["aluguel", "condominio", "agua", "luz", "internet", "gas"],
+  };
+
+  const normalized = normalizeString(description);
+
+  for (const [categoryKey, words] of Object.entries(keywords)) {
+    if (words.some((word) => normalized.includes(word))) {
+      const category = categories.find((c) =>
+        normalizeString(c.nome).includes(categoryKey)
+      );
+      if (category) return { id: category.id, nome: category.nome };
+    }
+  }
+
+  return null;
+}
+
+function matchCategoryByName(
+  description: string,
+  categories: Array<{ id: string; nome: string; tipo: string }>
+): { id: string; nome: string } | null {
+  const normalized = normalizeString(description);
+  let best: { id: string; nome: string } | null = null;
+  let bestScore = 0;
+
+  categories.forEach((c) => {
+    const name = normalizeString(c.nome);
+    if (!name) return;
+    let score = 0;
+    if (normalized === name) score = 1;
+    else if (normalized.includes(name) || name.includes(normalized)) score = 0.9;
+    else if (normalized.split(" ").some((w) => name.includes(w))) score = 0.7;
+
+    if (score > bestScore) {
+      bestScore = score;
+      best = { id: c.id, nome: c.nome };
+    }
+  });
+
+  return bestScore >= 0.7 ? best : null;
+}
+
+async function suggestCategoryFromDescription(
+  supabase: any,
+  userId: string,
+  description: string,
+  tipo: string
+): Promise<{ id: string; nome: string; reason: string } | null> {
+  const { data, error } = await supabase
+    .from("categories")
+    .select("id, nome, tipo")
+    .eq("user_id", userId)
+    .is("deleted_at", null);
+
+  if (error || !data?.length) return null;
+
+  const scoped = data.filter((c: any) => (tipo ? c.tipo === tipo : true));
+  if (scoped.length === 0) return null;
+
+  const keywordMatch = matchCategoryByKeywords(description, scoped);
+  if (keywordMatch) {
+    return { ...keywordMatch, reason: "keyword" };
+  }
+
+  const nameMatch = matchCategoryByName(description, scoped);
+  if (nameMatch) {
+    return { ...nameMatch, reason: "name" };
+  }
+
+  return null;
+}
+
+// ==================== HELPER: Card Statement Linking ====================
+function calculateStatementDates(
+  diaFechamento: number,
+  diaVencimento: number,
+  transactionDate: string
+): { abre: string; fecha: string; vence: string } {
+  const txDate = new Date(transactionDate);
+  const txDay = txDate.getDate();
+  const txMonth = txDate.getMonth();
+  const txYear = txDate.getFullYear();
+
+  let cycleMonth = txMonth;
+  let cycleYear = txYear;
+
+  if (txDay > diaFechamento) {
+    cycleMonth++;
+    if (cycleMonth > 11) {
+      cycleMonth = 0;
+      cycleYear++;
+    }
+  }
+
+  const prevMonth = cycleMonth === 0 ? 11 : cycleMonth - 1;
+  const prevYear = cycleMonth === 0 ? cycleYear - 1 : cycleYear;
+  const abreDate = new Date(prevYear, prevMonth, diaFechamento + 1);
+  const fechaDate = new Date(cycleYear, cycleMonth, diaFechamento);
+
+  let venceMonth = cycleMonth;
+  let venceYear = cycleYear;
+  if (diaVencimento <= diaFechamento) {
+    venceMonth++;
+    if (venceMonth > 11) {
+      venceMonth = 0;
+      venceYear++;
+    }
+  }
+
+  const venceDate = new Date(venceYear, venceMonth, diaVencimento);
+
+  const formatDate = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  return {
+    abre: formatDate(abreDate),
+    fecha: formatDate(fechaDate),
+    vence: formatDate(venceDate),
+  };
+}
+
+async function updateStatementTotal(
+  supabase: any,
+  statementId: string
+): Promise<void> {
+  try {
+    const { data: lines, error: linesError } = await supabase
+      .from("card_statement_lines")
+      .select("transaction_id")
+      .eq("statement_id", statementId);
+
+    if (linesError) throw linesError;
+
+    if (!lines || lines.length === 0) {
+      await supabase
+        .from("card_statements")
+        .update({ total: 0 })
+        .eq("id", statementId);
+      return;
+    }
+
+    const transactionIds = lines.map((l: any) => l.transaction_id);
+    const { data: transactions, error: txError } = await supabase
+      .from("transactions")
+      .select("valor")
+      .in("id", transactionIds)
+      .is("deleted_at", null);
+
+    if (txError) throw txError;
+
+    const total =
+      transactions?.reduce((sum: number, tx: any) => sum + Number(tx.valor || 0), 0) ||
+      0;
+
+    await supabase
+      .from("card_statements")
+      .update({ total })
+      .eq("id", statementId);
+  } catch (error) {
+    console.error("Error updating statement total:", error);
+  }
+}
+
+async function ensureStatementExists(
+  supabase: any,
+  walletId: string,
+  transactionDate: string,
+  userId: string
+): Promise<string | null> {
+  try {
+    const { data: wallet, error: walletError } = await supabase
+      .from("wallets")
+      .select("dia_fechamento, dia_vencimento")
+      .eq("id", walletId)
+      .eq("tipo", "cartao")
+      .single();
+
+    if (walletError || !wallet?.dia_fechamento || !wallet?.dia_vencimento) {
+      return null;
+    }
+
+    const { abre, fecha, vence } = calculateStatementDates(
+      wallet.dia_fechamento,
+      wallet.dia_vencimento,
+      transactionDate
+    );
+
+    const { data: existingStatement, error: checkError } = await supabase
+      .from("card_statements")
+      .select("id")
+      .eq("wallet_id", walletId)
+      .eq("abre", abre)
+      .eq("fecha", fecha)
+      .eq("vence", vence)
+      .maybeSingle();
+
+    if (checkError && checkError.code !== "PGRST116") {
+      throw checkError;
+    }
+
+    if (existingStatement) return existingStatement.id;
+
+    const { data: newStatement, error: insertError } = await supabase
+      .from("card_statements")
+      .insert({
+        user_id: userId,
+        wallet_id: walletId,
+        abre,
+        fecha,
+        vence,
+        status: "aberta",
+        total: 0,
+      })
+      .select("id")
+      .single();
+
+    if (insertError) throw insertError;
+
+    return newStatement.id;
+  } catch (error) {
+    console.error("Error ensuring statement exists:", error);
+    return null;
+  }
+}
+
+async function linkTransactionToStatement(
+  supabase: any,
+  transactionId: string,
+  statementId: string
+): Promise<boolean> {
+  try {
+    const { error: linkError } = await supabase
+      .from("card_statement_lines")
+      .insert({
+        statement_id: statementId,
+        transaction_id: transactionId,
+      });
+
+    if (linkError) {
+      if (linkError.code === "23505") return true;
+      throw linkError;
+    }
+
+    await updateStatementTotal(supabase, statementId);
+    return true;
+  } catch (error) {
+    console.error("Error linking transaction to statement:", error);
+    return false;
+  }
+}
+
+async function unlinkTransactionFromStatement(
+  supabase: any,
+  transactionId: string
+): Promise<boolean> {
+  try {
+    const { data: link, error: findError } = await supabase
+      .from("card_statement_lines")
+      .select("statement_id")
+      .eq("transaction_id", transactionId)
+      .maybeSingle();
+
+    if (findError || !link) return true;
+
+    const statementId = link.statement_id;
+    const { error: deleteError } = await supabase
+      .from("card_statement_lines")
+      .delete()
+      .eq("transaction_id", transactionId);
+
+    if (deleteError) throw deleteError;
+
+    await updateStatementTotal(supabase, statementId);
+    return true;
+  } catch (error) {
+    console.error("Error unlinking transaction from statement:", error);
+    return false;
+  }
 }
 
 // ==================== TOOL EXECUTION ====================
@@ -948,9 +1865,27 @@ async function executeTool(
     }
 
     case "query_finances": {
-      const mesReferencia = args.date_filter === "month" || !args.date_filter
+      const dateFilter = args.date_filter as string | undefined;
+      const mesReferencia = dateFilter === "month" || !dateFilter
         ? new Date().toISOString().slice(0, 7)
-        : args.date_filter as string;
+        : dateFilter;
+
+      let startDate: string | null = null;
+      let endDate: string | null = null;
+
+      if (dateFilter === "today") {
+        startDate = today;
+        endDate = today;
+      } else if (dateFilter === "week") {
+        startDate = startOfWeek.toISOString().split("T")[0];
+        endDate = endOfWeek.toISOString().split("T")[0];
+      } else if (dateFilter === "month" || (!dateFilter || /^\d{4}-\d{2}$/.test(dateFilter))) {
+        const base = dateFilter && dateFilter !== "month" ? dateFilter : new Date().toISOString().slice(0, 7);
+        const [year, month] = base.split("-").map(Number);
+        const lastDay = new Date(year, month, 0).getDate();
+        startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+        endDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+      }
 
       if (args.type === "pending_bills") {
         let query = supabase
@@ -1026,7 +1961,282 @@ async function executeTool(
         });
       }
 
+      if (args.type === "expenses" || args.type === "income") {
+        const tipo = args.type === "expenses" ? "despesa" : "receita";
+
+        let query = supabase
+          .from("transactions")
+          .select("valor, status, data")
+          .eq("user_id", userId)
+          .eq("tipo", tipo)
+          .is("deleted_at", null);
+
+        if (startDate && endDate) {
+          query = query.gte("data", startDate).lte("data", endDate);
+        }
+
+        const { data, error } = await query;
+        if (error) return `Erro: ${error.message}`;
+        if (!data?.length) return "Sem transações para o período.";
+
+        const totalPago = data
+          .filter((t: any) => t.status === "paga")
+          .reduce((sum: number, t: any) => sum + Number(t.valor || 0), 0);
+        const totalPendente = data
+          .filter((t: any) => t.status === "pendente")
+          .reduce((sum: number, t: any) => sum + Number(t.valor || 0), 0);
+
+        return JSON.stringify({
+          tipo,
+          periodo: startDate && endDate ? `${startDate}..${endDate}` : "todos",
+          total_pago: totalPago,
+          total_pendente: totalPendente,
+          total_geral: totalPago + totalPendente,
+        });
+      }
+
       return "Tipo de consulta não reconhecido.";
+    }
+
+    case "query_transactions": {
+      let query = supabase
+        .from("transactions")
+        .select("id, descricao, valor, data, status, tipo, category_id, wallet_id, categories(nome), wallets(nome)")
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .order("data", { ascending: false });
+
+      if (args.start_date) query = query.gte("data", args.start_date);
+      if (args.end_date) query = query.lte("data", args.end_date);
+      if (args.tipo) query = query.eq("tipo", args.tipo);
+      if (args.status) query = query.eq("status", args.status);
+      if (args.wallet_id) query = query.eq("wallet_id", args.wallet_id);
+      if (args.category_id) query = query.eq("category_id", args.category_id);
+
+      const limit = (args.limit as number) || 20;
+      const { data, error } = await query.limit(limit);
+      if (error) return `Erro: ${error.message}`;
+      if (!data?.length) return "Nenhuma transação encontrada.";
+
+      return JSON.stringify(
+        data.map((t: any) => ({
+          id: t.id,
+          descricao: t.descricao,
+          valor: t.valor,
+          data: t.data,
+          status: t.status,
+          tipo: t.tipo,
+          categoria: t.categories?.nome,
+          carteira: t.wallets?.nome,
+        }))
+      );
+    }
+
+    case "query_transfers": {
+      let query = supabase
+        .from("transfers")
+        .select("id, valor, data, descricao, from_wallet_id, to_wallet_id, from_wallet:from_wallet_id(nome), to_wallet:to_wallet_id(nome)")
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .order("data", { ascending: false });
+
+      if (args.start_date) query = query.gte("data", args.start_date);
+      if (args.end_date) query = query.lte("data", args.end_date);
+      if (args.wallet_id) {
+        query = query.or(`from_wallet_id.eq.${args.wallet_id},to_wallet_id.eq.${args.wallet_id}`);
+      }
+
+      const { data, error } = await query.limit(20);
+      if (error) return `Erro: ${error.message}`;
+      if (!data?.length) return "Nenhuma transferência encontrada.";
+
+      return JSON.stringify(
+        data.map((t: any) => ({
+          id: t.id,
+          valor: t.valor,
+          data: t.data,
+          descricao: t.descricao,
+          origem: t.from_wallet?.nome,
+          destino: t.to_wallet?.nome,
+        }))
+      );
+    }
+
+    case "query_wallets": {
+      const { data: wallets, error: walletError } = await supabase
+        .from("wallets")
+        .select("id, nome, tipo, instituicao, saldo_inicial, limite_credito, limite_emergencia")
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .eq("ativo", true)
+        .order("nome");
+
+      if (walletError) return `Erro: ${walletError.message}`;
+      if (!wallets?.length) return "Nenhuma carteira encontrada.";
+
+      const { data: balances } = await supabase
+        .from("v_wallet_balance")
+        .select("wallet_id, saldo")
+        .eq("user_id", userId);
+
+      const merged = wallets.map((w: any) => {
+        const balance = balances?.find((b: any) => b.wallet_id === w.id);
+        const saldo = balance?.saldo ?? w.saldo_inicial ?? 0;
+        const availableCredit =
+          w.tipo === "cartao" && w.limite_credito
+            ? Number(w.limite_credito) + Number(saldo || 0)
+            : null;
+
+        return {
+          id: w.id,
+          nome: w.nome,
+          tipo: w.tipo,
+          saldo,
+          limite_credito: w.limite_credito,
+          limite_emergencia: w.limite_emergencia,
+          alerta_saldo_negativo: saldo < 0,
+          credito_disponivel: availableCredit,
+        };
+      });
+
+      return JSON.stringify(merged);
+    }
+
+    case "query_categories": {
+      let query = supabase
+        .from("categories")
+        .select("id, nome, tipo")
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .order("nome");
+
+      if (args.tipo) query = query.eq("tipo", args.tipo);
+      if (args.search_term) query = query.ilike("nome", `%${args.search_term}%`);
+
+      const { data, error } = await query;
+      if (error) return `Erro: ${error.message}`;
+      if (!data?.length) return "Nenhuma categoria encontrada.";
+
+      return JSON.stringify(data);
+    }
+
+    case "query_budget_status": {
+      const now = new Date();
+      const year = (args.year as number) || now.getFullYear();
+      const month = (args.month as number) || now.getMonth() + 1;
+      const mode = (args.mode as string) || "pagas";
+
+      const { data: budgets, error: budgetsError } = await supabase
+        .from("budgets")
+        .select("id, category_id, ano, mes, limite_valor, rollover_policy, rollover_cap, categories(nome)")
+        .eq("user_id", userId)
+        .eq("ano", year)
+        .eq("mes", month)
+        .is("deleted_at", null);
+
+      if (budgetsError) return `Erro: ${budgetsError.message}`;
+      if (!budgets?.length) return "Nenhum orçamento encontrado para o período.";
+
+      const lastDay = new Date(year, month, 0).getDate();
+      const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+      const endDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+      const statusFilter = mode === "pagas" ? ["paga"] : ["paga", "pendente"];
+
+      const { data: realizedAgg, error: aggErr } = await supabase
+        .from("transactions")
+        .select("category_id, valor, status")
+        .eq("user_id", userId)
+        .eq("tipo", "despesa")
+        .gte("data", startDate)
+        .lte("data", endDate)
+        .in("status", statusFilter)
+        .is("deleted_at", null);
+
+      if (aggErr) return `Erro: ${aggErr.message}`;
+
+      const realizedMap: Record<string, number> = {};
+      (realizedAgg || []).forEach((row: any) => {
+        const catId = row.category_id;
+        realizedMap[catId] = (realizedMap[catId] || 0) + Number(row.valor || 0);
+      });
+
+      const results = budgets.map((b: any) => {
+        const realizado = realizedMap[b.category_id] ?? 0;
+        const limite = Number(b.limite_valor || 0);
+        const percentual = limite > 0 ? Math.round((realizado / limite) * 1000) / 10 : 0;
+        const restante = limite - realizado;
+        return {
+          id: b.id,
+          categoria: b.categories?.nome,
+          limite,
+          realizado,
+          percentual,
+          restante,
+          alerta_80: percentual >= 80 && percentual < 100,
+          alerta_100: percentual >= 100,
+        };
+      });
+
+      return JSON.stringify({
+        periodo: `${year}-${String(month).padStart(2, "0")}`,
+        orcamentos: results,
+      });
+    }
+
+    case "query_goals": {
+      const includeContribs = args.include_contributions === true;
+      const { data: goals, error: goalsError } = await supabase
+        .from("goals")
+        .select("*")
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+
+      if (goalsError) return `Erro: ${goalsError.message}`;
+      if (!goals?.length) return "Nenhuma meta encontrada.";
+
+      const goalIds = goals.map((g: any) => g.id);
+      const { data: contribs } = await supabase
+        .from("goals_contribs")
+        .select("*")
+        .in("goal_id", goalIds)
+        .order("data", { ascending: false });
+
+      const contribMap: Record<string, any[]> = {};
+      (contribs || []).forEach((c: any) => {
+        if (!contribMap[c.goal_id]) contribMap[c.goal_id] = [];
+        contribMap[c.goal_id].push(c);
+      });
+
+      const enriched = goals.map((g: any) => {
+        const list = contribMap[g.id] || [];
+        const economizado = list.reduce((sum: number, c: any) => sum + Number(c.valor || 0), 0);
+        const percentual = g.valor_meta > 0 ? Math.round((economizado / g.valor_meta) * 100) : 0;
+        const restante = g.valor_meta - economizado;
+        let diasRestantes: number | null = null;
+        if (g.prazo) {
+          const diff = new Date(g.prazo).getTime() - new Date().setHours(0, 0, 0, 0);
+          diasRestantes = Math.ceil(diff / (1000 * 60 * 60 * 24));
+        }
+
+        const suggestedDaily =
+          diasRestantes && diasRestantes > 0 ? Math.max(0, restante / diasRestantes) : null;
+
+        return {
+          id: g.id,
+          nome: g.nome,
+          valor_meta: g.valor_meta,
+          prazo: g.prazo,
+          economizado,
+          percentual,
+          restante,
+          diasRestantes,
+          sugestao_diaria: suggestedDaily ? Number(suggestedDaily.toFixed(2)) : null,
+          contribuicoes: includeContribs ? list : undefined,
+        };
+      });
+
+      return JSON.stringify(enriched);
     }
 
     case "query_memories": {
@@ -1057,6 +2267,33 @@ async function executeTool(
       })));
     }
 
+    case "query_reminders": {
+      let query = supabase
+        .from("ff_reminders")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .order("remind_at", { ascending: true });
+
+      if (args.status) query = query.eq("status", args.status);
+      if (args.channel) query = query.eq("channel", args.channel);
+      if (args.date_from) query = query.gte("remind_at", args.date_from);
+      if (args.date_to) query = query.lte("remind_at", args.date_to);
+
+      const { data, error } = await query;
+      if (error) return `Erro: ${error.message}`;
+      if (!data?.length) return "Nenhum lembrete encontrado.";
+
+      return JSON.stringify(
+        data.map((r: any) => ({
+          id: r.id,
+          titulo: r.title,
+          lembrar_em: r.remind_at,
+          canal: r.channel,
+          status: r.status,
+        }))
+      );
+    }
+
     // ==================== LISTAGENS ====================
     case "list_wallets": {
       const { data, error } = await supabase
@@ -1077,13 +2314,20 @@ async function executeTool(
 
       const walletsWithBalance = data.map((w: any) => {
         const balance = balances?.find((b: any) => b.wallet_id === w.id);
+        const saldo = balance?.saldo ?? w.saldo_inicial ?? 0;
+        const availableCredit =
+          w.tipo === "cartao" && w.limite_credito
+            ? Number(w.limite_credito) + Number(saldo || 0)
+            : null;
         return {
           id: w.id,
           nome: w.nome,
           tipo: w.tipo,
           instituicao: w.instituicao,
-          saldo: balance?.saldo || w.saldo_inicial || 0,
+          saldo,
           limite_credito: w.limite_credito,
+          alerta_saldo_negativo: saldo < 0,
+          credito_disponivel: availableCredit,
         };
       });
 
@@ -1166,6 +2410,128 @@ async function executeTool(
       return `Informação salva na memória!`;
     }
 
+    case "create_category": {
+      const { data, error } = await supabase
+        .from("categories")
+        .insert({
+          user_id: userId,
+          nome: args.nome,
+          tipo: args.tipo,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === "23505") {
+          return `Já existe uma categoria com o nome "${args.nome}".`;
+        }
+        return `Erro: ${error.message}`;
+      }
+
+      return `Categoria "${data.nome}" criada!`;
+    }
+
+    case "create_budget": {
+      const now = new Date();
+      const ano = (args.ano as number) || now.getFullYear();
+      const mes = (args.mes as number) || now.getMonth() + 1;
+
+      const categoryInput = args.category_id as string;
+      if (!categoryInput) {
+        return "Categoria é obrigatória para criar orçamento.";
+      }
+
+      const limiteValor = Number(args.limite_valor);
+      if (Number.isNaN(limiteValor) || limiteValor < 0) {
+        return "Valor do orçamento inválido.";
+      }
+
+      let categoryId = categoryInput;
+      if (!isUUID(categoryInput)) {
+        const { id: resolvedId, error: categoryError } = await resolveCategoryId(
+          supabase,
+          userId,
+          categoryInput,
+          "despesa"
+        );
+        if (categoryError) return categoryError;
+        if (!resolvedId) return "Categoria inválida. Use list_categories para escolher uma.";
+        categoryId = resolvedId;
+      }
+
+      const { data: existing } = await supabase
+        .from("budgets")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("category_id", categoryId)
+        .eq("ano", ano)
+        .eq("mes", mes)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (existing) {
+        return "Já existe um orçamento para esta categoria neste mês.";
+      }
+
+      const budgetData: any = {
+        user_id: userId,
+        category_id: categoryId,
+        ano,
+        mes,
+        limite_valor: limiteValor,
+      };
+
+      if (args.rollover_policy) budgetData.rollover_policy = args.rollover_policy;
+      if (args.rollover_cap !== undefined) budgetData.rollover_cap = args.rollover_cap;
+
+      const { data, error } = await supabase
+        .from("budgets")
+        .insert(budgetData)
+        .select()
+        .single();
+
+      if (error) return `Erro: ${error.message}`;
+
+      const periodo = `${ano}-${String(mes).padStart(2, "0")}`;
+      return `Orçamento criado para ${periodo}! Limite: R$ ${Number(data.limite_valor).toFixed(2)}`;
+    }
+
+    case "create_goal": {
+      const valorMeta = Number(args.valor_meta);
+      if (Number.isNaN(valorMeta) || valorMeta <= 0) {
+        return "Valor da meta inválido.";
+      }
+
+      const { data, error } = await supabase
+        .from("goals")
+        .insert({
+          user_id: userId,
+          nome: args.nome,
+          valor_meta: valorMeta,
+          prazo: args.prazo || null,
+        })
+        .select()
+        .single();
+
+      if (error) return `Erro: ${error.message}`;
+      return `Meta "${data.nome}" criada! Alvo: R$ ${Number(data.valor_meta).toFixed(2)}`;
+    }
+
+    case "add_goal_contribution": {
+      const { data, error } = await supabase
+        .from("goals_contribs")
+        .insert({
+          goal_id: args.goal_id,
+          valor: args.valor,
+          data: args.data,
+        })
+        .select()
+        .single();
+
+      if (error) return `Erro: ${error.message}`;
+      return `Contribuição de R$ ${Number(data.valor).toFixed(2)} registrada!`;
+    }
+
     // ==================== FINANÇAS ====================
     case "create_wallet": {
       const walletData: any = {
@@ -1196,20 +2562,14 @@ async function executeTool(
     }
 
     case "create_transaction": {
-      let walletId = args.wallet_id as string;
+      let walletId = args.wallet_id as string | undefined;
       const tipo = args.tipo as string;
-      const categoryInput = args.category_id as string;
-      
-      // Resolve category (can be UUID or name)
-      const { id: resolvedCategoryId, error: categoryError } = await resolveCategoryId(
-        supabase,
-        userId,
-        categoryInput,
-        tipo
-      );
+      const transactionDate = (args.data as string) || today;
+      const descricao = args.descricao as string;
+      const valor = Number(args.valor);
 
-      if (categoryError) {
-        return categoryError;
+      if (Number.isNaN(valor)) {
+        return "Valor inválido. Informe um número válido.";
       }
 
       const fetchLatestWallet = async () => {
@@ -1232,9 +2592,38 @@ async function executeTool(
         walletId = wallet.id;
       }
 
-      const transactionDate = (args.data as string) || today;
-      const descricao = args.descricao as string;
-      const valor = args.valor as number;
+      let resolvedCategoryId: string | null = null;
+      let categoryNote = "";
+
+      if (args.category_id) {
+        const { id: resolvedId, error: categoryError } = await resolveCategoryId(
+          supabase,
+          userId,
+          args.category_id as string,
+          tipo
+        );
+
+        if (categoryError) {
+          return categoryError;
+        }
+        resolvedCategoryId = resolvedId;
+      } else {
+        const suggestion = await suggestCategoryFromDescription(
+          supabase,
+          userId,
+          descricao,
+          tipo
+        );
+        if (!suggestion) {
+          return "Categoria é obrigatória. Use list_categories para escolher uma.";
+        }
+        resolvedCategoryId = suggestion.id;
+        categoryNote = ` Categoria sugerida: ${suggestion.nome}.`;
+      }
+
+      if (!resolvedCategoryId) {
+        return "Categoria inválida. Use list_categories para escolher uma.";
+      }
 
       // Check for duplicates
       const isDuplicate = await checkDuplicateTransaction(
@@ -1292,8 +2681,84 @@ async function executeTool(
 
       if (error) return `Erro: ${error.message}`;
 
+      if (data?.tipo === "despesa" && data.wallet_id) {
+        const { data: wallet } = await supabase
+          .from("wallets")
+          .select("tipo")
+          .eq("id", data.wallet_id)
+          .single();
+
+        if (wallet?.tipo === "cartao") {
+          const statementId = await ensureStatementExists(
+            supabase,
+            data.wallet_id,
+            data.data,
+            userId
+          );
+
+          if (statementId) {
+            await linkTransactionToStatement(supabase, data.id, statementId);
+          }
+        }
+      }
+
       const tipoLabel = data.tipo === "despesa" ? "Despesa" : "Receita";
-      return `${tipoLabel} de R$ ${data.valor.toFixed(2)} registrada! Carteira: ${data.wallets?.nome}, Categoria: ${data.categories?.nome}`;
+      return `${tipoLabel} de R$ ${Number(data.valor).toFixed(2)} registrada! Carteira: ${data.wallets?.nome}, Categoria: ${data.categories?.nome}.${categoryNote}`;
+    }
+
+    case "create_transfer": {
+      const fromInput = args.from_wallet_id as string;
+      const toInput = args.to_wallet_id as string;
+
+      if (!fromInput || !toInput) {
+        return "Informe as carteiras de origem e destino para a transferência.";
+      }
+
+      const { id: fromId, error: fromError } = await resolveWalletId(
+        supabase,
+        userId,
+        fromInput
+      );
+      if (fromError) return fromError;
+
+      const { id: toId, error: toError } = await resolveWalletId(
+        supabase,
+        userId,
+        toInput
+      );
+      if (toError) return toError;
+
+      if (!fromId || !toId) {
+        return "Não foi possível identificar as carteiras. Use list_wallets para ver as opções.";
+      }
+
+      if (fromId === toId) {
+        return "A carteira de origem deve ser diferente da carteira de destino.";
+      }
+
+      const valor = Number(args.valor);
+      if (Number.isNaN(valor) || valor <= 0) {
+        return "Valor inválido para transferência.";
+      }
+
+      const transferenciaData = {
+        user_id: userId,
+        from_wallet_id: fromId,
+        to_wallet_id: toId,
+        valor,
+        data: (args.data as string) || today,
+        descricao: (args.descricao as string) || null,
+      };
+
+      const { data, error } = await supabase
+        .from("transfers")
+        .insert(transferenciaData)
+        .select("id, valor, data, descricao, from_wallet:from_wallet_id(nome), to_wallet:to_wallet_id(nome)")
+        .single();
+
+      if (error) return `Erro: ${error.message}`;
+
+      return `Transferência de R$ ${Number(data.valor).toFixed(2)} registrada: ${data.from_wallet?.nome} → ${data.to_wallet?.nome}.`;
     }
 
     case "create_event": {
@@ -1383,6 +2848,591 @@ async function executeTool(
         done: "concluída",
       };
       return `Tarefa "${data.title}" marcada como ${statusLabels[data.status]}!`;
+    }
+
+    case "update_task": {
+      const updateData: any = {
+        updated_at: new Date().toISOString(),
+      };
+      let hasUpdates = false;
+
+      if (args.title !== undefined) { updateData.title = args.title; hasUpdates = true; }
+      if (args.description !== undefined) { updateData.description = args.description; hasUpdates = true; }
+      if (args.priority !== undefined) { updateData.priority = args.priority; hasUpdates = true; }
+      if (args.due_at !== undefined) { updateData.due_at = args.due_at; hasUpdates = true; }
+      if (args.status !== undefined) {
+        updateData.status = args.status;
+        hasUpdates = true;
+        if (args.status === "done") {
+          updateData.completed_at = new Date().toISOString();
+        }
+      }
+
+      if (!hasUpdates) return "Nenhum dado para atualizar.";
+
+      const { data, error } = await supabase
+        .from("ff_tasks")
+        .update(updateData)
+        .eq("id", args.task_id)
+        .eq("tenant_id", tenantId)
+        .select()
+        .single();
+
+      if (error) return `Erro: ${error.message}`;
+      return `Tarefa "${data.title}" atualizada!`;
+    }
+
+    case "delete_task": {
+      const { error } = await supabase
+        .from("ff_tasks")
+        .delete()
+        .eq("id", args.task_id)
+        .eq("tenant_id", tenantId);
+
+      if (error) return `Erro: ${error.message}`;
+      return "Tarefa removida com sucesso.";
+    }
+
+    case "update_event": {
+      const updateData: any = {
+        updated_at: new Date().toISOString(),
+      };
+      let hasUpdates = false;
+
+      if (args.title !== undefined) { updateData.title = args.title; hasUpdates = true; }
+      if (args.start_at !== undefined) { updateData.start_at = args.start_at; hasUpdates = true; }
+      if (args.end_at !== undefined) { updateData.end_at = args.end_at; hasUpdates = true; }
+      if (args.location !== undefined) { updateData.location = args.location; hasUpdates = true; }
+      if (args.description !== undefined) { updateData.description = args.description; hasUpdates = true; }
+      if (args.all_day !== undefined) { updateData.all_day = args.all_day; hasUpdates = true; }
+      if (args.priority !== undefined) { updateData.priority = args.priority; hasUpdates = true; }
+      if (args.status !== undefined) { updateData.status = args.status; hasUpdates = true; }
+
+      if (!hasUpdates) return "Nenhum dado para atualizar.";
+
+      const { data, error } = await supabase
+        .from("ff_events")
+        .update(updateData)
+        .eq("id", args.event_id)
+        .eq("tenant_id", tenantId)
+        .select()
+        .single();
+
+      if (error) return `Erro: ${error.message}`;
+      return `Evento "${data.title}" atualizado!`;
+    }
+
+    case "delete_event": {
+      const { error } = await supabase
+        .from("ff_events")
+        .delete()
+        .eq("id", args.event_id)
+        .eq("tenant_id", tenantId);
+
+      if (error) return `Erro: ${error.message}`;
+      return "Evento removido com sucesso.";
+    }
+
+    case "update_habit": {
+      const updateData: any = {
+        updated_at: new Date().toISOString(),
+      };
+      let hasUpdates = false;
+
+      if (args.title !== undefined) { updateData.title = args.title; hasUpdates = true; }
+      if (args.cadence !== undefined) { updateData.cadence = args.cadence; hasUpdates = true; }
+      if (args.times_per_cadence !== undefined) { updateData.times_per_cadence = args.times_per_cadence; hasUpdates = true; }
+      if (args.target_type !== undefined) { updateData.target_type = args.target_type; hasUpdates = true; }
+      if (args.target_value !== undefined) { updateData.target_value = args.target_value; hasUpdates = true; }
+      if (args.active !== undefined) { updateData.active = args.active; hasUpdates = true; }
+
+      if (!hasUpdates) return "Nenhum dado para atualizar.";
+
+      const { data, error } = await supabase
+        .from("ff_habits")
+        .update(updateData)
+        .eq("id", args.habit_id)
+        .eq("tenant_id", tenantId)
+        .select()
+        .single();
+
+      if (error) return `Erro: ${error.message}`;
+      return `Hábito "${data.title}" atualizado!`;
+    }
+
+    case "delete_habit": {
+      const { error } = await supabase
+        .from("ff_habits")
+        .update({ active: false, updated_at: new Date().toISOString() })
+        .eq("id", args.habit_id)
+        .eq("tenant_id", tenantId);
+
+      if (error) return `Erro: ${error.message}`;
+      return "Hábito removido com sucesso.";
+    }
+
+    case "log_habit": {
+      const logDate = (args.date as string) || today;
+      const value = args.value !== undefined ? Number(args.value) : 1;
+      if (Number.isNaN(value)) return "Valor inválido para o hábito.";
+
+      const { data: existingLog, error: findError } = await supabase
+        .from("ff_habit_logs")
+        .select("id")
+        .eq("habit_id", args.habit_id)
+        .eq("log_date", logDate)
+        .maybeSingle();
+
+      if (findError) return `Erro: ${findError.message}`;
+
+      if (existingLog) {
+        const { error } = await supabase
+          .from("ff_habit_logs")
+          .update({ value })
+          .eq("id", existingLog.id);
+
+        if (error) return `Erro: ${error.message}`;
+        return "Hábito atualizado para esta data.";
+      }
+
+      const { error } = await supabase
+        .from("ff_habit_logs")
+        .insert({
+          tenant_id: tenantId,
+          habit_id: args.habit_id,
+          user_id: userId,
+          log_date: logDate,
+          value,
+        });
+
+      if (error) return `Erro: ${error.message}`;
+      return "Hábito registrado com sucesso.";
+    }
+
+    case "update_reminder": {
+      const updateData: any = {
+        updated_at: new Date().toISOString(),
+      };
+      let hasUpdates = false;
+
+      if (args.title !== undefined) { updateData.title = args.title; hasUpdates = true; }
+      if (args.remind_at !== undefined) { updateData.remind_at = args.remind_at; hasUpdates = true; }
+      if (args.channel !== undefined) { updateData.channel = args.channel; hasUpdates = true; }
+      if (args.status !== undefined) { updateData.status = args.status; hasUpdates = true; }
+
+      if (!hasUpdates) return "Nenhum dado para atualizar.";
+
+      const { data, error } = await supabase
+        .from("ff_reminders")
+        .update(updateData)
+        .eq("id", args.reminder_id)
+        .eq("tenant_id", tenantId)
+        .select()
+        .single();
+
+      if (error) return `Erro: ${error.message}`;
+      return `Lembrete "${data.title}" atualizado!`;
+    }
+
+    case "delete_reminder": {
+      const { error } = await supabase
+        .from("ff_reminders")
+        .delete()
+        .eq("id", args.reminder_id)
+        .eq("tenant_id", tenantId);
+
+      if (error) return `Erro: ${error.message}`;
+      return "Lembrete removido com sucesso.";
+    }
+
+    case "update_memory": {
+      const updateData: any = {
+        updated_at: new Date().toISOString(),
+      };
+      let hasUpdates = false;
+
+      if (args.content !== undefined) { updateData.content = args.content; hasUpdates = true; }
+      if (args.title !== undefined) { updateData.title = args.title; hasUpdates = true; }
+      if (args.kind !== undefined) { updateData.kind = args.kind; hasUpdates = true; }
+
+      if (!hasUpdates) return "Nenhum dado para atualizar.";
+
+      const { data, error } = await supabase
+        .from("ff_memory_items")
+        .update(updateData)
+        .eq("id", args.memory_id)
+        .eq("tenant_id", tenantId)
+        .select()
+        .single();
+
+      if (error) return `Erro: ${error.message}`;
+      return "Memória atualizada com sucesso.";
+    }
+
+    case "delete_memory": {
+      const { error } = await supabase
+        .from("ff_memory_items")
+        .delete()
+        .eq("id", args.memory_id)
+        .eq("tenant_id", tenantId);
+
+      if (error) return `Erro: ${error.message}`;
+      return "Memória removida com sucesso.";
+    }
+
+    case "update_transfer": {
+      const updateData: any = {
+        updated_at: new Date().toISOString(),
+      };
+      let hasUpdates = false;
+
+      if (args.from_wallet_id !== undefined) {
+        const { id: fromId, error: fromError } = await resolveWalletId(
+          supabase,
+          userId,
+          args.from_wallet_id as string
+        );
+        if (fromError) return fromError;
+        updateData.from_wallet_id = fromId;
+        hasUpdates = true;
+      }
+
+      if (args.to_wallet_id !== undefined) {
+        const { id: toId, error: toError } = await resolveWalletId(
+          supabase,
+          userId,
+          args.to_wallet_id as string
+        );
+        if (toError) return toError;
+        updateData.to_wallet_id = toId;
+        hasUpdates = true;
+      }
+
+      if (args.valor !== undefined) {
+        const valor = Number(args.valor);
+        if (Number.isNaN(valor) || valor <= 0) return "Valor inválido para transferência.";
+        updateData.valor = valor;
+        hasUpdates = true;
+      }
+
+      if (args.data !== undefined) { updateData.data = args.data; hasUpdates = true; }
+      if (args.descricao !== undefined) { updateData.descricao = args.descricao; hasUpdates = true; }
+
+      if (!hasUpdates) return "Nenhum dado para atualizar.";
+
+      if (updateData.from_wallet_id && updateData.to_wallet_id && updateData.from_wallet_id === updateData.to_wallet_id) {
+        return "A carteira de origem deve ser diferente da carteira de destino.";
+      }
+
+      const { data, error } = await supabase
+        .from("transfers")
+        .update(updateData)
+        .eq("id", args.transfer_id)
+        .eq("user_id", userId)
+        .select("id, valor, data, descricao, from_wallet:from_wallet_id(nome), to_wallet:to_wallet_id(nome)")
+        .single();
+
+      if (error) return `Erro: ${error.message}`;
+
+      return `Transferência atualizada: ${data.from_wallet?.nome} → ${data.to_wallet?.nome}, R$ ${Number(data.valor).toFixed(2)}.`;
+    }
+
+    case "delete_transfer": {
+      const { error } = await supabase
+        .from("transfers")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", args.transfer_id)
+        .eq("user_id", userId);
+
+      if (error) return `Erro: ${error.message}`;
+      return "Transferência removida com sucesso.";
+    }
+
+    case "update_wallet": {
+      const updateData: any = {};
+      let hasUpdates = false;
+
+      if (args.nome !== undefined) { updateData.nome = args.nome; hasUpdates = true; }
+      if (args.tipo !== undefined) { updateData.tipo = args.tipo; hasUpdates = true; }
+      if (args.instituicao !== undefined) { updateData.instituicao = args.instituicao; hasUpdates = true; }
+      if (args.saldo_inicial !== undefined) { updateData.saldo_inicial = args.saldo_inicial; hasUpdates = true; }
+      if (args.limite_credito !== undefined) { updateData.limite_credito = args.limite_credito; hasUpdates = true; }
+      if (args.limite_emergencia !== undefined) { updateData.limite_emergencia = args.limite_emergencia; hasUpdates = true; }
+      if (args.dia_fechamento !== undefined) { updateData.dia_fechamento = args.dia_fechamento; hasUpdates = true; }
+      if (args.dia_vencimento !== undefined) { updateData.dia_vencimento = args.dia_vencimento; hasUpdates = true; }
+      if (args.ativo !== undefined) { updateData.ativo = args.ativo; hasUpdates = true; }
+
+      if (!hasUpdates) return "Nenhum dado para atualizar.";
+
+      const { data, error } = await supabase
+        .from("wallets")
+        .update(updateData)
+        .eq("id", args.wallet_id)
+        .eq("user_id", userId)
+        .select()
+        .single();
+
+      if (error) return `Erro: ${error.message}`;
+      return `Carteira "${data.nome}" atualizada!`;
+    }
+
+    case "delete_wallet": {
+      const { error } = await supabase
+        .from("wallets")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", args.wallet_id)
+        .eq("user_id", userId);
+
+      if (error) return `Erro: ${error.message}`;
+      return "Carteira removida com sucesso.";
+    }
+
+    case "update_category": {
+      const updateData: any = {};
+      let hasUpdates = false;
+
+      if (args.nome !== undefined) { updateData.nome = args.nome; hasUpdates = true; }
+      if (args.tipo !== undefined) { updateData.tipo = args.tipo; hasUpdates = true; }
+
+      if (!hasUpdates) return "Nenhum dado para atualizar.";
+
+      const { data, error } = await supabase
+        .from("categories")
+        .update(updateData)
+        .eq("id", args.category_id)
+        .eq("user_id", userId)
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === "23505") {
+          return `Já existe uma categoria com o nome "${args.nome}".`;
+        }
+        return `Erro: ${error.message}`;
+      }
+      return `Categoria "${data.nome}" atualizada!`;
+    }
+
+    case "delete_category": {
+      const { data: transactions } = await supabase
+        .from("transactions")
+        .select("id")
+        .eq("category_id", args.category_id)
+        .is("deleted_at", null)
+        .limit(1);
+
+      if (transactions && transactions.length > 0) {
+        return "Não é possível excluir: esta categoria possui lançamentos associados.";
+      }
+
+      const { error } = await supabase
+        .from("categories")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", args.category_id)
+        .eq("user_id", userId);
+
+      if (error) return `Erro: ${error.message}`;
+      return "Categoria removida com sucesso.";
+    }
+
+    case "update_budget": {
+      const updateData: any = {
+        updated_at: new Date().toISOString(),
+      };
+      let hasUpdates = false;
+
+      if (args.limite_valor !== undefined) { updateData.limite_valor = args.limite_valor; hasUpdates = true; }
+      if (args.rollover_policy !== undefined) { updateData.rollover_policy = args.rollover_policy; hasUpdates = true; }
+      if (args.rollover_cap !== undefined) { updateData.rollover_cap = args.rollover_cap; hasUpdates = true; }
+
+      if (!hasUpdates) return "Nenhum dado para atualizar.";
+
+      const { data, error } = await supabase
+        .from("budgets")
+        .update(updateData)
+        .eq("id", args.budget_id)
+        .eq("user_id", userId)
+        .select()
+        .single();
+
+      if (error) return `Erro: ${error.message}`;
+      return "Orçamento atualizado com sucesso.";
+    }
+
+    case "delete_budget": {
+      const { error } = await supabase
+        .from("budgets")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", args.budget_id)
+        .eq("user_id", userId);
+
+      if (error) return `Erro: ${error.message}`;
+      return "Orçamento removido com sucesso.";
+    }
+
+    case "update_goal": {
+      const updateData: any = {
+        updated_at: new Date().toISOString(),
+      };
+      let hasUpdates = false;
+
+      if (args.nome !== undefined) { updateData.nome = args.nome; hasUpdates = true; }
+      if (args.valor_meta !== undefined) { updateData.valor_meta = args.valor_meta; hasUpdates = true; }
+      if (args.prazo !== undefined) { updateData.prazo = args.prazo || null; hasUpdates = true; }
+
+      if (!hasUpdates) return "Nenhum dado para atualizar.";
+
+      const { data, error } = await supabase
+        .from("goals")
+        .update(updateData)
+        .eq("id", args.goal_id)
+        .eq("user_id", userId)
+        .select()
+        .single();
+
+      if (error) return `Erro: ${error.message}`;
+      return `Meta "${data.nome}" atualizada!`;
+    }
+
+    case "delete_goal": {
+      const { error } = await supabase
+        .from("goals")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", args.goal_id)
+        .eq("user_id", userId);
+
+      if (error) return `Erro: ${error.message}`;
+      return "Meta removida com sucesso.";
+    }
+
+    case "update_transaction": {
+      const transactionId = args.transaction_id as string;
+
+      const { data: existing, error: existingError } = await supabase
+        .from("transactions")
+        .select("id, wallet_id, data, tipo")
+        .eq("id", transactionId)
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (existingError) return `Erro: ${existingError.message}`;
+      if (!existing) return "Transação não encontrada.";
+
+      let shouldUnlink = false;
+      if (existing.tipo === "despesa" && existing.wallet_id) {
+        const { data: wallet } = await supabase
+          .from("wallets")
+          .select("tipo")
+          .eq("id", existing.wallet_id)
+          .single();
+
+        if (wallet?.tipo === "cartao") {
+          shouldUnlink = true;
+        }
+      }
+
+      const updateData: any = {
+        updated_at: new Date().toISOString(),
+      };
+      let hasUpdates = false;
+
+      if (args.tipo !== undefined) { updateData.tipo = args.tipo; hasUpdates = true; }
+      if (args.descricao !== undefined) { updateData.descricao = args.descricao; hasUpdates = true; }
+      if (args.valor !== undefined) {
+        const newValor = Number(args.valor);
+        if (Number.isNaN(newValor)) return "Valor inválido. Informe um número válido.";
+        updateData.valor = newValor;
+        hasUpdates = true;
+      }
+      if (args.wallet_id !== undefined) { updateData.wallet_id = args.wallet_id; hasUpdates = true; }
+      if (args.data !== undefined) {
+        updateData.data = args.data;
+        updateData.mes_referencia = (args.data as string).slice(0, 7);
+        hasUpdates = true;
+      }
+      if (args.status !== undefined) { updateData.status = args.status; hasUpdates = true; }
+      if (args.natureza !== undefined) { updateData.natureza = args.natureza; hasUpdates = true; }
+
+      if (args.category_id !== undefined) {
+        const { id: resolvedId, error: categoryError } = await resolveCategoryId(
+          supabase,
+          userId,
+          args.category_id as string,
+          (args.tipo as string) || existing.tipo
+        );
+
+        if (categoryError) return categoryError;
+        updateData.category_id = resolvedId;
+        hasUpdates = true;
+      }
+
+      if (!hasUpdates) return "Nenhum dado para atualizar.";
+
+      const { data, error } = await supabase
+        .from("transactions")
+        .update(updateData)
+        .eq("id", transactionId)
+        .eq("user_id", userId)
+        .select(`*, categories:category_id(nome), wallets:wallet_id(nome)`)
+        .single();
+
+      if (error) return `Erro: ${error.message}`;
+
+      if (shouldUnlink) {
+        await unlinkTransactionFromStatement(supabase, transactionId);
+      }
+
+      const newWalletId = updateData.wallet_id || existing.wallet_id;
+      const newTipo = updateData.tipo || existing.tipo;
+      const newDate = updateData.data || existing.data;
+
+      if (newTipo === "despesa" && newWalletId) {
+        const { data: wallet } = await supabase
+          .from("wallets")
+          .select("tipo")
+          .eq("id", newWalletId)
+          .single();
+
+        if (wallet?.tipo === "cartao") {
+          const statementId = await ensureStatementExists(
+            supabase,
+            newWalletId,
+            newDate,
+            userId
+          );
+          if (statementId) {
+            await linkTransactionToStatement(supabase, transactionId, statementId);
+          }
+        }
+      }
+
+      const tipoLabel = data.tipo === "despesa" ? "Despesa" : "Receita";
+      return `${tipoLabel} atualizada: R$ ${Number(data.valor).toFixed(2)}. Carteira: ${data.wallets?.nome}, Categoria: ${data.categories?.nome}.`;
+    }
+
+    case "delete_transaction": {
+      const transactionId = args.transaction_id as string;
+
+      await unlinkTransactionFromStatement(supabase, transactionId);
+
+      const { error: softError } = await supabase
+        .from("transactions")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", transactionId)
+        .eq("user_id", userId);
+
+      if (softError) {
+        const { error: hardError } = await supabase
+          .from("transactions")
+          .delete()
+          .eq("id", transactionId)
+          .eq("user_id", userId);
+
+        if (hardError) return `Erro: ${hardError.message}`;
+      }
+
+      return "Transação removida com sucesso.";
     }
 
     // ==================== PERFIL ====================
