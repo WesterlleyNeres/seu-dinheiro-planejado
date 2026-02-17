@@ -2629,7 +2629,7 @@ async function executeTool(
       const isDuplicate = await checkDuplicateTransaction(
         supabase,
         userId,
-        walletId,
+        walletId as string,
         tipo,
         valor,
         transactionDate,
