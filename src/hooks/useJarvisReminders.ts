@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiRequest } from "@/lib/api";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -23,15 +23,8 @@ export const useJarvisReminders = () => {
     queryKey,
     queryFn: async () => {
       if (!tenantId) return [];
-      
-      const { data, error } = await supabase
-        .from("ff_reminders")
-        .select("*")
-        .eq("tenant_id", tenantId)
-        .order("remind_at", { ascending: true });
 
-      if (error) throw error;
-      return data as JarvisReminder[];
+      return apiRequest<JarvisReminder[]>(`/reminders?tenant_id=${tenantId}`);
     },
     enabled: !!tenantId,
   });
@@ -40,21 +33,15 @@ export const useJarvisReminders = () => {
     mutationFn: async (input: CreateReminderInput) => {
       if (!tenantId || !user) throw new Error("Tenant ou usuário não encontrado");
 
-      const { data, error } = await supabase
-        .from("ff_reminders")
-        .insert({
+      return apiRequest<JarvisReminder>("/reminders", {
+        method: "POST",
+        body: JSON.stringify({
           tenant_id: tenantId,
-          created_by: user.id,
           title: input.title,
           remind_at: input.remind_at,
           channel: input.channel || "push",
-          status: "pending",
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as JarvisReminder;
+        }),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
@@ -67,15 +54,10 @@ export const useJarvisReminders = () => {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: 'pending' | 'sent' | 'dismissed' | 'canceled' }) => {
-      const { data, error } = await supabase
-        .from("ff_reminders")
-        .update({ status, updated_at: new Date().toISOString() })
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as JarvisReminder;
+      return apiRequest<JarvisReminder>(`/reminders/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey });
@@ -94,15 +76,10 @@ export const useJarvisReminders = () => {
 
   const dismissReminder = useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await supabase
-        .from("ff_reminders")
-        .update({ status: "dismissed", updated_at: new Date().toISOString() })
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as JarvisReminder;
+      return apiRequest<JarvisReminder>(`/reminders/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "dismissed" }),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
@@ -115,12 +92,7 @@ export const useJarvisReminders = () => {
 
   const deleteReminder = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("ff_reminders")
-        .delete()
-        .eq("id", id);
-
-      if (error) throw error;
+      await apiRequest(`/reminders/${id}`, { method: "DELETE" });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });

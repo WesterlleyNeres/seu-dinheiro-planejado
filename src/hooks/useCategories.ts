@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 
@@ -21,21 +21,11 @@ export const useCategories = (tipo?: Category['tipo']) => {
 
     try {
       setLoading(true);
-      let query = supabase
-        .from('categories')
-        .select('*')
-        .eq('user_id', user.id)
-        .is('deleted_at', null)
-        .order('nome');
-
-      if (tipo) {
-        query = query.eq('tipo', tipo);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-      setCategories((data as any) || []);
+      const params = new URLSearchParams();
+      if (tipo) params.set('tipo', tipo);
+      const query = params.toString() ? `?${params.toString()}` : '';
+      const data = await apiRequest<Category[]>(`/categories${query}`);
+      setCategories(data || []);
     } catch (error) {
       console.error('Error loading categories:', error);
       toast({
@@ -56,12 +46,10 @@ export const useCategories = (tipo?: Category['tipo']) => {
     if (!user) return;
 
     try {
-      const { error } = await supabase.from('categories').insert({
-        ...data,
-        user_id: user.id,
+      await apiRequest<Category>('/categories', {
+        method: 'POST',
+        body: JSON.stringify(data),
       });
-
-      if (error) throw error;
 
       toast({
         title: 'Categoria criada',
@@ -71,31 +59,31 @@ export const useCategories = (tipo?: Category['tipo']) => {
       loadCategories();
     } catch (error: any) {
       console.error('Error creating category:', error);
-      
-      if (error.code === '23505') {
+
+      const message = String(error?.message || '');
+      if (message.toLowerCase().includes('categoria já existe')) {
         toast({
           title: 'Erro ao criar categoria',
           description: 'Já existe uma categoria com este nome',
           variant: 'destructive',
         });
-      } else {
-        toast({
-          title: 'Erro ao criar categoria',
-          description: 'Tente novamente mais tarde',
-          variant: 'destructive',
-        });
+        return;
       }
+
+      toast({
+        title: 'Erro ao criar categoria',
+        description: 'Tente novamente mais tarde',
+        variant: 'destructive',
+      });
     }
   };
 
   const updateCategory = async (id: string, data: Partial<Category>) => {
     try {
-      const { error } = await supabase
-        .from('categories')
-        .update(data)
-        .eq('id', id);
-
-      if (error) throw error;
+      await apiRequest(`/categories/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
 
       toast({
         title: 'Categoria atualizada',
@@ -115,29 +103,7 @@ export const useCategories = (tipo?: Category['tipo']) => {
 
   const deleteCategory = async (id: string) => {
     try {
-      // Check if category has transactions
-      const { data: transactions } = await supabase
-        .from('transactions')
-        .select('id')
-        .eq('category_id', id)
-        .is('deleted_at', null)
-        .limit(1);
-
-      if (transactions && transactions.length > 0) {
-        toast({
-          title: 'Não é possível excluir',
-          description: 'Esta categoria possui lançamentos associados',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      const { error } = await supabase
-        .from('categories')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', id);
-
-      if (error) throw error;
+      await apiRequest(`/categories/${id}`, { method: 'DELETE' });
 
       toast({
         title: 'Categoria excluída',

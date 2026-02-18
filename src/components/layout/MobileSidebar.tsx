@@ -31,6 +31,7 @@ import {
   Bell,
   Lightbulb,
   MessageCircle,
+  FolderKanban,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/jarvis-helpers";
@@ -40,6 +41,7 @@ const jarvisNavigation = [
   { name: "Início", href: "/jarvis", icon: Brain },
   { name: "Chat", href: "/jarvis/chat", icon: MessageCircle },
   { name: "Tarefas", href: "/jarvis/tasks", icon: CheckSquare },
+  { name: "Projetos", href: "/jarvis/projects", icon: FolderKanban },
   { name: "Agenda", href: "/jarvis/calendar", icon: CalendarDays },
   { name: "Hábitos", href: "/jarvis/habits", icon: Repeat },
   { name: "Lembretes", href: "/jarvis/reminders", icon: Bell },

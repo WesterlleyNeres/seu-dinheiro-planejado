@@ -15,6 +15,12 @@ interface UnifiedLayoutProps {
 export const UnifiedLayout = ({ children }: UnifiedLayoutProps) => {
   const { loading: tenantLoading } = useTenant();
   const isMobile = useIsMobile();
+  const mobileInsetsStyle = isMobile
+    ? {
+        paddingTop: "calc(var(--mobile-header-height) + var(--safe-area-top))",
+        paddingBottom: "calc(var(--mobile-nav-height) + var(--safe-area-bottom))",
+      }
+    : undefined;
 
   // Fallback skeleton se tenant ainda não carregou
   if (tenantLoading) {
@@ -22,7 +28,7 @@ export const UnifiedLayout = ({ children }: UnifiedLayoutProps) => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-[100dvh] bg-background">
       {/* Desktop: Sidebar fixa */}
       {!isMobile && <UnifiedSidebar />}
 
@@ -35,11 +41,12 @@ export const UnifiedLayout = ({ children }: UnifiedLayoutProps) => {
       {/* Conteúdo principal */}
       <main
         className={cn(
-          "min-h-screen w-full overflow-x-hidden",
+          "min-h-[100dvh] w-full overflow-x-hidden",
           isMobile
-            ? "pt-14 pb-20 px-4" // space for header + bottom nav
+            ? "px-4" // spacing handled via safe-area-aware inline styles
             : "pl-64 pr-4 py-6" // sidebar padding + right padding
         )}
+        style={mobileInsetsStyle}
       >
         <div className="max-w-full">
           {children}

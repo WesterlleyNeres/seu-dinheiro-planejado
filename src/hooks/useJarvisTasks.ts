@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { apiRequest } from "@/lib/api";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -46,15 +46,8 @@ export const useJarvisTasks = () => {
     queryKey,
     queryFn: async () => {
       if (!tenantId) return [];
-      
-      const { data, error } = await supabase
-        .from("ff_tasks")
-        .select("*")
-        .eq("tenant_id", tenantId)
-        .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      return data as JarvisTask[];
+      return apiRequest<JarvisTask[]>(`/tasks?tenant_id=${tenantId}`);
     },
     enabled: !!tenantId,
   });
@@ -63,24 +56,17 @@ export const useJarvisTasks = () => {
     mutationFn: async (input: CreateTaskInput) => {
       if (!tenantId || !user) throw new Error("Tenant ou usuário não encontrado");
 
-      const { data, error } = await supabase
-        .from("ff_tasks")
-        .insert({
+      return apiRequest<JarvisTask>("/tasks", {
+        method: "POST",
+        body: JSON.stringify({
           tenant_id: tenantId,
-          created_by: user.id,
           title: input.title,
           description: input.description || null,
           priority: input.priority || "medium",
-          due_at: input.due_at || null,
+          due_at: input.due_at ? input.due_at : null,
           tags: input.tags || [],
-          status: "open",
-          source: "manual",
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as JarvisTask;
+        }),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
@@ -93,18 +79,16 @@ export const useJarvisTasks = () => {
 
   const updateTask = useMutation({
     mutationFn: async ({ id, ...input }: UpdateTaskInput & { id: string }) => {
-      const { data, error } = await supabase
-        .from("ff_tasks")
-        .update({
-          ...input,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as JarvisTask;
+      const sanitized = {
+        ...input,
+        ...(input.due_at !== undefined
+          ? { due_at: input.due_at ? input.due_at : null }
+          : {}),
+      };
+      return apiRequest<JarvisTask>(`/tasks/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(sanitized),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
@@ -117,12 +101,7 @@ export const useJarvisTasks = () => {
 
   const deleteTask = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("ff_tasks")
-        .delete()
-        .eq("id", id);
-
-      if (error) throw error;
+      await apiRequest(`/tasks/${id}`, { method: "DELETE" });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
@@ -135,8 +114,7 @@ export const useJarvisTasks = () => {
 
   const completeTask = useMutation({
     mutationFn: async (taskId: string) => {
-      const { error } = await supabase.rpc("ff_complete_task", { p_task_id: taskId });
-      if (error) throw error;
+      await apiRequest(`/tasks/${taskId}/complete`, { method: "POST" });
     },
     // Optimistic update
     onMutate: async (taskId) => {

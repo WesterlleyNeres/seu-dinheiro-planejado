@@ -1,0 +1,312 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CategoryType {
+  fixa
+  variavel
+  investimento
+  divida
+  receita
+  despesa
+
+  @@map("category_type")
+}
+
+enum WalletType {
+  conta
+  cartao
+
+  @@map("wallet_type")
+}
+
+enum TransactionType {
+  despesa
+  receita
+
+  @@map("transaction_type")
+}
+
+enum TransactionStatus {
+  paga
+  pendente
+
+  @@map("transaction_status")
+}
+
+enum RolloverPolicy {
+  none
+  carry_over
+  clamp
+
+  @@map("rollover_policy")
+}
+
+model Category {
+  id         String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id    String       @db.Uuid
+  nome       String
+  tipo       CategoryType
+  created_at DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at DateTime     @default(now()) @updatedAt @db.Timestamptz(6)
+  deleted_at DateTime?    @db.Timestamptz(6)
+
+  @@map("categories")
+}
+
+model Wallet {
+  id               String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id          String    @db.Uuid
+  nome             String
+  tipo             WalletType
+  instituicao      String?
+  dia_fechamento   Int?
+  dia_vencimento   Int?
+  saldo_inicial    Decimal?  @db.Decimal(14, 2)
+  limite_credito   Decimal?  @db.Decimal(14, 2)
+  limite_emergencia Decimal? @db.Decimal(14, 2)
+  ativo            Boolean   @default(true)
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+  deleted_at       DateTime? @db.Timestamptz(6)
+
+  @@map("wallets")
+}
+
+model Transaction {
+  id                    String            @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id               String            @db.Uuid
+  wallet_id             String?           @db.Uuid
+  tipo                  TransactionType
+  category_id           String            @db.Uuid
+  descricao             String
+  forma_pagamento       String?
+  status                TransactionStatus @default(pendente)
+  valor                 Decimal           @db.Decimal(14, 2)
+  data                  DateTime          @db.Date
+  mes_referencia        String
+  created_at            DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime          @default(now()) @updatedAt @db.Timestamptz(6)
+  deleted_at            DateTime?         @db.Timestamptz(6)
+  payment_method_id     String?           @db.Uuid
+  parcela_numero        Int?
+  parcela_total         Int?
+  valor_parcela         Decimal?          @db.Decimal(14, 2)
+  valor_total_parcelado Decimal?          @db.Decimal(14, 2)
+  grupo_parcelamento    String?           @db.Uuid
+  natureza              String?
+  mes_referencia_int    Int?
+  fingerprint           String?
+
+  @@map("transactions")
+}
+
+model Transfer {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id        String    @db.Uuid
+  from_wallet_id String    @db.Uuid
+  to_wallet_id   String    @db.Uuid
+  valor          Decimal   @db.Decimal(14, 2)
+  data           DateTime  @db.Date
+  descricao      String?
+  created_at     DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+  deleted_at     DateTime? @db.Timestamptz(6)
+
+  @@map("transfers")
+}
+
+model Budget {
+  id              String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id         String         @db.Uuid
+  ano             Int
+  mes             Int
+  category_id     String         @db.Uuid
+  limite_valor    Decimal        @db.Decimal(14, 2)
+  rollover_policy RolloverPolicy @default(none)
+  rollover_cap    Decimal?       @db.Decimal(14, 2)
+  created_at      DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime       @default(now()) @updatedAt @db.Timestamptz(6)
+  deleted_at      DateTime?      @db.Timestamptz(6)
+
+  @@unique([user_id, ano, mes, category_id])
+  @@map("budgets")
+}
+
+model Goal {
+  id         String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  user_id    String    @db.Uuid
+  nome       String
+  prazo      DateTime? @db.Date
+  valor_meta Decimal   @db.Decimal(14, 2)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+  deleted_at DateTime? @db.Timestamptz(6)
+
+  @@map("goals")
+}
+
+model GoalContribution {
+  id         String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  goal_id    String    @db.Uuid
+  data       DateTime  @db.Date
+  valor      Decimal   @db.Decimal(14, 2)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@map("goals_contribs")
+}
+
+model Tenant {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name       String
+  created_by String   @db.Uuid
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@map("tenants")
+}
+
+model TenantMember {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenant_id  String   @db.Uuid
+  user_id    String   @db.Uuid
+  role       String?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("tenant_members")
+}
+
+model JarvisTask {
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenant_id    String    @db.Uuid
+  created_by   String    @db.Uuid
+  title        String
+  description  String?
+  status       String
+  priority     String
+  due_at       DateTime? @db.Timestamptz(6)
+  completed_at DateTime? @db.Timestamptz(6)
+  tags         String[]
+  source       String
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  project_links JarvisProjectTask[]
+
+  @@map("ff_tasks")
+}
+
+model JarvisProject {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenant_id   String    @db.Uuid
+  created_by  String    @db.Uuid
+  title       String
+  description String?
+  status      String
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  task_links JarvisProjectTask[]
+
+  @@map("ff_projects")
+}
+
+model JarvisProjectTask {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenant_id  String   @db.Uuid
+  project_id String   @db.Uuid
+  task_id    String   @db.Uuid
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  project JarvisProject @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  task    JarvisTask    @relation(fields: [task_id], references: [id], onDelete: Cascade)
+
+  @@unique([project_id, task_id])
+  @@map("ff_project_tasks")
+}
+
+model JarvisEvent {
+  id                 String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenant_id          String    @db.Uuid
+  created_by         String    @db.Uuid
+  title              String
+  description        String?
+  location           String?
+  start_at           DateTime  @db.Timestamptz(6)
+  end_at             DateTime? @db.Timestamptz(6)
+  all_day            Boolean
+  priority           String
+  status             String
+  google_calendar_id String?
+  google_event_id    String?
+  source             String
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@map("ff_events")
+}
+
+model JarvisHabit {
+  id                 String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenant_id          String    @db.Uuid
+  created_by         String    @db.Uuid
+  title              String
+  cadence            String
+  times_per_cadence  Int
+  target_type        String
+  target_value       Float
+  active             Boolean
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@map("ff_habits")
+}
+
+model JarvisHabitLog {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenant_id  String   @db.Uuid
+  habit_id   String   @db.Uuid
+  user_id    String   @db.Uuid
+  log_date   DateTime @db.Date
+  value      Float
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("ff_habit_logs")
+}
+
+model JarvisReminder {
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenant_id       String    @db.Uuid
+  created_by      String    @db.Uuid
+  title           String
+  remind_at       DateTime  @db.Timestamptz(6)
+  channel         String
+  status          String
+  attempt_count   Int
+  last_attempt_at DateTime? @db.Timestamptz(6)
+  sent_at         DateTime? @db.Timestamptz(6)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@map("ff_reminders")
+}
+
+model JarvisMemoryItem {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenant_id  String   @db.Uuid
+  user_id    String   @db.Uuid
+  kind       String
+  title      String?
+  content    String
+  metadata   Json
+  source     String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @db.Timestamptz(6)
+
+  @@map("ff_memory_items")
+}

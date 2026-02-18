@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -51,6 +50,7 @@ import { formatCurrency } from '@/lib/currency';
 import { StatementsList } from '@/components/statements/StatementsList';
 import { CreditLimitCard } from '@/components/wallets/CreditLimitCard';
 import { EmergencyLimitAlert } from '@/components/wallets/EmergencyLimitAlert';
+import { PageShell } from '@/components/layout/PageShell';
 
 export default function Wallets() {
   const [formOpen, setFormOpen] = useState(false);
@@ -159,8 +159,7 @@ export default function Wallets() {
   const cartoes = wallets.filter((w) => w.tipo === 'cartao');
 
   return (
-    <AppLayout>
-      <div className="space-y-6" data-tour="wallets-content">
+    <PageShell data-tour="wallets-content" className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">Carteiras</h1>
@@ -289,20 +288,20 @@ export default function Wallets() {
                                 <p>Fechamento: dia {wallet.dia_fechamento}</p>
                               )}
                               {wallet.dia_vencimento && (
-                      <p>Vencimento: dia {wallet.dia_vencimento}</p>
-                    )}
-                  </div>
-                  
-                  {wallet.limite_credito && limits[wallet.id] && (
-                    <CreditLimitCard
-                      limiteTotal={limits[wallet.id].limiteTotal}
-                      valorUsado={limits[wallet.id].valorUsado}
-                      limiteDisponivel={limits[wallet.id].limiteDisponivel}
-                      percentualUso={limits[wallet.id].percentualUso}
-                    />
-                  )}
-                  
-                  <div className="flex gap-2">
+                                <p>Vencimento: dia {wallet.dia_vencimento}</p>
+                              )}
+                            </div>
+
+                            {wallet.limite_credito && limits[wallet.id] && (
+                              <CreditLimitCard
+                                limiteTotal={limits[wallet.id].limiteTotal}
+                                valorUsado={limits[wallet.id].valorUsado}
+                                limiteDisponivel={limits[wallet.id].limiteDisponivel}
+                                percentualUso={limits[wallet.id].percentualUso}
+                              />
+                            )}
+
+                            <div className="flex gap-2">
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -340,11 +339,10 @@ export default function Wallets() {
             )}
           </TabsContent>
 
-          <TabsContent value="statements" className="mt-6">
-            <StatementsList />
-          </TabsContent>
-        </Tabs>
-      </div>
+        <TabsContent value="statements" className="mt-6">
+          <StatementsList />
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="max-w-md">
@@ -575,6 +573,6 @@ export default function Wallets() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </AppLayout>
+    </PageShell>
   );
 }

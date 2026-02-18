@@ -30,15 +30,15 @@ export const StatCard = ({ title, value, icon, trend, variant = "default" }: Sta
 
   return (
     <Card className={cn("border-2", variantStyles[variant])}>
-      <CardContent className="p-6">
+      <CardContent className="p-4 sm:p-6">
         <div className="flex items-start justify-between">
           <div className="space-y-2">
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <p className="text-3xl font-bold currency">{value}</p>
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground">{title}</p>
+            <p className="text-2xl sm:text-3xl font-bold currency">{value}</p>
             {trend && (
               <p
                 className={cn(
-                  "text-sm font-medium",
+                  "text-xs sm:text-sm font-medium",
                   trend.positive ? "text-success" : "text-destructive"
                 )}
               >
@@ -46,7 +46,7 @@ export const StatCard = ({ title, value, icon, trend, variant = "default" }: Sta
               </p>
             )}
           </div>
-          <div className={cn("rounded-lg p-3", iconStyles[variant])}>{icon}</div>
+          <div className={cn("rounded-lg p-2 sm:p-3", iconStyles[variant])}>{icon}</div>
         </div>
       </CardContent>
     </Card>

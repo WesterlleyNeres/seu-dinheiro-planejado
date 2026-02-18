@@ -6,6 +6,7 @@ import { useTenant } from "@/contexts/TenantContext";
 import { useJarvisReminders } from "@/hooks/useJarvisReminders";
 import { ReminderCard } from "@/components/jarvis/ReminderCard";
 import { Plus, Bell, Loader2 } from "lucide-react";
+import { PageShell } from "@/components/layout/PageShell";
 import {
   Dialog,
   DialogContent,
@@ -74,7 +75,7 @@ const JarvisReminders = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -208,7 +209,7 @@ const JarvisReminders = () => {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   );
 };
 

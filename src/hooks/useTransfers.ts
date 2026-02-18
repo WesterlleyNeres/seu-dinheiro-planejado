@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
@@ -38,26 +38,13 @@ export const useTransfers = () => {
     
     setLoading(true);
     try {
-      let query = supabase
-        .from('transfers')
-        .select('*')
-        .eq('user_id', user.id)
-        .is('deleted_at', null)
-        .order('data', { ascending: false });
+      const params = new URLSearchParams();
+      if (filters?.startDate) params.set('start_date', filters.startDate);
+      if (filters?.endDate) params.set('end_date', filters.endDate);
+      if (filters?.walletId) params.set('wallet_id', filters.walletId);
 
-      if (filters?.startDate) {
-        query = query.gte('data', filters.startDate);
-      }
-      if (filters?.endDate) {
-        query = query.lte('data', filters.endDate);
-      }
-      if (filters?.walletId) {
-        query = query.or(`from_wallet_id.eq.${filters.walletId},to_wallet_id.eq.${filters.walletId}`);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
+      const query = params.toString() ? `?${params.toString()}` : '';
+      const data = await apiRequest<Transfer[]>(`/transfers${query}`);
       setTransfers(data || []);
     } catch (error: any) {
       console.error('Error loading transfers:', error);
@@ -71,14 +58,11 @@ export const useTransfers = () => {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from('transfers')
-        .insert([{ ...transferData, user_id: user.id }])
-        .select()
-        .single();
+      const data = await apiRequest<Transfer>('/transfers', {
+        method: 'POST',
+        body: JSON.stringify(transferData),
+      });
 
-      if (error) throw error;
-      
       toast.success('Transferência criada com sucesso');
       await loadTransfers();
       return data;
@@ -91,13 +75,11 @@ export const useTransfers = () => {
 
   const updateTransfer = async (id: string, transferData: Partial<Transfer>) => {
     try {
-      const { error } = await supabase
-        .from('transfers')
-        .update(transferData)
-        .eq('id', id);
+      await apiRequest(`/transfers/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(transferData),
+      });
 
-      if (error) throw error;
-      
       toast.success('Transferência atualizada com sucesso');
       await loadTransfers();
     } catch (error: any) {
@@ -109,13 +91,8 @@ export const useTransfers = () => {
 
   const deleteTransfer = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('transfers')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', id);
+      await apiRequest(`/transfers/${id}`, { method: 'DELETE' });
 
-      if (error) throw error;
-      
       toast.success('Transferência excluída com sucesso');
       await loadTransfers();
     } catch (error: any) {
@@ -129,13 +106,7 @@ export const useTransfers = () => {
     if (!user) return [];
 
     try {
-      const { data, error } = await supabase
-        .from('v_wallet_balance')
-        .select('*')
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-      return data || [];
+      return await apiRequest<WalletBalance[]>('/wallets/balances');
     } catch (error: any) {
       console.error('Error getting wallet balances:', error);
       return [];

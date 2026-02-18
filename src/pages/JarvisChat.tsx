@@ -56,6 +56,11 @@ const JarvisChat = () => {
     await sendMessage({ message: action });
   };
 
+  const handleSelectOption = async (value: string) => {
+    if (isSending) return;
+    await sendMessage({ message: value });
+  };
+
   return (
     <div className="flex h-[calc(100vh-8rem)]" data-tour="chat-area">
       {/* Sidebar */}
@@ -95,9 +100,9 @@ const JarvisChat = () => {
             </div>
             <div>
               <h1 className="text-xl font-semibold truncate max-w-[200px] sm:max-w-none">
-                {currentConversation?.title || "JARVIS"}
+                {currentConversation?.title || "GUTA"}
               </h1>
-              <p className="text-sm text-muted-foreground">Seu assistente pessoal</p>
+              <p className="text-sm text-muted-foreground">Sua assistente pessoal</p>
             </div>
           </div>
           {isMobile && (
@@ -123,7 +128,11 @@ const JarvisChat = () => {
           ) : (
             <div className="space-y-4 pr-4">
               {messages.map((message) => (
-                <ChatMessage key={message.id} message={message} />
+                <ChatMessage
+                  key={message.id}
+                  message={message}
+                  onSelectOption={handleSelectOption}
+                />
               ))}
               {isSending && (
                 <div className="flex items-start gap-3">

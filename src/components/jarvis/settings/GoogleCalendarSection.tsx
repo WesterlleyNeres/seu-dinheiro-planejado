@@ -39,7 +39,7 @@ const GoogleCalendarSection = () => {
           Integrações
         </CardTitle>
         <CardDescription>
-          Conecte serviços externos ao JARVIS
+          Conecte serviços externos à GUTA
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

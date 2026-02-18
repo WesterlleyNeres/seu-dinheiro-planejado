@@ -206,7 +206,7 @@ export const recurringTransactionSchema = z.object({
 });
 
 // ==========================================
-// JARVIS SCHEMAS
+// GUTA SCHEMAS
 // ==========================================
 
 export const jarvisTaskSchema = z.object({

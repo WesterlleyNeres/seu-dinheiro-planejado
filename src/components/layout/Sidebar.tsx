@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Repeat,
   Bell,
+  FolderKanban,
   LayoutDashboard,
   Receipt,
   Tag,
@@ -24,6 +25,7 @@ import { cn } from "@/lib/utils";
 const jarvisNavigation = [
   { name: "Home", href: "/jarvis", icon: Brain },
   { name: "Tarefas", href: "/jarvis/tasks", icon: CheckSquare },
+  { name: "Projetos", href: "/jarvis/projects", icon: FolderKanban },
   { name: "Agenda", href: "/jarvis/calendar", icon: CalendarDays },
   { name: "Hábitos", href: "/jarvis/habits", icon: Repeat },
   { name: "Lembretes", href: "/jarvis/reminders", icon: Bell },
@@ -107,7 +109,7 @@ export const Sidebar = () => {
 
         {/* Navigation */}
         <nav className="flex-1 space-y-6 p-4 overflow-y-auto">
-          {/* JARVIS Section */}
+          {/* GUTA Section */}
           <NavSection
             title="Assistente"
             items={jarvisNavigation}

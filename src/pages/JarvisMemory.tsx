@@ -14,6 +14,7 @@ import { MemoryCard, MemoryCardSkeleton } from "@/components/jarvis/MemoryCard";
 import { MemoryForm } from "@/components/jarvis/MemoryForm";
 import { ChatGPTImporter, ChatGPTImporterTrigger } from "@/components/jarvis/ChatGPTImporter";
 import { ConversationGroup, ConversationGroupSkeleton } from "@/components/jarvis/ConversationGroup";
+import { PageShell } from "@/components/layout/PageShell";
 import type { JarvisMemoryItem } from "@/types/jarvis";
 
 const kindFilterOptions = [
@@ -112,7 +113,7 @@ const JarvisMemory = () => {
   const hasChatgptItems = groupedConversations.length > 0;
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
@@ -257,7 +258,7 @@ const JarvisMemory = () => {
           ))}
         </div>
       )}
-    </div>
+    </PageShell>
   );
 };
 

@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react';
-import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -34,6 +33,7 @@ import { formatCurrency } from '@/lib/currency';
 import { formatDate } from '@/lib/date';
 import { Plus, Pencil, Trash2, CheckCircle2, Clock, Repeat, Play } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageShell } from '@/components/layout/PageShell';
 
 export default function Transactions() {
   const [filters, setFilters] = useState<TransactionFilters>({});
@@ -189,8 +189,7 @@ export default function Transactions() {
   const saldo = totalReceitas - totalDespesas;
 
   return (
-    <AppLayout>
-      <div className="space-y-6" data-tour="transactions-content">
+    <PageShell data-tour="transactions-content" className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">Lançamentos</h1>
@@ -246,126 +245,126 @@ export default function Transactions() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="transactions" className="space-y-6">
-            <div className="flex justify-end">
-              <Button onClick={handleNewTransaction}>
-                <Plus className="h-4 w-4 mr-2" />
-                Novo Lançamento
-              </Button>
-            </div>
+        <TabsContent value="transactions" className="space-y-6">
+          <div className="flex justify-end">
+            <Button onClick={handleNewTransaction}>
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Lançamento
+            </Button>
+          </div>
 
-            <TransactionFiltersComponent filters={filters} onFiltersChange={setFilters} />
+          <TransactionFiltersComponent filters={filters} onFiltersChange={setFilters} />
 
-            <Card>
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="p-6 space-y-4">
-                {[...Array(5)].map((_, i) => (
-                  <Skeleton key={i} className="h-12 w-full" />
-                ))}
-              </div>
-            ) : transactions.length === 0 ? (
-              <div className="p-12 text-center">
-                <p className="text-muted-foreground">
-                  Nenhum lançamento encontrado. Crie seu primeiro lançamento!
-                </p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[50px]"></TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Descrição</TableHead>
-                    <TableHead>Categoria</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Valor</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedGroups.map((item, idx) =>
-                    item.type === 'group' ? (
-                <InstallmentGroupRow
-                  key={`group-${item.data.groupId}`}
-                  parcels={item.data.parcels}
-                  onEdit={handleEdit}
-                  onDelete={handleDeleteClick}
-                  onDeleteDirect={deleteTransaction}
-                  onToggleStatus={toggleStatus}
-                />
-                    ) : (
-                      <TableRow key={item.data.id}>
-                        <TableCell></TableCell>
-                        <TableCell>{formatDate(item.data.data)}</TableCell>
-                        <TableCell>
-                          <span className="font-medium">{item.data.descricao}</span>
-                        </TableCell>
-                        <TableCell>{item.data.category?.nome}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              item.data.tipo === 'receita' ? 'default' : 'secondary'
-                            }
-                          >
-                            {item.data.tipo}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              toggleStatus(item.data.id, item.data.status)
-                            }
-                          >
-                            {item.data.status === 'paga' ? (
-                              <CheckCircle2 className="h-4 w-4 text-success" />
-                            ) : (
-                              <Clock className="h-4 w-4 text-warning" />
-                            )}
-                          </Button>
-                        </TableCell>
-                        <TableCell
-                          className={`text-right font-semibold ${
-                            item.data.tipo === 'receita'
-                              ? 'text-success'
-                              : 'text-destructive'
-                          }`}
-                        >
-                          {item.data.tipo === 'receita' ? '+' : '-'}
-                          {formatCurrency(Number(item.data.valor))}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
+          <Card>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-6 space-y-4">
+                  {[...Array(5)].map((_, i) => (
+                    <Skeleton key={i} className="h-12 w-full" />
+                  ))}
+                </div>
+              ) : transactions.length === 0 ? (
+                <div className="p-12 text-center">
+                  <p className="text-muted-foreground">
+                    Nenhum lançamento encontrado. Crie seu primeiro lançamento!
+                  </p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[50px]"></TableHead>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Categoria</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedGroups.map((item) =>
+                      item.type === 'group' ? (
+                        <InstallmentGroupRow
+                          key={`group-${item.data.groupId}`}
+                          parcels={item.data.parcels}
+                          onEdit={handleEdit}
+                          onDelete={handleDeleteClick}
+                          onDeleteDirect={deleteTransaction}
+                          onToggleStatus={toggleStatus}
+                        />
+                      ) : (
+                        <TableRow key={item.data.id}>
+                          <TableCell></TableCell>
+                          <TableCell>{formatDate(item.data.data)}</TableCell>
+                          <TableCell>
+                            <span className="font-medium">{item.data.descricao}</span>
+                          </TableCell>
+                          <TableCell>{item.data.category?.nome}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                item.data.tipo === 'receita' ? 'default' : 'secondary'
+                              }
+                            >
+                              {item.data.tipo}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
                             <Button
                               variant="ghost"
-                              size="icon"
-                              onClick={() => handleEdit(item.data)}
+                              size="sm"
+                              onClick={() =>
+                                toggleStatus(item.data.id, item.data.status)
+                              }
                             >
-                              <Pencil className="h-4 w-4" />
+                              {item.data.status === 'paga' ? (
+                                <CheckCircle2 className="h-4 w-4 text-success" />
+                              ) : (
+                                <Clock className="h-4 w-4 text-warning" />
+                              )}
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteClick(item.data.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  )}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-          </TabsContent>
+                          </TableCell>
+                          <TableCell
+                            className={`text-right font-semibold ${
+                              item.data.tipo === 'receita'
+                                ? 'text-success'
+                                : 'text-destructive'
+                            }`}
+                          >
+                            {item.data.tipo === 'receita' ? '+' : '-'}
+                            {formatCurrency(Number(item.data.valor))}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEdit(item.data)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDeleteClick(item.data.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    )}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-          <TabsContent value="recurring" className="space-y-6">
+        <TabsContent value="recurring" className="space-y-6">
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => processRecurringTransactions()}>
                 <Play className="h-4 w-4 mr-2" />
@@ -400,9 +399,8 @@ export default function Transactions() {
                 onShowHistory={handleShowHistory}
               />
             )}
-          </TabsContent>
-        </Tabs>
-      </div>
+        </TabsContent>
+      </Tabs>
 
       <TransactionForm
         open={formOpen}
@@ -439,6 +437,6 @@ export default function Transactions() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </AppLayout>
+    </PageShell>
   );
 }

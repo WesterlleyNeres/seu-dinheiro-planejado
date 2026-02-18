@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
@@ -68,96 +68,18 @@ export const useBudgets = (year: number, month: number, budgetMode: 'pagas' | 'p
     try {
       setLoading(true);
 
-      // Fetch budgets with category info
-      const { data: budgetsData, error: budgetsError } = await supabase
-        .from('budgets')
-        .select(`
-          *,
-          category:categories!budgets_category_id_fkey(id, nome, tipo)
-        `)
-        .eq('user_id', user.id)
-        .eq('ano', year)
-        .eq('mes', month)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false });
-
-      if (budgetsError) throw budgetsError;
-
-      if (!budgetsData || budgetsData.length === 0) {
-        setBudgets([]);
-        setTotals({ orcado: 0, realizado: 0, saldo: 0, percentual: 0 });
-        return;
-      }
-
-    // Calculate realizado for ALL budgets in single query based on budget_mode
-    const lastDayOfMonth = new Date(year, month, 0).getDate();
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
-
-    const statusFilter = (budgetMode === 'pagas') ? ['paga'] as const : (['paga', 'pendente'] as const);
-
-    // Single aggregation query for all categories
-    const { data: realizedAgg, error: aggErr } = await supabase
-      .from('transactions')
-      .select('category_id, valor')
-      .eq('user_id', user.id)
-      .eq('tipo', 'despesa')
-      .gte('data', startDate)
-      .lte('data', endDate)
-      .in('status', statusFilter)
-      .is('deleted_at', null);
-
-    if (aggErr) throw aggErr;
-
-    // Build map: category_id -> total realizado
-    const realizedMap: Record<string, number> = {};
-    (realizedAgg || []).forEach((row: any) => {
-      const catId = row.category_id;
-      if (!realizedMap[catId]) realizedMap[catId] = 0;
-      realizedMap[catId] += Number(row.valor);
-    });
-
-    // Enrich budgets with realized values
-    const enrichedBudgets = budgetsData.map((budget) => {
-      const realizado = realizedMap[budget.category_id] ?? 0;
-      const limite = Number(budget.limite_valor);
-      const percentual = limite > 0 ? (realizado / limite) * 100 : 0;
-      const restante = limite - realizado;
-
-      return {
-        ...budget,
-        category: Array.isArray(budget.category) ? budget.category[0] : budget.category,
-        realizado,
-        percentual: Math.round(percentual * 10) / 10,
-        restante,
-      };
-    });
-
-      // Calculate totals
-      const totalOrcado = enrichedBudgets.reduce(
-        (sum, b) => sum + Number(b.limite_valor),
-        0
-      );
-      const totalRealizado = enrichedBudgets.reduce(
-        (sum, b) => sum + (b.realizado || 0),
-        0
-      );
-      const totalSaldo = totalOrcado - totalRealizado;
-      const totalPercentual = totalOrcado > 0 
-        ? (totalRealizado / totalOrcado) * 100 
-        : 0;
-
-      setTotals({
-        orcado: totalOrcado,
-        realizado: totalRealizado,
-        saldo: totalSaldo,
-        percentual: Math.round(totalPercentual * 10) / 10,
+      const params = new URLSearchParams({
+        year: String(year),
+        month: String(month),
+        mode: budgetMode,
       });
 
-      // Sort by percentual descending (most critical first)
-      enrichedBudgets.sort((a, b) => (b.percentual || 0) - (a.percentual || 0));
+      const response = await apiRequest<{ budgets: Budget[]; totals: BudgetTotals }>(
+        `/budgets?${params.toString()}`
+      );
 
-      setBudgets(enrichedBudgets);
+      setBudgets(response.budgets || []);
+      setTotals(response.totals);
     } catch (error: any) {
       console.error('Error loading budgets:', error);
       toast.error('Erro ao carregar orçamentos');
@@ -174,28 +96,10 @@ export const useBudgets = (year: number, month: number, budgetMode: 'pagas' | 'p
     if (!user) return;
 
     try {
-      // Check for duplicate
-      const { data: existing } = await supabase
-        .from('budgets')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('category_id', data.category_id)
-        .eq('ano', data.ano)
-        .eq('mes', data.mes)
-        .is('deleted_at', null)
-        .maybeSingle();
-
-      if (existing) {
-        toast.error('Já existe um orçamento para esta categoria neste mês');
-        return;
-      }
-
-      const { error } = await supabase.from('budgets').insert({
-        ...data,
-        user_id: user.id,
+      await apiRequest('/budgets', {
+        method: 'POST',
+        body: JSON.stringify(data),
       });
-
-      if (error) throw error;
 
       toast.success('Orçamento criado com sucesso');
       await loadBudgets();
@@ -215,13 +119,10 @@ export const useBudgets = (year: number, month: number, budgetMode: 'pagas' | 'p
     if (!user) return;
 
     try {
-      const { error } = await supabase
-        .from('budgets')
-        .update(data)
-        .eq('id', id)
-        .eq('user_id', user.id);
-
-      if (error) throw error;
+      await apiRequest(`/budgets/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
 
       toast.success('Orçamento atualizado com sucesso');
       await loadBudgets();
@@ -241,13 +142,7 @@ export const useBudgets = (year: number, month: number, budgetMode: 'pagas' | 'p
     if (!user) return;
 
     try {
-      const { error } = await supabase
-        .from('budgets')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', id)
-        .eq('user_id', user.id);
-
-      if (error) throw error;
+      await apiRequest(`/budgets/${id}`, { method: 'DELETE' });
 
       toast.success('Orçamento excluído com sucesso');
       await loadBudgets();

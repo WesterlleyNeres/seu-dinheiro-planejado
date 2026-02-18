@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiRequest } from "@/lib/api";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -36,16 +36,8 @@ export const useJarvisHabits = () => {
     queryKey: habitsQueryKey,
     queryFn: async () => {
       if (!tenantId) return [];
-      
-      const { data, error } = await supabase
-        .from("ff_habits")
-        .select("*")
-        .eq("tenant_id", tenantId)
-        .eq("active", true)
-        .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      return data as JarvisHabit[];
+      return apiRequest<JarvisHabit[]>(`/habits?tenant_id=${tenantId}&active=true`);
     },
     enabled: !!tenantId,
   });
@@ -54,21 +46,17 @@ export const useJarvisHabits = () => {
     queryKey: logsQueryKey,
     queryFn: async () => {
       if (!tenantId) return [];
-      
+
       // Buscar logs dos últimos 90 dias para suportar cálculo de streaks longos
       const start = subDays(new Date(), 90);
       const end = new Date();
-      
-      const { data, error } = await supabase
-        .from("ff_habit_logs")
-        .select("*")
-        .eq("tenant_id", tenantId)
-        .gte("log_date", format(start, "yyyy-MM-dd"))
-        .lte("log_date", format(end, "yyyy-MM-dd"))
-        .order("log_date", { ascending: false });
+      const params = new URLSearchParams({
+        tenant_id: tenantId,
+        start_date: format(start, "yyyy-MM-dd"),
+        end_date: format(end, "yyyy-MM-dd"),
+      });
 
-      if (error) throw error;
-      return data as JarvisHabitLog[];
+      return apiRequest<JarvisHabitLog[]>(`/habits/logs?${params.toString()}`);
     },
     enabled: !!tenantId,
   });
@@ -77,23 +65,17 @@ export const useJarvisHabits = () => {
     mutationFn: async (input: CreateHabitInput) => {
       if (!tenantId || !user) throw new Error("Tenant ou usuário não encontrado");
 
-      const { data, error } = await supabase
-        .from("ff_habits")
-        .insert({
+      return apiRequest<JarvisHabit>("/habits", {
+        method: "POST",
+        body: JSON.stringify({
           tenant_id: tenantId,
-          created_by: user.id,
           title: input.title,
           cadence: input.cadence || "weekly",
           times_per_cadence: input.times_per_cadence || 3,
           target_type: input.target_type || "count",
           target_value: input.target_value || 1,
-          active: true,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as JarvisHabit;
+        }),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: habitsQueryKey });
@@ -106,18 +88,10 @@ export const useJarvisHabits = () => {
 
   const updateHabit = useMutation({
     mutationFn: async ({ id, ...input }: Partial<CreateHabitInput> & { id: string; active?: boolean }) => {
-      const { data, error } = await supabase
-        .from("ff_habits")
-        .update({
-          ...input,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as JarvisHabit;
+      return apiRequest<JarvisHabit>(`/habits/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: habitsQueryKey });
@@ -130,13 +104,7 @@ export const useJarvisHabits = () => {
 
   const deleteHabit = useMutation({
     mutationFn: async (id: string) => {
-      // Soft delete via active = false
-      const { error } = await supabase
-        .from("ff_habits")
-        .update({ active: false, updated_at: new Date().toISOString() })
-        .eq("id", id);
-
-      if (error) throw error;
+      await apiRequest(`/habits/${id}`, { method: "DELETE" });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: habitsQueryKey });
@@ -151,44 +119,13 @@ export const useJarvisHabits = () => {
     mutationFn: async ({ habitId, value = 1, date }: { habitId: string; value?: number; date?: string }) => {
       if (!tenantId || !user) throw new Error("Tenant ou usuário não encontrado");
 
-      const logDate = date || format(new Date(), "yyyy-MM-dd");
-
-      // Verificar se já existe log para esta data
-      const { data: existingLog } = await supabase
-        .from("ff_habit_logs")
-        .select("id")
-        .eq("habit_id", habitId)
-        .eq("log_date", logDate)
-        .maybeSingle();
-
-      if (existingLog) {
-        // Atualizar log existente
-        const { data, error } = await supabase
-          .from("ff_habit_logs")
-          .update({ value })
-          .eq("id", existingLog.id)
-          .select()
-          .single();
-
-        if (error) throw error;
-        return data as JarvisHabitLog;
-      } else {
-        // Criar novo log
-        const { data, error } = await supabase
-          .from("ff_habit_logs")
-          .insert({
-            tenant_id: tenantId,
-            habit_id: habitId,
-            user_id: user.id,
-            log_date: logDate,
-            value,
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-        return data as JarvisHabitLog;
-      }
+      return apiRequest<JarvisHabitLog>(`/habits/${habitId}/logs`, {
+        method: "POST",
+        body: JSON.stringify({
+          value,
+          date: date || format(new Date(), "yyyy-MM-dd"),
+        }),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: logsQueryKey });

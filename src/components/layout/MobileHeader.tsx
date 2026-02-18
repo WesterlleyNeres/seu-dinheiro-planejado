@@ -16,9 +16,9 @@ export function MobileHeader() {
     <>
       <header
         className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-card/95 backdrop-blur-sm"
-        style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+        style={{ paddingTop: "var(--safe-area-top)" }}
       >
-        <div className="flex items-center justify-between px-4 h-14">
+        <div className="flex items-center justify-between px-4 h-[var(--mobile-header-height)]">
           <Button
             variant="ghost"
             size="icon"

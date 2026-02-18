@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
-import { useAutoStatement } from './useAutoStatement';
 
 export interface Transaction {
   id: string;
@@ -50,51 +49,24 @@ export const useTransactions = (filters?: TransactionFilters) => {
   const { user } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const { ensureStatementExists, linkTransactionToStatement, unlinkTransactionFromStatement } = useAutoStatement();
 
   const loadTransactions = async (retryCount = 0) => {
     if (!user) return;
 
     try {
       setLoading(true);
-      let query = supabase
-        .from('transactions')
-        .select(`
-          *,
-          category:categories(id, nome, tipo),
-          wallet:wallets(id, nome)
-        `)
-        .eq('user_id', user.id)
-        .is('deleted_at', null)
-        .order('data', { ascending: false });
+      const params = new URLSearchParams();
+      if (filters?.startDate) params.set('start_date', filters.startDate);
+      if (filters?.endDate) params.set('end_date', filters.endDate);
+      if (filters?.tipo) params.set('tipo', filters.tipo);
+      if (filters?.category_id) params.set('category_id', filters.category_id);
+      if (filters?.status) params.set('status', filters.status);
+      if (filters?.wallet_id) params.set('wallet_id', filters.wallet_id);
+      if (filters?.natureza) params.set('natureza', filters.natureza);
 
-      if (filters?.startDate) {
-        query = query.gte('data', filters.startDate);
-      }
-      if (filters?.endDate) {
-        query = query.lte('data', filters.endDate);
-      }
-      if (filters?.tipo) {
-        query = query.eq('tipo', filters.tipo);
-      }
-      if (filters?.category_id) {
-        query = query.eq('category_id', filters.category_id);
-      }
-      if (filters?.status) {
-        query = query.eq('status', filters.status);
-      }
-      if (filters?.wallet_id) {
-        query = query.eq('wallet_id', filters.wallet_id);
-      }
-
-      if (filters?.natureza) {
-        query = query.eq('natureza', filters.natureza);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-      setTransactions((data as any) || []);
+      const query = params.toString() ? `?${params.toString()}` : '';
+      const data = await apiRequest<Transaction[]>(`/transactions${query}`);
+      setTransactions(data || []);
     } catch (error) {
       console.error('Error loading transactions:', error);
       
@@ -127,35 +99,13 @@ export const useTransactions = (filters?: TransactionFilters) => {
       // Remover campos que não existem na tabela
       const { isInstallment, installmentType, installmentCount, installmentValue, totalValue, ...transactionData } = data as any;
       
-      const { data: insertedData, error } = await supabase.from('transactions').insert({
-        ...transactionData,
-        user_id: user.id,
-        mes_referencia: mesReferencia,
-      }).select('id, wallet_id, data, tipo').single();
-
-      if (error) throw error;
-
-      // Se é despesa em cartão de crédito, vincular à fatura
-      if (insertedData && transactionData.wallet_id && transactionData.tipo === 'despesa') {
-        // Buscar tipo da carteira
-        const { data: wallet } = await supabase
-          .from('wallets')
-          .select('tipo')
-          .eq('id', transactionData.wallet_id)
-          .single();
-
-        if (wallet?.tipo === 'cartao') {
-          const statementId = await ensureStatementExists(
-            transactionData.wallet_id,
-            transactionData.data,
-            user.id
-          );
-
-          if (statementId) {
-            await linkTransactionToStatement(insertedData.id, statementId);
-          }
-        }
-      }
+      await apiRequest('/transactions', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...transactionData,
+          mes_referencia: mesReferencia,
+        }),
+      });
 
       toast({
         title: 'Lançamento criado',
@@ -192,12 +142,10 @@ export const useTransactions = (filters?: TransactionFilters) => {
         transactionData.mes_referencia = format(parseISO(transactionData.data), 'yyyy-MM');
       }
 
-      const { error } = await supabase
-        .from('transactions')
-        .update(transactionData)
-        .eq('id', id);
-
-      if (error) throw error;
+      await apiRequest(`/transactions/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(transactionData),
+      });
 
       toast({
         title: 'Lançamento atualizado',
@@ -229,18 +177,7 @@ export const useTransactions = (filters?: TransactionFilters) => {
     if (!user) return;
 
     try {
-      // Remover vínculo com fatura antes de deletar
-      await unlinkTransactionFromStatement(id);
-
-      // Tentativa: soft delete
-      const { error: softError } = await supabase
-        .from('transactions')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', id);
-
-      if (softError) {
-        throw softError;
-      }
+      await apiRequest(`/transactions/${id}`, { method: 'DELETE' });
 
       toast({
         title: 'Lançamento excluído',
@@ -248,39 +185,22 @@ export const useTransactions = (filters?: TransactionFilters) => {
       });
       loadTransactions();
     } catch (err: any) {
-      console.error('Error soft-deleting transaction:', err);
+      console.error('Error deleting transaction:', err);
+      const msg = String(err?.message || '');
 
-      // Fallback: hard delete
-      const { error: hardError } = await supabase
-        .from('transactions')
-        .delete()
-        .eq('id', id);
-
-      if (hardError) {
-        console.error('Error hard-deleting transaction:', hardError);
-        const msg = String(hardError?.message || err?.message || '');
-        
-        if (msg.toLowerCase().includes('período') || msg.toLowerCase().includes('fechado')) {
-          toast({
-            title: 'Período Fechado',
-            description: 'Este mês está fechado. Vá em Orçamento para reabrí-lo.',
-            variant: 'destructive',
-          });
-        } else {
-          toast({
-            title: 'Erro ao excluir lançamento',
-            description: 'Tente novamente ou verifique sua conexão.',
-            variant: 'destructive',
-          });
-        }
-        return;
+      if (msg.toLowerCase().includes('período') || msg.toLowerCase().includes('fechado')) {
+        toast({
+          title: 'Período Fechado',
+          description: 'Este mês está fechado. Vá em Orçamento para reabrí-lo.',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Erro ao excluir lançamento',
+          description: 'Tente novamente ou verifique sua conexão.',
+          variant: 'destructive',
+        });
       }
-
-      toast({
-        title: 'Lançamento excluído',
-        description: 'O lançamento foi excluído com sucesso',
-      });
-      loadTransactions();
     }
   };
 
@@ -360,36 +280,11 @@ export const useTransactions = (filters?: TransactionFilters) => {
         });
       }
 
-      const { data: insertedTransactions, error } = await supabase
-        .from('transactions')
-        .insert(transactions)
-        .select('id, wallet_id, data, tipo');
-
-      if (error) throw error;
-
-      // Se é despesa em cartão de crédito, vincular cada parcela à sua fatura
-      if (insertedTransactions && baseData.wallet_id && baseData.tipo === 'despesa') {
-        // Buscar tipo da carteira
-        const { data: wallet } = await supabase
-          .from('wallets')
-          .select('tipo')
-          .eq('id', baseData.wallet_id)
-          .single();
-
-        if (wallet?.tipo === 'cartao') {
-          // Vincular cada parcela à sua respectiva fatura
-          for (const tx of insertedTransactions) {
-            const statementId = await ensureStatementExists(
-              baseData.wallet_id,
-              tx.data,
-              user.id
-            );
-
-            if (statementId) {
-              await linkTransactionToStatement(tx.id, statementId);
-            }
-          }
-        }
+      for (const tx of transactions) {
+        await apiRequest('/transactions', {
+          method: 'POST',
+          body: JSON.stringify(tx),
+        });
       }
 
       toast({

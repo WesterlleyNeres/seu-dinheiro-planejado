@@ -80,7 +80,7 @@ async function getValidAccessToken(
   return integration.access_token;
 }
 
-// Convert JARVIS event to Google Calendar event format
+// Convert GUTA event to Google Calendar event format
 function toGoogleEvent(event: any) {
   const googleEvent: any = {
     summary: event.title,

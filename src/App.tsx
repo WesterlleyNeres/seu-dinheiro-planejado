@@ -34,6 +34,7 @@ import JarvisReminders from "./pages/JarvisReminders";
 import JarvisSettings from "./pages/JarvisSettings";
 import JarvisMemory from "./pages/JarvisMemory";
 import JarvisChat from "./pages/JarvisChat";
+import JarvisProjects from "./pages/JarvisProjects";
 
 // Component to redirect logged users from landing to dashboard
 const LandingOrDashboard = () => {
@@ -108,12 +109,13 @@ const App = () => (
             <Route path="/import" element={<ProtectedPage><Import /></ProtectedPage>} />
             <Route path="/faq" element={<ProtectedPage><FAQ /></ProtectedPage>} />
             
-            {/* JARVIS Routes */}
+            {/* GUTA Routes */}
             <Route path="/jarvis" element={<ProtectedPage><JarvisDashboard /></ProtectedPage>} />
             <Route path="/jarvis/tasks" element={<ProtectedPage><JarvisTasks /></ProtectedPage>} />
             <Route path="/jarvis/calendar" element={<ProtectedPage><JarvisCalendar /></ProtectedPage>} />
             <Route path="/jarvis/habits" element={<ProtectedPage><JarvisHabits /></ProtectedPage>} />
             <Route path="/jarvis/reminders" element={<ProtectedPage><JarvisReminders /></ProtectedPage>} />
+            <Route path="/jarvis/projects" element={<ProtectedPage><JarvisProjects /></ProtectedPage>} />
             <Route path="/jarvis/settings" element={<ProtectedPageNoGuard><JarvisSettings /></ProtectedPageNoGuard>} />
             <Route path="/jarvis/memory" element={<ProtectedPage><JarvisMemory /></ProtectedPage>} />
             {/* Chat is always accessible (for onboarding) */}

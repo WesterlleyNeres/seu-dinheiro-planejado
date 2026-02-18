@@ -1,7 +1,7 @@
 # 📋 Documentação de Operações - Sistema Financeiro v2.0
 
 ## 🎯 Objetivo
-Este documento descreve os procedimentos operacionais do FRACTTO FLOW: gerenciamento de períodos, processamento de recorrências, configuração de alertas **e operações do JARVIS**.
+Este documento descreve os procedimentos operacionais do FRACTTO FLOW: gerenciamento de períodos, processamento de recorrências, configuração de alertas **e operações da GUTA**.
 
 ---
 
@@ -136,7 +136,7 @@ Edge Function que envia resumo diário por email com:
 
 ---
 
-## 4️⃣ Operações JARVIS 🆕
+## 4️⃣ Operações GUTA 🆕
 
 ### 4.1 Edge Function ff-jarvis-chat
 
@@ -174,45 +174,12 @@ Edge Function que envia resumo diário por email com:
 
 **Verificar logs:**
 ```
-Lovable Cloud → Edge Functions → ff-jarvis-chat → Logs
+Supabase → Edge Functions → ff-jarvis-chat → Logs
 ```
 
 ---
 
-### 4.2 Integração WhatsApp
-
-**Edge Functions:**
-- `ff-whatsapp-verify`: Verifica telefone do usuário
-- `ff-whatsapp-ingest`: Processa mensagens recebidas
-
-**Fluxo de Verificação:**
-1. Usuário cadastra telefone em `/jarvis/settings`
-2. Envia "verificar" para o número do JARVIS
-3. n8n chama `ff-whatsapp-verify`
-4. Sistema marca `verified_at` em `ff_user_phones`
-
-**Fluxo de Mensagem:**
-1. Usuário envia mensagem no WhatsApp
-2. n8n recebe via Evolution API
-3. n8n chama `ff-whatsapp-ingest`
-4. Motor IA unificado processa (mesmo do chat web)
-5. Resposta retornada para n8n → WhatsApp
-
-**Verificar status de telefone:**
-```sql
-SELECT phone_e164, verified_at, display_name
-FROM ff_user_phones
-WHERE user_id = 'xxx';
-```
-
-**Secret necessário:**
-```
-N8N_WEBHOOK_TOKEN=seu_token_seguro
-```
-
----
-
-### 4.3 Google Calendar Sync
+### 4.2 Google Calendar Sync
 
 **Edge Functions:**
 - `ff-google-oauth-callback`: Callback do OAuth
@@ -278,7 +245,7 @@ VAPID_PRIVATE_KEY=xxx...
 - `onboarding_step`: Etapa atual (`welcome`, `profile`, `wallet_setup`, `first_habit`, `complete`)
 
 **Etapas do fluxo:**
-1. **welcome**: JARVIS pergunta apelido
+1. **welcome**: GUTA pergunta apelido
 2. **profile**: Pergunta objetivos
 3. **wallet_setup**: Cria primeira carteira
 4. **first_habit**: Sugere hábito (opcional)
@@ -295,7 +262,7 @@ WHERE user_id = 'xxx';
 
 ---
 
-## 5️⃣ Troubleshooting JARVIS
+## 5️⃣ Troubleshooting GUTA
 
 ### Onboarding travado
 
@@ -321,24 +288,9 @@ WHERE user_id = 'xxx';
 
 ---
 
-### WhatsApp não funciona
+### WhatsApp (planejado)
 
-**Sintoma:** Mensagens não são processadas
-
-**Verificar:**
-1. Telefone cadastrado?
-   ```sql
-   SELECT * FROM ff_user_phones WHERE user_id = 'xxx';
-   ```
-
-2. Telefone verificado?
-   ```sql
-   SELECT verified_at FROM ff_user_phones WHERE phone_e164 = '+55...';
-   -- Se NULL, não está verificado
-   ```
-
-3. Token n8n configurado?
-   - Verificar secret `N8N_WEBHOOK_TOKEN`
+Integração WhatsApp está desativada no momento. Reimplementar ingest/verificação antes de habilitar no app.
 
 ---
 
@@ -409,7 +361,7 @@ Buscar por "Selected model:"
 const tenant = useTenant().currentTenant;
 console.log(tenant);
 
-// Verificar profile JARVIS
+// Verificar profile GUTA
 const { data } = await supabase
   .from('ff_user_profiles')
   .select('*')
@@ -419,8 +371,8 @@ console.log(data);
 
 ### Logs Estruturados
 
-- **Edge Function Logs:** Lovable Cloud → Edge Functions → [nome] → Logs
-- **Database Logs:** Lovable Cloud → Database → Logs
+- **Edge Function Logs:** Supabase → Edge Functions → [nome] → Logs
+- **Database Logs:** Supabase → Database → Logs
 - **Cron Logs:** `SELECT * FROM cron.job_run_details ORDER BY start_time DESC;`
 
 ---

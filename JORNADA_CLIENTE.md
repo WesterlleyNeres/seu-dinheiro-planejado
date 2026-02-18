@@ -7,7 +7,7 @@
 
 ## **Visão Geral**
 
-Este guia conduz novos usuários desde o cadastro inicial até o controle avançado de finanças pessoais **com assistente IA integrado**. O processo de onboarding agora é **guiado pelo JARVIS**, tornando a experiência mais fluida e personalizada.
+Este guia conduz novos usuários desde o cadastro inicial até o controle avançado de finanças pessoais **com assistente IA integrado**. O processo de onboarding agora é **guiado pela GUTA**, tornando a experiência mais fluida e personalizada.
 
 ---
 
@@ -18,7 +18,7 @@ flowchart TD
     Start([👤 Novo Usuário]) --> Signup[📝 Cadastro/Login]
     Signup --> OnboardCheck{Primeiro Acesso?}
     
-    OnboardCheck -->|Sim| Jarvis[🤖 JARVIS Onboarding]
+    OnboardCheck -->|Sim| Jarvis[🤖 GUTA Onboarding]
     OnboardCheck -->|Não| Dashboard[📊 Dashboard]
     
     subgraph Onboarding["Onboarding Guiado por IA"]
@@ -36,7 +36,7 @@ flowchart TD
     
     Dashboard --> Navigation{O que fazer?}
     
-    Navigation --> Jarvis2[💬 Chat JARVIS]
+    Navigation --> Jarvis2[💬 Chat GUTA]
     Navigation --> Finances[💰 Finanças]
     Navigation --> Productivity[📋 Produtividade]
     
@@ -69,23 +69,23 @@ flowchart TD
   - Cria tenant (workspace) pessoal
   - Gera categorias e métodos de pagamento padrão
 
-### **1.2 Boas-vindas do JARVIS**
+### **1.2 Boas-vindas da GUTA**
 - **Localização**: Após login, usuário é direcionado para `/jarvis/chat`
 - **Experiência**:
   ```
-  JARVIS: "Olá! Sou o JARVIS, seu assistente pessoal. 
+  GUTA: "Olá! Sou a GUTA, seu assistente pessoal. 
           Vou te ajudar a configurar sua conta.
           Como posso te chamar?"
   
   Você: "Me chama de João"
   
-  JARVIS: "Prazer, João! 🎉 
+  GUTA: "Prazer, João! 🎉 
           Me conta, você quer organizar suas finanças, 
           sua produtividade, ou os dois?"
   ```
 
 ### **1.3 Configuração de Objetivos**
-- JARVIS identifica necessidades:
+- GUTA identifica necessidades:
   - 💰 Controle financeiro
   - 📋 Gestão de tarefas
   - 🔄 Tracking de hábitos
@@ -95,28 +95,28 @@ flowchart TD
 ### **1.4 Criação da Primeira Carteira**
 - **Via conversa natural**:
   ```
-  JARVIS: "Para começar, vamos criar sua primeira carteira.
+  GUTA: "Para começar, vamos criar sua primeira carteira.
           Qual é seu banco principal?"
   
   Você: "Nubank"
   
-  JARVIS: "Ótimo! É conta corrente ou cartão de crédito?"
+  GUTA: "Ótimo! É conta corrente ou cartão de crédito?"
   
   Você: "Conta corrente, tenho uns R$ 2.000 lá"
   
-  JARVIS: "✅ Perfeito! Criei sua conta Nubank com saldo 
+  GUTA: "✅ Perfeito! Criei sua conta Nubank com saldo 
           inicial de R$ 2.000,00."
   ```
 
 ### **1.5 Sugestão de Primeiro Hábito**
-- JARVIS sugere hábito baseado nos objetivos:
+- GUTA sugere hábito baseado nos objetivos:
   - Se focou em finanças: "Registrar gastos diariamente"
   - Se focou em produtividade: "Revisar tarefas de manhã"
   - Se focou em saúde: "Beber 8 copos de água"
 - Usuário pode aceitar ou pular
 
 ### **1.6 Finalização**
-- JARVIS marca `onboarding_completed = true`
+- GUTA marca `onboarding_completed = true`
 - Usuário tem acesso a todo o sistema
 - Menu lateral é liberado
 
@@ -181,7 +181,7 @@ Cada workspace tem dados completamente isolados.
 
 ---
 
-## **3. Usando o JARVIS**
+## **3. Usando a GUTA**
 
 ### **3.1 Chat Inteligente**
 
@@ -232,7 +232,7 @@ Cada workspace tem dados completamente isolados.
 
 - Criar lembretes com data/hora
 - Receber notificação push no navegador
-- Opcional: alerta via WhatsApp
+- Opcional (planejado): alerta via WhatsApp
 
 ### **3.6 Memória**
 
@@ -241,22 +241,17 @@ Cada workspace tem dados completamente isolados.
 - Salvar informações importantes
 - Tipos: preferência, fato, nota, senha, contato
 - Busca rápida
-- JARVIS acessa automaticamente em conversas
+- GUTA acessa automaticamente em conversas
 
 ---
 
 ## **4. Integrações**
 
-### **4.1 WhatsApp** 🆕
+### **4.1 WhatsApp (planejado)** 🆕
 
 **Configuração**: Menu → Configurações → WhatsApp
 
-1. Insira seu número no formato +55 11 99999-9999
-2. Salve e envie "verificar" para o número do JARVIS
-3. Após verificação, você pode:
-   - Criar tarefas: "tarefa: comprar leite"
-   - Registrar gastos: "gasto: 50 almoço"
-   - Consultar saldo: "qual meu saldo?"
+Em migração. A integração será reabilitada após o novo ingest/autenticação.
 
 ### **4.2 Google Calendar** 🆕
 
@@ -326,7 +321,7 @@ Cada workspace tem dados completamente isolados.
 
 *(Mantém seção existente + adicionar)*
 
-### **12.5 Configurações do JARVIS** 🆕
+### **12.5 Configurações da GUTA** 🆕
 
 **Localização**: Menu → Configurações
 
@@ -339,7 +334,7 @@ Cada workspace tem dados completamente isolados.
 ## **13. Rotina Recomendada**
 
 ### **13.1 Diária**
-- [ ] Verificar dashboard no JARVIS
+- [ ] Verificar dashboard na GUTA
 - [ ] Registrar hábitos
 - [ ] Lançar transações do dia
 - [ ] Marcar tarefas concluídas
@@ -364,11 +359,8 @@ Cada workspace tem dados completamente isolados.
 - **Causa**: Usuário fechou chat antes de finalizar
 - **Solução**: Clicar em "Pular configuração" no chat
 
-### **Erro: WhatsApp não funciona**
-- **Verificar**:
-  - Número está verificado?
-  - Formato correto (+55...)?
-- **Solução**: Enviar "verificar" novamente
+### **WhatsApp (planejado)**
+- **Status**: integração desativada no momento
 
 ### **Erro: Google Calendar não sincroniza**
 - **Verificar**:
@@ -392,8 +384,8 @@ Cada workspace tem dados completamente isolados.
 - Busca por palavras-chave
 - Artigos categorizados
 
-### **Chat com JARVIS**
-- Pergunte diretamente ao JARVIS
+### **Chat com GUTA**
+- Pergunte diretamente à GUTA
 - "Como faço para importar CSV?"
 - "Explica o rollover de orçamento"
 
@@ -406,7 +398,7 @@ Cada workspace tem dados completamente isolados.
 - **Próxima revisão**: Trimestral
 
 ### **Changelog v2.0**
-- ✅ Onboarding guiado por IA (JARVIS)
+- ✅ Onboarding guiado por IA (GUTA)
 - ✅ Menu lateral unificado
 - ✅ Módulo de tarefas
 - ✅ Módulo de eventos
@@ -430,7 +422,7 @@ Cada workspace tem dados completamente isolados.
 ## **Suporte e Contato**
 
 Para dúvidas, problemas ou sugestões:
-1. Pergunte ao JARVIS no chat
+1. Pergunte à GUTA no chat
 2. Consulte o FAQ no aplicativo
 3. Verifique esta documentação
 

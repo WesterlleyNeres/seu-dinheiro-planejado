@@ -6,6 +6,7 @@ import { EventForm } from "@/components/jarvis/EventForm";
 import { DayEventGroup } from "@/components/jarvis/DayEventGroup";
 import { QuickEventInput } from "@/components/jarvis/QuickEventInput";
 import { Plus, Calendar, Loader2 } from "lucide-react";
+import { PageShell } from "@/components/layout/PageShell";
 import { parseISO } from "date-fns";
 import type { JarvisEvent } from "@/types/jarvis";
 
@@ -63,7 +64,7 @@ const JarvisCalendar = () => {
   }
 
   return (
-    <div className="space-y-6" data-tour="calendar-content">
+    <PageShell data-tour="calendar-content">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -125,7 +126,7 @@ const JarvisCalendar = () => {
         onSubmit={editingEvent ? handleUpdateEvent : handleCreateEvent}
         isLoading={createEvent.isPending || updateEvent.isPending}
       />
-    </div>
+    </PageShell>
   );
 };
 

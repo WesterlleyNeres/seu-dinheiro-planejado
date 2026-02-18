@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
@@ -81,64 +81,8 @@ export const useGoals = (): UseGoalsReturn => {
     try {
       setLoading(true);
 
-      // Buscar metas não deletadas
-      const { data: goalsData, error: goalsError } = await supabase
-        .from('goals')
-        .select('*')
-        .eq('user_id', user.id)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false });
-
-      if (goalsError) throw goalsError;
-
-      // Para cada meta, buscar contribuições e calcular dados
-      const enrichedGoals = await Promise.all(
-        (goalsData || []).map(async (goal) => {
-          // Buscar contribuições
-          const { data: contribs, error: contribsError } = await supabase
-            .from('goals_contribs')
-            .select('*')
-            .eq('goal_id', goal.id)
-            .order('data', { ascending: false });
-
-          if (contribsError) {
-            console.error('Erro ao buscar contribuições:', contribsError);
-            return {
-              ...goal,
-              contribuicoes: [],
-              economizado: 0,
-              percentual: 0,
-              restante: goal.valor_meta,
-              diasRestantes: goal.prazo 
-                ? Math.ceil((new Date(goal.prazo).getTime() - new Date().setHours(0, 0, 0, 0)) / (1000 * 60 * 60 * 24))
-                : null,
-              ultimaContribuicao: null,
-            };
-          }
-
-          // Calcular economizado
-          const economizado = (contribs || []).reduce((sum, c) => sum + Number(c.valor), 0);
-          const percentual = goal.valor_meta > 0 ? Math.round((economizado / goal.valor_meta) * 100) : 0;
-          const restante = goal.valor_meta - economizado;
-
-          // Calcular dias restantes
-          let diasRestantes: number | null = null;
-          if (goal.prazo) {
-            const diff = new Date(goal.prazo).getTime() - new Date().setHours(0, 0, 0, 0);
-            diasRestantes = Math.ceil(diff / (1000 * 60 * 60 * 24));
-          }
-
-          return {
-            ...goal,
-            contribuicoes: contribs || [],
-            economizado,
-            percentual,
-            restante,
-            diasRestantes,
-            ultimaContribuicao: contribs && contribs.length > 0 ? contribs[0] : null,
-          };
-        })
-      );
+      const response = await apiRequest<{ goals: Goal[]; totals: GoalTotals }>('/goals');
+      const enrichedGoals = response.goals || [];
 
       // Ordenar: prazo próximo primeiro, depois por percentual
       const sortedGoals = enrichedGoals.sort((a, b) => {
@@ -165,17 +109,7 @@ export const useGoals = (): UseGoalsReturn => {
 
       setGoals(sortedGoals);
 
-      // Calcular totais
-      const totalAlvo = enrichedGoals.reduce((sum, g) => sum + Number(g.valor_meta), 0);
-      const totalEconomizado = enrichedGoals.reduce((sum, g) => sum + (g.economizado || 0), 0);
-      const totalRestante = totalAlvo - totalEconomizado;
-
-      setTotals({
-        metasAtivas: enrichedGoals.length,
-        totalAlvo,
-        totalEconomizado,
-        totalRestante: Math.max(0, totalRestante),
-      });
+      setTotals(response.totals);
     } catch (error) {
       console.error('Erro ao carregar metas:', error);
       toast.error('Erro ao carregar metas');
@@ -192,16 +126,14 @@ export const useGoals = (): UseGoalsReturn => {
     if (!user) return;
 
     try {
-      const { error } = await supabase
-        .from('goals')
-        .insert({
-          user_id: user.id,
+      await apiRequest('/goals', {
+        method: 'POST',
+        body: JSON.stringify({
           nome: data.nome,
           valor_meta: data.valor_meta,
           prazo: data.prazo || null,
-        });
-
-      if (error) throw error;
+        }),
+      });
 
       toast.success('Meta criada com sucesso!');
       await loadGoals();
@@ -214,15 +146,10 @@ export const useGoals = (): UseGoalsReturn => {
 
   const updateGoal = async (id: string, data: UpdateGoalData) => {
     try {
-      const { error } = await supabase
-        .from('goals')
-        .update({
-          ...data,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id);
-
-      if (error) throw error;
+      await apiRequest(`/goals/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
 
       toast.success('Meta atualizada com sucesso!');
       await loadGoals();
@@ -235,12 +162,7 @@ export const useGoals = (): UseGoalsReturn => {
 
   const deleteGoal = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('goals')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', id);
-
-      if (error) throw error;
+      await apiRequest(`/goals/${id}`, { method: 'DELETE' });
 
       toast.success('Meta excluída com sucesso!');
       await loadGoals();
@@ -253,15 +175,10 @@ export const useGoals = (): UseGoalsReturn => {
 
   const addContribution = async (goalId: string, data: AddContributionData) => {
     try {
-      const { error } = await supabase
-        .from('goals_contribs')
-        .insert({
-          goal_id: goalId,
-          valor: data.valor,
-          data: data.data,
-        });
-
-      if (error) throw error;
+      await apiRequest(`/goals/${goalId}/contributions`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
 
       toast.success('Contribuição adicionada com sucesso!');
       await loadGoals();
@@ -274,12 +191,7 @@ export const useGoals = (): UseGoalsReturn => {
 
   const deleteContribution = async (contributionId: string) => {
     try {
-      const { error } = await supabase
-        .from('goals_contribs')
-        .delete()
-        .eq('id', contributionId);
-
-      if (error) throw error;
+      await apiRequest(`/goals/contributions/${contributionId}`, { method: 'DELETE' });
 
       toast.success('Contribuição removida com sucesso!');
       await loadGoals();

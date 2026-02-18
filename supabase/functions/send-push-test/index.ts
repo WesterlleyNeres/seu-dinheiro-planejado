@@ -196,7 +196,7 @@ serve(async (req) => {
     
     // Send test notification to all subscriptions
     const payload = {
-      title: "🧪 Teste JARVIS",
+      title: "🧪 Teste GUTA",
       body: "Suas notificações estão funcionando!",
       data: {
         url: "/jarvis/reminders",

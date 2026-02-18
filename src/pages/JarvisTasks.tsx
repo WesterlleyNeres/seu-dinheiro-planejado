@@ -10,6 +10,7 @@ import { QuickAddInput } from "@/components/jarvis/QuickAddInput";
 import { TaskForm } from "@/components/jarvis/TaskForm";
 import { TaskFilters, PriorityFilter, SortBy } from "@/components/jarvis/TaskFilters";
 import { Plus, Loader2, CheckSquare, Sun, CalendarDays, ListTodo, CheckCircle } from "lucide-react";
+import { PageShell } from "@/components/layout/PageShell";
 import type { JarvisTask } from "@/types/jarvis";
 
 const JarvisTasks = () => {
@@ -211,7 +212,7 @@ const JarvisTasks = () => {
   );
 
   return (
-    <div className="space-y-6" data-tour="tasks-content">
+    <PageShell data-tour="tasks-content">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -328,7 +329,7 @@ const JarvisTasks = () => {
         isLoading={createTask.isPending || updateTask.isPending}
         allTags={allTags}
       />
-    </div>
+    </PageShell>
   );
 };
 

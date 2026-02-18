@@ -8,7 +8,7 @@
 
 > **"Suas Finanças, Peça por Peça"** - Plataforma completa de gestão financeira pessoal com assistente IA integrado
 
-**URL Produção:** https://fracttoflow.lovable.app
+**URL Produção:** (definir domínio)
 
 ---
 
@@ -45,7 +45,7 @@ FRACTTO FLOW é uma plataforma SaaS de gestão financeira pessoal com assistente
 - Importar extratos bancários via CSV
 - Gerar relatórios e exportar para PDF/CSV
 - Receber alertas por email sobre vencimentos e orçamentos
-- **Conversar com JARVIS** (assistente IA para produtividade e finanças)
+- **Conversar com GUTA** (assistente IA para produtividade e finanças)
 
 ### 1.2 Características Principais
 
@@ -64,15 +64,14 @@ FRACTTO FLOW é uma plataforma SaaS de gestão financeira pessoal com assistente
 #### 1.3.1 Módulo Finanças
 Gestão completa de finanças pessoais: transações, carteiras, orçamentos, metas, investimentos, faturas de cartão e relatórios.
 
-#### 1.3.2 Módulo JARVIS (Assistente IA)
+#### 1.3.2 Módulo GUTA (Assistente IA)
 Assistente pessoal inteligente com:
 - **Chat IA**: Conversa natural com entendimento de contexto financeiro
 - **Tarefas**: Gestão de to-dos com prioridades, tags e datas
 - **Eventos**: Calendário com integração Google Calendar
 - **Hábitos**: Tracking diário/semanal com metas configuráveis
-- **Lembretes**: Notificações push e WhatsApp
+- **Lembretes**: Notificações push
 - **Memória**: Armazenamento de informações pessoais e preferências
-- **Integração WhatsApp**: Comandos via mensagem
 - **Onboarding Guiado**: Configuração inicial humanizada
 
 ---
@@ -104,13 +103,13 @@ Notificações: Sonner 1.7.x
 Markdown: react-markdown 10.x
 ```
 
-### 2.2 Backend (Lovable Cloud)
+### 2.2 Backend (Self-hosted + Supabase)
 
 ```yaml
-Banco de Dados: PostgreSQL 15+
-Autenticação: Supabase Auth
-API: PostgREST (auto-generated)
-Edge Functions: Deno Runtime
+Banco de Dados: PostgreSQL 15+ (Supabase)
+Autenticação: Supabase Auth (JWT)
+API: Fastify (Node.js) + Prisma
+Edge Functions: Deno Runtime (Supabase)
 Storage: Supabase Storage
 Automação: pg_cron
 Email: Resend API
@@ -160,10 +159,11 @@ graph TB
         Context[Auth + Tenant Context]
     end
     
-    subgraph Backend["Backend (Lovable Cloud)"]
+    subgraph Backend["Backend (Fastify + Supabase)"]
         Auth[Supabase Auth]
+        API[Fastify API]
         DB[(PostgreSQL)]
-        Edge[12 Edge Functions]
+        Edge[9 Edge Functions]
         Storage[Storage Buckets]
         Cron[pg_cron Jobs]
     end
@@ -176,21 +176,19 @@ graph TB
     subgraph External["Integrações Externas"]
         Resend[Resend API]
         Google[Google Calendar]
-        WhatsApp[WhatsApp via n8n]
         Push[Web Push]
     end
     
     UI --> Hooks
     Hooks --> Context
     Context --> Auth
-    Hooks --> DB
+    Hooks --> API
     Edge --> DB
     Edge --> GPT
     GPT --> Tools
     Tools --> DB
     Edge --> Resend
     Edge --> Google
-    Edge --> WhatsApp
     Edge --> Push
     Cron --> DB
     Cron --> Edge
@@ -241,7 +239,7 @@ graph TD
 **Tabelas relacionadas:**
 - `tenants`: Definição de workspaces
 - `tenant_members`: Membros de cada tenant
-- `ff_*`: Tabelas JARVIS com `tenant_id`
+- `ff_*`: Tabelas GUTA com `tenant_id`
 
 ---
 
@@ -249,9 +247,7 @@ graph TD
 
 ```
 fractto-flow/
-├── .lovable/
 │   └── plan.md                  # Roadmap de implementação
-├── docs/
 │   └── WHATSAPP_N8N_INTEGRATION.md
 ├── public/
 │   ├── favicon.ico
@@ -289,18 +285,18 @@ fractto-flow/
 │   │   ├── transfers/           # Transferências
 │   │   ├── wallets/             # Carteiras
 │   │   │
-│   │   ├── jarvis/              # 🆕 Módulo JARVIS
+│   │   ├── jarvis/              # 🆕 Módulo GUTA
 │   │   │   ├── chat/            # Chat IA
 │   │   │   │   ├── ChatInput.tsx
 │   │   │   │   ├── ChatMessage.tsx
 │   │   │   │   ├── ChatSidebar.tsx
 │   │   │   │   └── ChatWelcome.tsx
-│   │   │   ├── home/            # Dashboard JARVIS
+│   │   │   ├── home/            # Dashboard GUTA
 │   │   │   │   ├── QuickSummaryCard.tsx
 │   │   │   │   ├── TodayTasksCard.tsx
 │   │   │   │   ├── UpcomingEventsCard.tsx
 │   │   │   │   └── WeeklyHabitsCard.tsx
-│   │   │   ├── settings/        # Configurações JARVIS
+│   │   │   ├── settings/        # Configurações GUTA
 │   │   │   │   ├── GoogleCalendarSection.tsx
 │   │   │   │   └── WhatsAppSection.tsx
 │   │   │   ├── ChatGPTImporter.tsx
@@ -396,7 +392,7 @@ fractto-flow/
 │   │   ├── deduplication.ts
 │   │   ├── export.ts
 │   │   ├── goals.ts
-│   │   ├── jarvis-helpers.ts    # 🆕 Helpers JARVIS
+│   │   ├── jarvis-helpers.ts    # 🆕 Helpers GUTA
 │   │   ├── masks.ts
 │   │   ├── pdfGenerator.ts
 │   │   ├── periodValidation.ts
@@ -417,13 +413,13 @@ fractto-flow/
 │   │   ├── Import.tsx
 │   │   ├── Index.tsx
 │   │   ├── Investments.tsx
-│   │   ├── JarvisCalendar.tsx   # 🆕 Agenda JARVIS
+│   │   ├── JarvisCalendar.tsx   # 🆕 Agenda GUTA
 │   │   ├── JarvisChat.tsx       # 🆕 Chat IA
-│   │   ├── JarvisDashboard.tsx  # 🆕 Dashboard JARVIS
+│   │   ├── JarvisDashboard.tsx  # 🆕 Dashboard GUTA
 │   │   ├── JarvisHabits.tsx     # 🆕 Hábitos
 │   │   ├── JarvisMemory.tsx     # 🆕 Memória
 │   │   ├── JarvisReminders.tsx  # 🆕 Lembretes
-│   │   ├── JarvisSettings.tsx   # 🆕 Configurações JARVIS
+│   │   ├── JarvisSettings.tsx   # 🆕 Configurações GUTA
 │   │   ├── JarvisTasks.tsx      # 🆕 Tarefas
 │   │   ├── Landing.tsx
 │   │   ├── NotFound.tsx
@@ -435,7 +431,7 @@ fractto-flow/
 │   │
 │   └── types/
 │       ├── faq.ts
-│       ├── jarvis.ts            # 🆕 Tipos JARVIS
+│       ├── jarvis.ts            # 🆕 Tipos GUTA
 │       └── push-subscription.ts # 🆕 Tipos Push
 │
 ├── supabase/
@@ -446,9 +442,6 @@ fractto-flow/
 │       ├── ff-google-calendar-sync/ # 🆕 Sync bidirecional
 │       ├── ff-google-oauth-callback/# 🆕 OAuth Google
 │       ├── ff-jarvis-chat/          # 🆕 Chat IA com tools
-│       ├── ff-whatsapp-ingest/      # 🆕 Ingestão WhatsApp
-│       ├── ff-whatsapp-verify/      # 🆕 Verificação WhatsApp
-│       ├── generate-social-image/
 │       ├── get-vapid-public-key/    # 🆕 VAPID keys
 │       ├── process-reminders/       # 🆕 Processador de lembretes
 │       ├── send-alerts/
@@ -507,7 +500,7 @@ erDiagram
 
 *(Mantém documentação existente das tabelas: profiles, transactions, categories, wallets, budgets, goals, goals_contribs, investments, investment_contribs, transfers, card_statements, card_statement_lines, recurring_transactions, recurring_transaction_history, periods, payment_methods, user_settings, alert_settings, alert_log, import_history, import_presets, leads)*
 
-### 5.3 Tabelas JARVIS (Novas)
+### 5.3 Tabelas GUTA (Novas)
 
 #### 5.3.1 tenants
 
@@ -544,7 +537,7 @@ CREATE TABLE public.tenant_members (
 
 #### 5.3.3 ff_user_profiles
 
-Perfil do usuário no JARVIS (onboarding + preferências).
+Perfil do usuário na GUTA (onboarding + preferências).
 
 ```sql
 CREATE TABLE public.ff_user_profiles (
@@ -705,7 +698,7 @@ CREATE TABLE public.ff_memory_items (
 
 #### 5.3.9 ff_conversations e ff_conversation_messages
 
-Histórico de conversas com JARVIS.
+Histórico de conversas com GUTA.
 
 ```sql
 -- Sessões de conversa
@@ -737,7 +730,7 @@ CREATE TABLE public.ff_conversation_messages (
 
 #### 5.3.10 ff_user_phones
 
-Telefones para integração WhatsApp.
+Telefones para integração WhatsApp (planejada).
 
 ```sql
 CREATE TABLE public.ff_user_phones (
@@ -839,14 +832,7 @@ Envia resumo financeiro diário por email.
 
 ---
 
-### 6.2 generate-social-image
-
-Gera imagem OG para compartilhamento social.
-*(Documentação existente mantida)*
-
----
-
-### 6.3 ff-jarvis-chat (Nova)
+### 6.2 ff-jarvis-chat (Nova)
 
 Chat IA com function calling para ações no sistema.
 
@@ -902,69 +888,7 @@ verify_jwt = true
 
 ---
 
-### 6.4 ff-whatsapp-verify (Nova)
-
-Verifica telefone para integração WhatsApp.
-
-**Endpoint:** `POST /functions/v1/ff-whatsapp-verify`
-
-**Headers:**
-```
-x-n8n-token: <N8N_WEBHOOK_TOKEN>
-```
-
-**Payload:**
-```json
-{
-  "phone_e164": "+5511999999999"
-}
-```
-
-**Resposta:**
-```json
-{
-  "ok": true,
-  "reply": "✅ WhatsApp verificado com sucesso!"
-}
-```
-
----
-
-### 6.5 ff-whatsapp-ingest (Nova)
-
-Recebe e processa mensagens do WhatsApp via n8n.
-
-**Endpoint:** `POST /functions/v1/ff-whatsapp-ingest`
-
-**Headers:**
-```
-x-n8n-token: <N8N_WEBHOOK_TOKEN>
-```
-
-**Payload:**
-```json
-{
-  "phone_e164": "+5511999999999",
-  "message_type": "text",
-  "text": "mensagem do usuário",
-  "message_id": "abc123"
-}
-```
-
-**Fluxo:**
-1. Verificar token n8n
-2. Resolver usuário por telefone
-3. Verificar se telefone está verificado
-4. Usar motor IA unificado (mesmo do chat web)
-5. Retornar resposta para envio via n8n
-
-**Secrets:**
-- `N8N_WEBHOOK_TOKEN`
-- `OPENAI_API_KEY`
-
----
-
-### 6.6 ff-google-oauth-callback (Nova)
+### 6.3 ff-google-oauth-callback (Nova)
 
 Callback do OAuth do Google Calendar.
 
@@ -985,7 +909,7 @@ Callback do OAuth do Google Calendar.
 
 ---
 
-### 6.7 ff-google-calendar-sync (Nova)
+### 6.4 ff-google-calendar-sync (Nova)
 
 Sincroniza eventos com Google Calendar.
 
@@ -999,7 +923,7 @@ Sincroniza eventos com Google Calendar.
 
 ---
 
-### 6.8 ff-google-calendar-push (Nova)
+### 6.5 ff-google-calendar-push (Nova)
 
 Webhook para push notifications do Google Calendar.
 
@@ -1015,7 +939,7 @@ Webhook para push notifications do Google Calendar.
 
 ---
 
-### 6.9 get-vapid-public-key (Nova)
+### 6.6 get-vapid-public-key (Nova)
 
 Retorna chave pública VAPID para Web Push.
 
@@ -1030,7 +954,7 @@ Retorna chave pública VAPID para Web Push.
 
 ---
 
-### 6.10 send-push-test (Nova)
+### 6.7 send-push-test (Nova)
 
 Envia push de teste para validar subscription.
 
@@ -1038,7 +962,7 @@ Envia push de teste para validar subscription.
 
 ---
 
-### 6.11 process-reminders (Nova)
+### 6.8 process-reminders (Nova)
 
 Processa lembretes pendentes e envia notificações.
 
@@ -1046,7 +970,7 @@ Processa lembretes pendentes e envia notificações.
 
 ---
 
-### 6.12 cron-send-reminders (Nova)
+### 6.9 cron-send-reminders (Nova)
 
 Cron job para processar lembretes.
 
@@ -1060,11 +984,11 @@ Cron job para processar lembretes.
 
 *(Mantém documentação existente: useTransactions, useBudgets, useWallets, useGoals, useInvestments, useRecurringTransactions, useStatements, usePeriods, useReports, useImporter, useCategories, usePaymentMethods, useTransfers, useCardLimits, useAlertSettings, useCalendar, useAutoStatement, useLeads, useUserSettings)*
 
-### 7.2 Hooks JARVIS (Novos)
+### 7.2 Hooks GUTA (Novos)
 
 #### 7.2.1 useJarvisChat
 
-Chat IA com JARVIS.
+Chat IA com GUTA.
 
 ```typescript
 interface UseJarvisChatReturn {
@@ -1244,7 +1168,7 @@ interface UseGoogleIntegrationReturn {
 
 #### 7.3.2 useUserPhone
 
-Gerenciamento de telefone WhatsApp.
+Gerenciamento de telefone WhatsApp (planejado).
 
 ```typescript
 interface UseUserPhoneReturn {
@@ -1361,7 +1285,7 @@ sequenceDiagram
 
 ---
 
-### 8.6 Chat com JARVIS (Novo)
+### 8.6 Chat com GUTA (Novo)
 
 ```mermaid
 sequenceDiagram
@@ -1403,39 +1327,7 @@ sequenceDiagram
 
 ---
 
-### 8.7 Integração WhatsApp (Novo)
-
-```mermaid
-sequenceDiagram
-    participant W as WhatsApp
-    participant N as n8n
-    participant V as ff-whatsapp-verify
-    participant I as ff-whatsapp-ingest
-    participant AI as Motor IA
-    participant DB as PostgreSQL
-    
-    Note over W,DB: Fluxo de Verificação
-    W->>N: "verificar"
-    N->>V: POST /ff-whatsapp-verify
-    V->>DB: UPDATE ff_user_phones SET verified_at
-    V-->>N: reply: "✅ Verificado!"
-    N->>W: Envia resposta
-    
-    Note over W,DB: Fluxo de Mensagem
-    W->>N: "criar tarefa: comprar leite amanhã"
-    N->>I: POST /ff-whatsapp-ingest
-    I->>DB: Verificar telefone verificado
-    I->>AI: Mesmo motor do chat web
-    AI->>AI: Tool: create_task
-    AI->>DB: INSERT ff_tasks
-    AI-->>I: "✅ Tarefa criada!"
-    I-->>N: reply
-    N->>W: Envia resposta
-```
-
----
-
-### 8.8 Google Calendar Sync (Novo)
+### 8.7 Google Calendar Sync (Novo)
 
 ```mermaid
 sequenceDiagram
@@ -1470,7 +1362,7 @@ sequenceDiagram
 
 *(Mantém seções existentes: RLS, Soft Delete, Proteção de Período, Fingerprint, Validação de Cartão)*
 
-### 9.6 Segurança JARVIS (Novo)
+### 9.6 Segurança GUTA (Novo)
 
 #### RLS Multi-tenant
 Todas as tabelas `ff_*` possuem RLS baseado em `tenant_id`:
@@ -1481,25 +1373,6 @@ CREATE POLICY "tenant_isolation" ON ff_tasks
     USING (tenant_id IN (
         SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid()
     ));
-```
-
-#### Proteção de Integração WhatsApp
-
-```sql
--- Apenas telefones verificados podem criar itens
-CREATE POLICY "verified_phones_only" ON ff_user_phones
-    FOR SELECT
-    USING (user_id = auth.uid());
-```
-
-#### Token n8n
-Edge functions de WhatsApp validam header `x-n8n-token`:
-
-```typescript
-const token = req.headers.get('x-n8n-token');
-if (token !== Deno.env.get('N8N_WEBHOOK_TOKEN')) {
-  return new Response('Unauthorized', { status: 401 });
-}
 ```
 
 ---
@@ -1594,22 +1467,13 @@ function selectModel(
 
 ```toml
 # supabase/config.toml
-project_id = "uyeqdokcwmcxuxuwwjnj"
+project_id = "cqvrucgqubjwqvwvdplz"
 
 [functions.send-alerts]
 verify_jwt = false
 
-[functions.generate-social-image]
-verify_jwt = false
-
 [functions.ff-jarvis-chat]
 verify_jwt = true
-
-[functions.ff-whatsapp-verify]
-verify_jwt = false
-
-[functions.ff-whatsapp-ingest]
-verify_jwt = false
 
 [functions.ff-google-oauth-callback]
 verify_jwt = false
@@ -1639,7 +1503,6 @@ verify_jwt = false
 |--------|-----------|-------------|
 | `OPENAI_API_KEY` | API key OpenAI para chat IA | ✅ |
 | `RESEND_API_KEY` | API key Resend para emails | ✅ |
-| `N8N_WEBHOOK_TOKEN` | Token para validar webhooks n8n | Se usar WhatsApp |
 | `GOOGLE_CLIENT_ID` | OAuth Google | Se usar Calendar |
 | `GOOGLE_CLIENT_SECRET` | OAuth Google | Se usar Calendar |
 | `VAPID_PUBLIC_KEY` | Web Push | Se usar notificações |
@@ -1653,7 +1516,7 @@ verify_jwt = false
 
 *(Mantém: Data mostrando dia anterior, Transação não aparece no orçamento, Erro "Período fechado", Duplicata na importação, Fatura não fecha)*
 
-### 12.2 Problemas JARVIS (Novos)
+### 12.2 Problemas GUTA (Novos)
 
 #### Onboarding travado
 
@@ -1671,20 +1534,10 @@ Ou clicar em "Pular configuração" no chat.
 
 ---
 
-#### WhatsApp não funciona
+#### WhatsApp (planejado)
 
-**Verificar:**
-1. Telefone cadastrado em `ff_user_phones`?
-2. Campo `verified_at` não é NULL?
-3. Secret `N8N_WEBHOOK_TOKEN` configurado?
+Integração desativada no momento. Reimplementar ingest/verificação antes de habilitar no app.
 
-```sql
-SELECT phone_e164, verified_at 
-FROM ff_user_phones 
-WHERE user_id = 'xxx';
-```
-
----
 
 #### Chat lento
 
@@ -1720,13 +1573,13 @@ WHERE user_id = 'xxx';
 // Verificar tenant atual
 console.log(useTenant().currentTenant);
 
-// Verificar queries JARVIS
+// Verificar queries GUTA
 import { queryClient } from '@/lib/queryClient';
 console.log(queryClient.getQueryCache().findAll({ queryKey: ['jarvis'] }));
 ```
 
 **Edge Function logs:**
-- Lovable Cloud → Edge Functions → [nome] → Logs
+- Supabase → Edge Functions → [nome] → Logs
 
 ---
 
@@ -1738,22 +1591,20 @@ console.log(queryClient.getQueryCache().findAll({ queryKey: ['jarvis'] }));
 | [OPERATIONS.md](./OPERATIONS.md) | Procedimentos operacionais |
 | [JORNADA_CLIENTE.md](./JORNADA_CLIENTE.md) | Jornada do usuário |
 | [APRESENTACAO_COMERCIAL.md](./APRESENTACAO_COMERCIAL.md) | Apresentação comercial |
-| [docs/WHATSAPP_N8N_INTEGRATION.md](./docs/WHATSAPP_N8N_INTEGRATION.md) | Integração WhatsApp |
 
 ---
 
 ## Changelog
 
 ### v2.0.0 (2026-02)
-- ✅ **Módulo JARVIS**: Chat IA, tarefas, eventos, hábitos, lembretes, memória
+- ✅ **Módulo GUTA**: Chat IA, tarefas, eventos, hábitos, lembretes, memória
 - ✅ **Onboarding Guiado por IA**: Configuração inicial via chat
-- ✅ **Layout Unificado**: Sidebar única para JARVIS + Finanças
+- ✅ **Layout Unificado**: Sidebar única para GUTA + Finanças
 - ✅ **Multi-tenant**: Workspaces isolados
-- ✅ **Integração WhatsApp**: Motor IA unificado via n8n
 - ✅ **Integração Google Calendar**: Sync bidirecional
 - ✅ **Push Notifications**: Web Push para lembretes
 - ✅ **Seleção Dinâmica de Modelo**: gpt-4o-mini / o3
-- ✅ **12 Edge Functions** (vs 2 anteriores)
+- ✅ **9 Edge Functions** (vs 2 anteriores)
 - ✅ **32 Custom Hooks** (vs 20 anteriores)
 
 ### v1.1.0 (2025-01)
@@ -1772,7 +1623,7 @@ console.log(queryClient.getQueryCache().findAll({ queryKey: ['jarvis'] }));
 
 **Projeto:** FRACTTO FLOW  
 **Versão:** 2.0.0  
-**URL:** https://fracttoflow.lovable.app
+**URL:** (definir domínio)
 
 ---
 

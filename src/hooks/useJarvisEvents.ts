@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { apiRequest } from "@/lib/api";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -81,15 +82,8 @@ export const useJarvisEvents = () => {
     queryKey,
     queryFn: async () => {
       if (!tenantId) return [];
-      
-      const { data, error } = await supabase
-        .from("ff_events")
-        .select("*")
-        .eq("tenant_id", tenantId)
-        .order("start_at", { ascending: true });
 
-      if (error) throw error;
-      return data as JarvisEvent[];
+      return apiRequest<JarvisEvent[]>(`/events?tenant_id=${tenantId}`);
     },
     enabled: !!tenantId,
   });
@@ -98,11 +92,10 @@ export const useJarvisEvents = () => {
     mutationFn: async (input: CreateEventInput) => {
       if (!tenantId || !user) throw new Error("Tenant ou usuário não encontrado");
 
-      const { data, error } = await supabase
-        .from("ff_events")
-        .insert({
+      return apiRequest<JarvisEvent>("/events", {
+        method: "POST",
+        body: JSON.stringify({
           tenant_id: tenantId,
-          created_by: user.id,
           title: input.title,
           description: input.description || null,
           location: input.location || null,
@@ -110,14 +103,8 @@ export const useJarvisEvents = () => {
           end_at: input.end_at || null,
           all_day: input.all_day || false,
           priority: input.priority || "medium",
-          status: "scheduled",
-          source: "manual",
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as JarvisEvent;
+        }),
+      });
     },
     onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey });
@@ -135,18 +122,10 @@ export const useJarvisEvents = () => {
 
   const updateEvent = useMutation({
     mutationFn: async ({ id, ...input }: UpdateEventInput & { id: string }) => {
-      const { data, error } = await supabase
-        .from("ff_events")
-        .update({
-          ...input,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as JarvisEvent;
+      return apiRequest<JarvisEvent>(`/events/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      });
     },
     onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey });
@@ -164,24 +143,12 @@ export const useJarvisEvents = () => {
 
   const deleteEvent = useMutation({
     mutationFn: async (id: string) => {
-      // First get the event to check if it has google_event_id
-      const { data: eventData } = await supabase
-        .from("ff_events")
-        .select("google_event_id")
-        .eq("id", id)
-        .single();
-
-      // Push delete to Google before deleting locally
-      if (tenantId && eventData?.google_event_id) {
+      const existing = events.find((event) => event.id === id);
+      if (tenantId && existing?.google_event_id) {
         await pushToGoogle(tenantId, id, "delete");
       }
 
-      const { error } = await supabase
-        .from("ff_events")
-        .delete()
-        .eq("id", id);
-
-      if (error) throw error;
+      await apiRequest(`/events/${id}`, { method: "DELETE" });
       return id;
     },
     onSuccess: () => {

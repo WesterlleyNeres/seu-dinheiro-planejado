@@ -13,6 +13,7 @@ import { TaskForm } from "@/components/jarvis/TaskForm";
 import { EventForm } from "@/components/jarvis/EventForm";
 import { HabitForm } from "@/components/jarvis/HabitForm";
 import { getGreeting, getDayOfWeek, getFormattedDate } from "@/lib/jarvis-helpers";
+import { PageShell } from "@/components/layout/PageShell";
 import type { JarvisTask } from "@/types/jarvis";
 
 const JarvisDashboard = () => {
@@ -83,7 +84,7 @@ const JarvisDashboard = () => {
   }
 
   return (
-    <div className="space-y-6" data-tour="jarvis-content">
+    <PageShell data-tour="jarvis-content">
       {/* Header com saudação */}
       <div className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight">
@@ -161,7 +162,7 @@ const JarvisDashboard = () => {
         onSubmit={handleHabitSubmit}
         isLoading={createHabit.isPending}
       />
-    </div>
+    </PageShell>
   );
 };
 

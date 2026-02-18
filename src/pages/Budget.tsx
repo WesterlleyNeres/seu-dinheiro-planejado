@@ -28,6 +28,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { formatCurrency } from '@/lib/currency';
+import { PageShell } from '@/components/layout/PageShell';
 import {
   Plus,
   ChevronLeft,
@@ -161,7 +162,7 @@ const Budget = () => {
   );
 
   return (
-    <div className="space-y-6" data-tour="budget-content">
+    <PageShell data-tour="budget-content">
       {/* Header */}
       <div className="space-y-2">
         <h1 className="text-3xl font-bold capitalize">Orçamento - {monthName}</h1>
@@ -464,7 +465,7 @@ const Budget = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageShell>
   );
 };
 

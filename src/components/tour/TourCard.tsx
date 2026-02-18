@@ -77,7 +77,7 @@ export function TourCard() {
             )} />
           </div>
           <div>
-            <span className="font-semibold text-primary">JARVIS</span>
+            <span className="font-semibold text-primary">GUTA</span>
             <p className="text-xs text-muted-foreground">Tour Guiado</p>
           </div>
         </div>

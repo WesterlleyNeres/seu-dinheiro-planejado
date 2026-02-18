@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 
@@ -28,14 +28,7 @@ export const useWallets = () => {
 
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('wallets')
-        .select('*')
-        .eq('user_id', user.id)
-        .is('deleted_at', null)
-        .order('nome');
-
-      if (error) throw error;
+      const data = await apiRequest<Wallet[]>('/wallets');
       setWallets(data || []);
     } catch (error) {
       console.error('Error loading wallets:', error);
@@ -57,12 +50,10 @@ export const useWallets = () => {
     if (!user) return;
 
     try {
-      const { error } = await supabase.from('wallets').insert({
-        ...data,
-        user_id: user.id,
+      await apiRequest<Wallet>('/wallets', {
+        method: 'POST',
+        body: JSON.stringify(data),
       });
-
-      if (error) throw error;
 
       toast({
         title: 'Carteira criada',
@@ -82,12 +73,10 @@ export const useWallets = () => {
 
   const updateWallet = async (id: string, data: Partial<Wallet>) => {
     try {
-      const { error } = await supabase
-        .from('wallets')
-        .update(data)
-        .eq('id', id);
-
-      if (error) throw error;
+      await apiRequest(`/wallets/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
 
       toast({
         title: 'Carteira atualizada',
@@ -107,12 +96,7 @@ export const useWallets = () => {
 
   const deleteWallet = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('wallets')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', id);
-
-      if (error) throw error;
+      await apiRequest(`/wallets/${id}`, { method: 'DELETE' });
 
       toast({
         title: 'Carteira excluída',

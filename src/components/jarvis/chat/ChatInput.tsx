@@ -356,7 +356,7 @@ export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
       )}
 
       <p className="mt-2 text-xs text-muted-foreground text-center">
-        JARVIS pode analisar imagens, transcrever áudios e ler documentos.
+        GUTA pode analisar imagens, transcrever áudios e ler documentos.
       </p>
     </form>
   );

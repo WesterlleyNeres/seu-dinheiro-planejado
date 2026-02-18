@@ -1,16 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { apiRequest } from "@/lib/api";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import type { JarvisMemoryItem } from "@/types/jarvis";
-import type { Json } from "@/integrations/supabase/types";
 
 interface CreateMemoryInput {
   kind: string;
   content: string;
   title?: string;
-  metadata?: Json;
+  metadata?: Record<string, unknown>;
   source?: string;
 }
 
@@ -26,15 +25,8 @@ export const useJarvisMemory = () => {
     queryKey,
     queryFn: async () => {
       if (!tenantId) return [];
-      
-      const { data, error } = await supabase
-        .from("ff_memory_items")
-        .select("*")
-        .eq("tenant_id", tenantId)
-        .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      return data as JarvisMemoryItem[];
+      return apiRequest<JarvisMemoryItem[]>(`/memory?tenant_id=${tenantId}`);
     },
     enabled: !!tenantId,
   });
@@ -43,22 +35,17 @@ export const useJarvisMemory = () => {
     mutationFn: async (input: CreateMemoryInput) => {
       if (!tenantId || !user) throw new Error("Tenant ou usuário não encontrado");
 
-      const { data, error } = await supabase
-        .from("ff_memory_items")
-        .insert([{
+      return apiRequest<JarvisMemoryItem>("/memory", {
+        method: "POST",
+        body: JSON.stringify({
           tenant_id: tenantId,
-          user_id: user.id,
           kind: input.kind,
           title: input.title || null,
           content: input.content,
           metadata: input.metadata || {},
           source: input.source || "manual",
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as JarvisMemoryItem;
+        }),
+      });
     },
     // Optimistic update para inserir no topo instantaneamente
     onMutate: async (input) => {
@@ -99,12 +86,7 @@ export const useJarvisMemory = () => {
 
   const deleteMemoryItem = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("ff_memory_items")
-        .delete()
-        .eq("id", id);
-
-      if (error) throw error;
+      await apiRequest(`/memory/${id}`, { method: "DELETE" });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });

@@ -6,7 +6,7 @@
 
 ## 🎯 Visão Geral do Produto
 
-**FRACTTO FLOW** é uma plataforma completa de gestão financeira pessoal **com assistente IA integrado** que oferece controle total sobre receitas, despesas, investimentos e metas financeiras. Com uma interface intuitiva, recursos avançados e o **JARVIS** (seu assistente pessoal), o sistema permite que usuários tomem decisões financeiras inteligentes e organizem sua vida com comandos simples.
+**FRACTTO FLOW** é uma plataforma completa de gestão financeira pessoal **com assistente IA integrado** que oferece controle total sobre receitas, despesas, investimentos e metas financeiras. Com uma interface intuitiva, recursos avançados e o **GUTA** (seu assistente pessoal), o sistema permite que usuários tomem decisões financeiras inteligentes e organizem sua vida com comandos simples.
 
 ### 💡 Proposta de Valor
 
@@ -19,18 +19,18 @@
 - ✅ Planejamento baseado em dados históricos
 - ✅ Segurança e privacidade garantidas
 - ✅ **Assistente IA para produtividade e finanças** 🆕
-- ✅ **Integração com WhatsApp** 🆕
+- ⏳ **Integração com WhatsApp (planejada)**
 - ✅ **Onboarding guiado por chat** 🆕
 
 ---
 
-## 🤖 JARVIS - Assistente Pessoal IA 🆕
+## 🤖 GUTA - Assistente Pessoal IA 🆕
 
 ### Seu copiloto para produtividade e finanças
 
-O **JARVIS** é um assistente de inteligência artificial integrado que entende linguagem natural e executa ações no sistema. Não é apenas um chatbot – é um agente que toma ações reais.
+O **GUTA** é um assistente de inteligência artificial integrado que entende linguagem natural e executa ações no sistema. Não é apenas um chatbot – é um agente que toma ações reais.
 
-### Funcionalidades do JARVIS
+### Funcionalidades da GUTA
 
 #### 💬 Chat Inteligente
 - Conversa natural em português
@@ -41,13 +41,13 @@ O **JARVIS** é um assistente de inteligência artificial integrado que entende 
 **Exemplos de interação:**
 ```
 Você: "Quanto tenho na conta do Nubank?"
-JARVIS: "Seu saldo atual no Nubank é R$ 3.450,00. Você tem R$ 280 em contas a pagar nos próximos 7 dias."
+GUTA: "Seu saldo atual no Nubank é R$ 3.450,00. Você tem R$ 280 em contas a pagar nos próximos 7 dias."
 
 Você: "Cria uma tarefa para pagar o IPTU amanhã"
-JARVIS: "✅ Tarefa criada: Pagar IPTU - vence amanhã às 18:00"
+GUTA: "✅ Tarefa criada: Pagar IPTU - vence amanhã às 18:00"
 
 Você: "Analisa meus gastos do mês passado"
-JARVIS: "📊 Em janeiro você gastou R$ 4.200. Principais categorias: Mercado (32%), Transporte (18%), Lazer (15%). Comparado a dezembro, houve aumento de 12% em Lazer."
+GUTA: "📊 Em janeiro você gastou R$ 4.200. Principais categorias: Mercado (32%), Transporte (18%), Lazer (15%). Comparado a dezembro, houve aumento de 12% em Lazer."
 ```
 
 #### 📋 Gestão de Tarefas
@@ -71,7 +71,6 @@ JARVIS: "📊 Em janeiro você gastou R$ 4.200. Principais categorias: Mercado (
 
 #### 🔔 Lembretes Inteligentes
 - Notificações push no navegador
-- Alertas via WhatsApp
 - Múltiplos canais configuráveis
 
 #### 🧠 Memória Persistente
@@ -79,17 +78,16 @@ JARVIS: "📊 Em janeiro você gastou R$ 4.200. Principais categorias: Mercado (
 - Lembra datas importantes, senhas wifi, contatos
 - Acesso rápido via comando
 
-#### 📱 Integração WhatsApp
+#### 📱 Integração WhatsApp (planejada)
 - Crie tarefas, lembretes e eventos por mensagem
 - Consulte saldos e contas a pagar
 - Registre hábitos do dia
-- Funciona 24/7
 
 ### Onboarding Guiado por IA 🆕
 
-Novos usuários são recebidos pelo JARVIS em um processo humanizado:
+Novos usuários são recebidos pela GUTA em um processo humanizado:
 
-1. **Boas-vindas personalizadas** - JARVIS pergunta como chamar o usuário
+1. **Boas-vindas personalizadas** - GUTA pergunta como chamar o usuário
 2. **Entendimento de objetivos** - Identifica necessidades financeiras e de produtividade
 3. **Configuração assistida** - Cria carteiras, categorias e hábitos via conversa
 4. **Primeiro hábito** - Sugere um hábito inicial baseado nos objetivos
@@ -217,7 +215,7 @@ Novos usuários são recebidos pelo JARVIS em um processo humanizado:
 | Exportação PDF de Relatórios | ✅ | ⚠️ | ❌ | ❌ | ⚠️ |
 | Alertas Configuráveis por Email | ✅ | ⚠️ | ⚠️ | ⚠️ | ❌ |
 | **Assistente IA com Chat** 🆕 | ✅ | ❌ | ❌ | ❌ | ⚠️ |
-| **Integração WhatsApp** 🆕 | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Integração WhatsApp** 🆕 | ⚠️ | ❌ | ❌ | ❌ | ❌ |
 | **Onboarding Guiado por IA** 🆕 | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **Google Calendar Sync** 🆕 | ✅ | ❌ | ❌ | ❌ | ⚠️ |
 | **Notificações Push** 🆕 | ✅ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
@@ -247,13 +245,13 @@ Novos usuários são recebidos pelo JARVIS em um processo humanizado:
 - Importação CSV
 - Relatórios completos
 - Alertas por email
-- **JARVIS básico** (chat + tarefas)
+- **GUTA básico** (chat + tarefas)
 
 ### Plano Premium ⭐
 **R$ 39,90/mês**
 - Tudo do Plus +
-- **JARVIS completo** (todos os módulos)
-- **Integração WhatsApp**
+- **GUTA completo** (todos os módulos)
+- **Integração WhatsApp (planejada)**
 - **Google Calendar Sync**
 - **Notificações Push**
 - Suporte prioritário
@@ -291,7 +289,7 @@ Novos usuários são recebidos pelo JARVIS em um processo humanizado:
 
 **Fluxo guiado por IA:**
 1. **Cadastro:** Email + senha (verificação automática)
-2. **Chat de boas-vindas:** JARVIS pergunta nome e objetivos
+2. **Chat de boas-vindas:** GUTA pergunta nome e objetivos
 3. **Configuração via conversa:**
    - "Qual seu banco principal?" → Cria carteira
    - "Tem cartão de crédito?" → Configura ciclo
@@ -306,7 +304,7 @@ Novos usuários são recebidos pelo JARVIS em um processo humanizado:
 
 *(Mantém seção existente + adicionar)*
 
-1. **Interações diárias com JARVIS:**
+1. **Interações diárias com GUTA:**
    - Consultar saldos via chat
    - Criar tarefas e lembretes
    - Registrar hábitos do dia
@@ -317,7 +315,7 @@ Novos usuários são recebidos pelo JARVIS em um processo humanizado:
 
 *(Mantém seção existente + adicionar)*
 
-1. **Integração WhatsApp:**
+1. **Integração WhatsApp (planejado):**
    - Verificar número na configuração
    - Enviar comandos via mensagem
    - Receber alertas no celular
@@ -337,17 +335,17 @@ Novos usuários são recebidos pelo JARVIS em um processo humanizado:
 - **Estado:** TanStack Query (cache e sincronização)
 
 #### Backend
-- **Banco de Dados:** PostgreSQL (Lovable Cloud)
+- **Banco de Dados:** PostgreSQL (Supabase)
 - **ORM/API:** Supabase Client (auto-gerado)
 - **Autenticação:** Supabase Auth
 - **Storage:** Supabase Storage
-- **Edge Functions:** Deno runtime (12 funções)
+- **Edge Functions:** Deno runtime (9 funções)
 - **Automação:** pg_cron (jobs diários)
 
 #### IA e Integrações 🆕
 - **Modelos:** OpenAI (gpt-4o-mini, gpt-4o, o3)
 - **Function Calling:** 16+ tools para ações no sistema
-- **WhatsApp:** Via n8n + Evolution API
+- **WhatsApp:** Planejado (via n8n + Evolution API)
 - **Google Calendar:** OAuth 2.0 + Calendar API
 - **Push:** Web Push (VAPID)
 - **Email:** Resend API
@@ -363,15 +361,12 @@ graph TB
     E --> F[Resend API]
     E --> G[OpenAI API]
     E --> H[Google Calendar]
-    I[WhatsApp] --> J[n8n]
-    J --> E
     K[pg_cron] --> L[process_recurring]
     K --> M[send-alerts]
     K --> N[process-reminders]
     
     style A fill:#e3f2fd
     style G fill:#10b981
-    style I fill:#25D366
 ```
 
 ---
@@ -380,7 +375,7 @@ graph TB
 
 **Projeto:** FRACTTO FLOW  
 **Versão:** 2.0.0  
-**URL:** https://fracttoflow.lovable.app
+**URL:** (definir domínio)
 
 ---
 

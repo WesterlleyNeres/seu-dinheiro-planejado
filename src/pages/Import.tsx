@@ -5,6 +5,7 @@ import { ImportSummary } from '@/components/import/ImportSummary';
 import { useImporter } from '@/hooks/useImporter';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { PageShell } from '@/components/layout/PageShell';
 import { ChevronLeft, Upload, Settings, Eye, CheckCircle } from 'lucide-react';
 
 const Import = () => {
@@ -37,7 +38,7 @@ const Import = () => {
   const currentStepIndex = steps.findIndex(s => s.key === step);
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       <div>
         <h1 className="text-3xl font-bold">Importar Transações</h1>
         <p className="text-muted-foreground">
@@ -139,7 +140,7 @@ const Import = () => {
           <ImportSummary summary={summary} onReset={reset} />
         )}
       </div>
-    </div>
+    </PageShell>
   );
 };
 

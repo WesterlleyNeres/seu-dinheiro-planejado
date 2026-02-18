@@ -20,12 +20,12 @@ export const tourSteps: TourStep[] = [
     spotlight: true,
   },
   
-  // === JARVIS MODULE ===
+  // === GUTA MODULE ===
   {
     id: 'jarvis-home',
     targetSelector: '[data-tour="jarvis-content"]',
     targetRoute: '/jarvis',
-    title: 'Início do JARVIS',
+    title: 'Início da GUTA',
     content: 'Aqui você vê suas tarefas pendentes, próximos eventos e hábitos do dia. É seu painel de produtividade!',
     position: 'bottom',
     spotlight: true,
@@ -34,7 +34,7 @@ export const tourSteps: TourStep[] = [
     id: 'jarvis-chat',
     targetSelector: '[data-tour="chat-area"]',
     targetRoute: '/jarvis/chat',
-    title: 'Chat com JARVIS',
+    title: 'Chat com GUTA',
     content: 'Converse comigo em linguagem natural! Pode pedir para criar tarefas, registrar gastos, agendar eventos... eu entendo tudo.',
     position: 'center',
     spotlight: false,

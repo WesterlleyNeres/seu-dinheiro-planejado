@@ -6,6 +6,7 @@ import { useJarvisHabits } from "@/hooks/useJarvisHabits";
 import { HabitCardNectar } from "@/components/jarvis/HabitCardNectar";
 import { HabitForm } from "@/components/jarvis/HabitForm";
 import { Plus, Repeat, Loader2, Flame, Trophy, Target } from "lucide-react";
+import { PageShell } from "@/components/layout/PageShell";
 import type { JarvisHabit } from "@/types/jarvis";
 
 const JarvisHabits = () => {
@@ -66,7 +67,7 @@ const JarvisHabits = () => {
   }
 
   return (
-    <div className="space-y-6" data-tour="habits-content">
+    <PageShell data-tour="habits-content">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -178,7 +179,7 @@ const JarvisHabits = () => {
         onSubmit={editingHabit ? handleUpdateHabit : handleCreateHabit}
         isLoading={createHabit.isPending || updateHabit.isPending}
       />
-    </div>
+    </PageShell>
   );
 };
 

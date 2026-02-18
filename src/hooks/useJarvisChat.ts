@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
@@ -58,6 +58,8 @@ export function useJarvisChat() {
   const queryClient = useQueryClient();
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [wantsNewConversation, setWantsNewConversation] = useState(false);
+  const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
+  const optimisticUrlsRef = useRef<Record<string, string[]>>({});
 
   // Fetch all conversations for sidebar
   const { data: conversations = [], isLoading: isLoadingConversations } = useQuery({
@@ -233,6 +235,87 @@ export function useJarvisChat() {
     },
   });
 
+  const clearOptimisticMessages = () => {
+    Object.values(optimisticUrlsRef.current)
+      .flat()
+      .forEach((url) => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {
+          // ignore
+        }
+      });
+    optimisticUrlsRef.current = {};
+    setOptimisticMessages([]);
+  };
+
+  const buildOptimisticAttachments = (attachments?: LocalAttachment[]) => {
+    if (!attachments || attachments.length === 0) return undefined;
+
+    const urlsToRevoke: string[] = [];
+    const optimistic = attachments.map((att) => {
+      let url = att.preview;
+      if (!url) {
+        url = URL.createObjectURL(att.file);
+        urlsToRevoke.push(url);
+      }
+      return {
+        type: att.type,
+        url,
+        name: att.name,
+        size: att.size,
+        mime_type: att.file.type,
+      } as Attachment;
+    });
+
+    return { optimistic, urlsToRevoke };
+  };
+
+  const sendMessageWithOptimistic = async ({ message, attachments }: SendMessageParams) => {
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const createdAt = new Date().toISOString();
+
+    const optimisticAttachmentsResult = buildOptimisticAttachments(attachments);
+    if (optimisticAttachmentsResult?.urlsToRevoke?.length) {
+      optimisticUrlsRef.current[tempId] = optimisticAttachmentsResult.urlsToRevoke;
+    }
+
+    const content =
+      message && message.trim().length > 0
+        ? message
+        : attachments && attachments.length > 0
+          ? "📎 Anexo enviado"
+          : "";
+
+    setOptimisticMessages((prev) => [
+      ...prev,
+      {
+        id: tempId,
+        role: "user",
+        content,
+        created_at: createdAt,
+        attachments: optimisticAttachmentsResult?.optimistic,
+      },
+    ]);
+
+    try {
+      await sendMessage.mutateAsync({ message, attachments });
+    } finally {
+      setOptimisticMessages((prev) => prev.filter((m) => m.id !== tempId));
+      const urls = optimisticUrlsRef.current[tempId];
+      if (urls && urls.length > 0) {
+        urls.forEach((url) => {
+          try {
+            URL.revokeObjectURL(url);
+          } catch {
+            // ignore
+          }
+        });
+        delete optimisticUrlsRef.current[tempId];
+      }
+    }
+  };
+
   // Rename conversation mutation
   const renameConversation = useMutation({
     mutationFn: async ({ id, title }: { id: string; title: string }) => {
@@ -288,6 +371,7 @@ export function useJarvisChat() {
     setConversationId(null);
     setWantsNewConversation(true);
     queryClient.setQueryData(["jarvis-chat", null], []); // Clear messages immediately
+    clearOptimisticMessages();
   };
 
   // Select a conversation
@@ -295,16 +379,18 @@ export function useJarvisChat() {
     setConversationId(id);
     setWantsNewConversation(false);
     queryClient.invalidateQueries({ queryKey: ["jarvis-chat", id] });
+    clearOptimisticMessages();
   };
 
   // Get current conversation
   const currentConversation = conversations.find((c) => c.id === conversationId);
+  const mergedMessages = [...messages, ...optimisticMessages];
 
   return {
-    messages,
+    messages: mergedMessages,
     isLoading,
     isSending: sendMessage.isPending,
-    sendMessage: sendMessage.mutateAsync,
+    sendMessage: sendMessageWithOptimistic,
     conversationId,
     startNewConversation,
     // New exports for sidebar

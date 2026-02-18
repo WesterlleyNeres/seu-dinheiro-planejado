@@ -1,4 +1,4 @@
-// JARVIS Service Worker - Push Notifications
+// GUTA Service Worker - Push Notifications
 // Versão: 2.0
 
 const SW_VERSION = "2.0.0";
@@ -20,7 +20,7 @@ self.addEventListener("push", (event) => {
   console.log("[SW] Push received:", event);
 
   let data = {
-    title: "JARVIS Lembrete",
+    title: "GUTA Lembrete",
     body: "Você tem um lembrete",
     icon: "/favicon.svg",
     badge: "/favicon.svg",
@@ -55,7 +55,7 @@ self.addEventListener("push", (event) => {
     badge: data.badge,
     vibrate: [100, 50, 100],
     data: data.data,
-    tag: data.data?.reminder_id || "jarvis-reminder-" + Date.now(),
+    tag: data.data?.reminder_id || "guta-reminder-" + Date.now(),
     renotify: true,
     requireInteraction: true,
     actions: [

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/currency";
 import { getCurrentMonth } from "@/lib/date";
+import { PageShell } from "@/components/layout/PageShell";
 import {
   ArrowUpCircle,
   ArrowDownCircle,
@@ -115,9 +116,9 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="space-y-8" data-tour="dashboard-content">
+    <PageShell className="space-y-8" data-tour="dashboard-content">
       <div>
-        <h1 className="text-3xl font-bold">Dashboard</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold">Dashboard</h1>
         <p className="text-muted-foreground">Visão geral das suas finanças</p>
       </div>
 
@@ -200,7 +201,7 @@ const Dashboard = () => {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </PageShell>
   );
 };
 

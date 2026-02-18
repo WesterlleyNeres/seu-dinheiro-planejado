@@ -9,6 +9,7 @@ import {
   Wallet,
   Lightbulb,
   MessageCircle,
+  FolderKanban,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -21,6 +22,7 @@ const jarvisNav = [
   { icon: Brain, label: "Início", href: "/jarvis" },
   { icon: MessageCircle, label: "Chat", href: "/jarvis/chat" },
   { icon: CheckSquare, label: "Tarefas", href: "/jarvis/tasks" },
+  { icon: FolderKanban, label: "Projetos", href: "/jarvis/projects" },
   { icon: CalendarDays, label: "Agenda", href: "/jarvis/calendar" },
   { icon: Repeat, label: "Hábitos", href: "/jarvis/habits" },
   { icon: Bell, label: "Lembretes", href: "/jarvis/reminders" },

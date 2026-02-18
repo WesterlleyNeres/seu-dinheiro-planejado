@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { QuickPeriodActions } from "@/components/periods/QuickPeriodActions";
 import { TenantSwitcher } from "@/components/tenant/TenantSwitcher";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -25,15 +27,18 @@ import {
   Bell,
   Lightbulb,
   MessageCircle,
+  FolderKanban,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/jarvis-helpers";
 import fracttoLogo from "@/assets/logo-fractto.png";
+import { usePeriods } from "@/hooks/usePeriods";
 
 const jarvisNavigation = [
   { name: "Início", href: "/jarvis", icon: Brain },
   { name: "Chat", href: "/jarvis/chat", icon: MessageCircle },
   { name: "Tarefas", href: "/jarvis/tasks", icon: CheckSquare },
+  { name: "Projetos", href: "/jarvis/projects", icon: FolderKanban },
   { name: "Agenda", href: "/jarvis/calendar", icon: CalendarDays },
   { name: "Hábitos", href: "/jarvis/habits", icon: Repeat },
   { name: "Lembretes", href: "/jarvis/reminders", icon: Bell },
@@ -104,8 +109,17 @@ export const UnifiedSidebar = () => {
   const location = useLocation();
   const currentPath = location.pathname;
   const { signOut, user } = useAuth();
+  const { periodStatus, getPeriodStatus } = usePeriods();
+  const [currentPeriod] = useState({
+    year: new Date().getFullYear(),
+    month: new Date().getMonth() + 1,
+  });
   
   const initials = getInitials(user?.email || user?.user_metadata?.full_name || "");
+
+  useEffect(() => {
+    getPeriodStatus(currentPeriod.year, currentPeriod.month);
+  }, [currentPeriod, getPeriodStatus]);
 
   return (
     <aside 
@@ -127,9 +141,19 @@ export const UnifiedSidebar = () => {
           <TenantSwitcher variant="sidebar" />
         </div>
 
+        {/* Quick Period Actions */}
+        <div className="border-b border-border px-4 py-3">
+          <QuickPeriodActions
+            year={currentPeriod.year}
+            month={currentPeriod.month}
+            status={periodStatus || 'open'}
+            onSuccess={() => getPeriodStatus(currentPeriod.year, currentPeriod.month)}
+          />
+        </div>
+
         {/* Navigation */}
         <nav className="flex-1 space-y-6 p-4 overflow-y-auto">
-          {/* JARVIS Section */}
+          {/* GUTA Section */}
           <NavSection
             title="Assistente"
             items={jarvisNavigation}

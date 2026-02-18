@@ -12,6 +12,7 @@ import { formatCurrency } from '@/lib/currency';
 import { ChevronLeft, ChevronRight, CalendarDays, Plus, ArrowUpCircle, ArrowDownCircle, Wallet } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
+import { PageShell } from '@/components/layout/PageShell';
 
 const Calendar = () => {
   const { user } = useAuth();
@@ -126,7 +127,7 @@ const Calendar = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold">Calendário</h1>
@@ -251,7 +252,7 @@ const Calendar = () => {
         onSubmit={handleSubmit}
         defaultDate={defaultDate}
       />
-    </div>
+    </PageShell>
   );
 };
 

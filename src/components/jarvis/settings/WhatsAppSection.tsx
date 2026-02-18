@@ -158,7 +158,7 @@ const WhatsAppSection = () => {
               <Info className="h-4 w-4" />
               <AlertTitle className="text-sm">Como verificar</AlertTitle>
               <AlertDescription className="text-xs">
-                Envie "verificar" para o WhatsApp do JARVIS. 
+                Envie "verificar" para o WhatsApp da GUTA. 
                 Você receberá uma confirmação quando estiver ativo.
               </AlertDescription>
             </Alert>
@@ -173,7 +173,7 @@ const WhatsAppSection = () => {
               <div>
                 <Label className="text-destructive">Remover vínculo</Label>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Desvincula seu WhatsApp do JARVIS
+                  Desvincula seu WhatsApp da GUTA
                 </p>
               </div>
               <Button 

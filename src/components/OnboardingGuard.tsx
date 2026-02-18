@@ -14,12 +14,22 @@ export const OnboardingGuard = ({ children }: OnboardingGuardProps) => {
 
   // Rotas permitidas durante onboarding (expandido)
   const allowedRoutes = [
-    "/jarvis/chat", 
-    "/jarvis/settings", 
+    "/jarvis/chat",
+    "/jarvis/settings",
     "/settings",
-    "/dashboard",      // Ver overview
-    "/wallets",        // Ver carteira criada
-    "/jarvis",         // Home do JARVIS
+    "/dashboard",
+    "/wallets",
+    "/transactions",
+    "/transfers",
+    "/categories",
+    "/budget",
+    "/goals",
+    "/calendar",
+    "/investments",
+    "/reports",
+    "/import",
+    "/faq",
+    "/jarvis",
   ];
   const isAllowedRoute = allowedRoutes.some(route => location.pathname.startsWith(route));
 

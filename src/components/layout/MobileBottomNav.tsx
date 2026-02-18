@@ -21,10 +21,14 @@ export function MobileBottomNav() {
   };
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-sm">
+    <nav className="mobile-nav fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-sm">
       <div
-        className="flex items-center justify-around py-1"
-        style={{ paddingBottom: "max(0.25rem, env(safe-area-inset-bottom, 0px))" }}
+        className="flex items-center justify-around"
+        style={{
+          paddingTop: "0.25rem",
+          paddingBottom: "calc(0.25rem + var(--safe-area-bottom))",
+          minHeight: "var(--mobile-nav-height)",
+        }}
       >
         {navItems.map((item) => {
           const active = isActive(item);

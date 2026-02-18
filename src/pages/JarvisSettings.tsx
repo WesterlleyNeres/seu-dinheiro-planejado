@@ -95,7 +95,7 @@ const JarvisSettings = () => {
         <div>
           <h1 className="text-xl font-bold">Configurações</h1>
           <p className="text-sm text-muted-foreground">
-            Personalize seu JARVIS
+            Personalize a GUTA
           </p>
         </div>
       </div>
@@ -116,7 +116,7 @@ const JarvisSettings = () => {
             <div>
               <Label htmlFor="dark-mode">Modo Escuro</Label>
               <p className="text-xs text-muted-foreground mt-0.5">
-                JARVIS usa o tema escuro por padrão
+                GUTA usa o tema escuro por padrão
               </p>
             </div>
             <Switch id="dark-mode" checked disabled />
@@ -285,7 +285,7 @@ const JarvisSettings = () => {
             <div>
               <Label>Nome do Espaço</Label>
               <p className="text-sm text-foreground mt-0.5">
-                {tenant?.name || "Meu Espaço JARVIS"}
+                {tenant?.name || "Meu Espaço GUTA"}
               </p>
             </div>
           </div>

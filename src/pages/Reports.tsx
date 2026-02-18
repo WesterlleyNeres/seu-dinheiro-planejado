@@ -15,6 +15,7 @@ import { Download, FileText, TrendingUp } from 'lucide-react';
 import { format, subMonths } from 'date-fns';
 import { getCurrentMonth } from '@/lib/date';
 import { exportToCSV, generatePDFReport } from '@/lib/export';
+import { PageShell } from '@/components/layout/PageShell';
 
 const Reports = () => {
   const {
@@ -108,7 +109,7 @@ const Reports = () => {
   }
 
   return (
-    <div className="space-y-8">
+    <PageShell className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Relatórios e Análises</h1>
@@ -253,7 +254,7 @@ const Reports = () => {
           {recurringInsights && <RecurringInsightsCard data={recurringInsights} />}
         </TabsContent>
       </Tabs>
-    </div>
+    </PageShell>
   );
 };
 

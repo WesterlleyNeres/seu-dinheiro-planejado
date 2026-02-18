@@ -62,8 +62,8 @@ export function ChatWelcome({ onQuickAction }: ChatWelcomeProps) {
           Bem-vindo ao <span className="text-primary">Fractto Flow</span>!
         </h2>
         <p className="text-muted-foreground text-center max-w-md mb-6">
-          Eu sou o <span className="font-semibold text-primary">JARVIS</span>, 
-          seu assistente pessoal inteligente. Vou te ajudar a organizar suas finanças, 
+          Eu sou a <span className="font-semibold text-primary">GUTA</span>, 
+          sua assistente pessoal inteligente. Vou te ajudar a organizar suas finanças, 
           tarefas e hábitos de um jeito simples e eficiente.
         </p>
 
@@ -86,11 +86,11 @@ export function ChatWelcome({ onQuickAction }: ChatWelcomeProps) {
           <Button 
             size="lg"
             variant="outline"
-            onClick={() => onQuickAction("Olá JARVIS! Vamos começar?")}
+            onClick={() => onQuickAction("Olá GUTA! Vamos começar?")}
             className="flex-1 gap-2 text-base"
           >
             <Sparkles className="h-5 w-5" />
-            Conversar com JARVIS
+            Conversar com GUTA
           </Button>
         </div>
 
@@ -116,9 +116,9 @@ export function ChatWelcome({ onQuickAction }: ChatWelcomeProps) {
         <Brain className="h-8 w-8 text-primary" />
       </div>
       
-      <h2 className="text-2xl font-semibold mb-2">Olá! Eu sou o JARVIS</h2>
+      <h2 className="text-2xl font-semibold mb-2">Olá! Eu sou a GUTA</h2>
       <p className="text-muted-foreground text-center max-w-md mb-8">
-        Seu assistente pessoal inteligente. Posso ajudar você a gerenciar suas tarefas,
+        Sua assistente pessoal inteligente. Posso ajudar você a gerenciar suas tarefas,
         finanças, hábitos e muito mais.
       </p>
 

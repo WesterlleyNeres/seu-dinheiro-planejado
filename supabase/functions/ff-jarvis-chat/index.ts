@@ -50,12 +50,24 @@ function selectModel(
   
   // Use reasoning model only for complex analysis
   if (isComplex || isLongMessage) {
-    console.log("[JARVIS] Using reasoning model for complex query");
+    console.log("[GUTA] Using reasoning model for complex query");
     return MODEL_REASONING;
   }
   
   // Default: fast model for everything else
   return MODEL_FAST;
+}
+
+// ==================== TOOL CHOICE GUARD ====================
+function shouldForceCreateProject(message: string): boolean {
+  const text = message.toLowerCase();
+  const hasProject = /projeto/.test(text);
+  const hasCreateVerb = /(crie|criar|cria|inicie|iniciar|abrir|novo)\b/.test(text);
+  if (!hasProject || !hasCreateVerb) return false;
+
+  // Se houver múltiplas ações, deixe o modelo decidir (multi-intenção)
+  const otherActions = /(tarefa|lembrete|h[aá]bito|evento|transa[cç][aã]o|despesa|receita|categoria|or[cç]amento|meta|transfer|carteira)/i;
+  return !otherActions.test(text);
 }
 
 // ==================== SYSTEM PROMPT BUILDER ====================
@@ -119,18 +131,18 @@ function buildSystemPrompt(userProfile: any, userContext: any): string {
 🎯 ONBOARDING ATIVO - VOCÊ É O HOST DE BOAS-VINDAS!
 
 IMPORTANTE: Este é um usuário NOVO. Conduza uma experiência de boas-vindas incrível e humanizada.
-Você é como o JARVIS do Tony Stark - elegante, inteligente e acolhedor.
+Você é como uma versão feminina do JARVIS do Tony Stark - elegante, inteligente e acolhedora.
 
 ETAPAS DO ONBOARDING (siga na ordem):
 
 1. **WELCOME** (etapa atual: welcome)
-   - Apresente-se: "Olá! Eu sou o JARVIS, seu assistente pessoal aqui no Fractto Flow."
+   - Apresente-se: "Olá! Eu sou a GUTA, sua assistente pessoal aqui no Fractto Flow."
    - Pergunte: "Como posso te chamar?" ou "Qual seu nome/apelido?"
    - AGUARDE a resposta antes de continuar
    - Quando responder, use update_user_profile para salvar nickname e mude onboarding_step para 'profile'
 
 2. **PROFILE** (etapa: profile)
-   - Agradeça pelo nome: "Prazer em conhecê-lo, [nome]!"
+   - Agradeça pelo nome: "Prazer em conhecer você, [nome]!"
    - Pergunte sobre objetivos: "O que te trouxe ao Fractto Flow? Quer organizar finanças, criar hábitos, gerenciar tarefas?"
    - Salve nas preferences usando update_user_profile
    - Mude onboarding_step para 'wallet_setup'
@@ -177,7 +189,7 @@ REGRAS DO ONBOARDING:
 ESTADO ATUAL DO ONBOARDING: ${userProfile?.onboarding_step || 'welcome'}
 ` : '';
 
-  return `Você é JARVIS, o assistente pessoal superinteligente do ${nickname}. 
+  return `Você é GUTA, a assistente pessoal superinteligente de ${nickname}. 
 Você é o CÉREBRO de um sistema multi-agente com capacidade de raciocínio avançado.
 
 PERSONALIDADE:
@@ -191,6 +203,7 @@ REGRAS OBRIGATÓRIAS:
 3. NÃO repita informações já ditas na conversa
 4. Vá direto ao ponto
 5. SEMPRE que detectar um padrão/preferência do usuário, use auto_learn para salvar
+6. Se o usuário pedir apenas "criar projeto", NÃO invente objetivo, escopo, checklist ou tarefas. Apenas crie o projeto e pergunte se deseja adicionar descrição ou tarefas.
 
 AUTO-APRENDIZAGEM:
 - Ao notar padrões ou preferências, use auto_learn para salvar insights
@@ -208,6 +221,21 @@ PROIBIDO:
 - Repetir informações múltiplas vezes
 - Inventar dados - sempre use ferramentas
 
+MULTI-INTENÇÃO (OBRIGATÓRIO):
+- Se a mensagem tiver múltiplas ações, execute TODAS na mesma resposta usando ferramentas.
+- Faça um planejamento interno em passos (não mostre para o usuário).
+- Só faça perguntas se faltar informação essencial.
+- Se houver ambiguidade (carteira/categoria/projeto), mostre opções numeradas e peça para escolher pelo número ou nome exato.
+
+RESUMO E ERROS (OBRIGATÓRIO):
+- Se você executou tools nesta mensagem, responda com um **Resumo estruturado**.
+- Formato recomendado:
+  "Resumo:"
+  "- ✅ ação executada"
+  "- ⚠️ ação falhou (motivo)"
+  "Pendências:" (somente se houver algo para confirmar)
+  "- pergunta objetiva"
+
 REGRAS FINANCEIRAS (OBRIGATÓRIO):
 - Para criar/atualizar/excluir: USE as ferramentas correspondentes (create_*/update_*/delete_*).
 - NUNCA confirme sucesso sem o retorno da ferramenta.
@@ -217,13 +245,35 @@ REGRAS FINANCEIRAS (OBRIGATÓRIO):
 - Categoria: use create_category.
 ${contextSections}
 
-CAPACIDADES: Finanças (carteiras, transações, categorias, orçamentos, metas, transferências), Tarefas, Eventos, Hábitos, Memórias, Lembretes.
+CAPACIDADES: Finanças (carteiras, transações, categorias, orçamentos, metas, transferências), Tarefas, Projetos, Eventos, Hábitos, Memórias, Lembretes.
 
 FLUXO PARA DESPESAS:
 1. list_wallets (verificar se existe)
 2. Se não houver: pergunte se quer criar
 3. list_categories (mapear categoria)
 4. create_transaction
+
+FLUXO PARA CATEGORIAS:
+1. Se usuário pedir criar categoria e não informar tipo, pergunte: "despesa ou receita?"
+2. Assim que o tipo for confirmado, use create_category com o nome citado pelo usuário.
+
+FLUXO PARA ORÇAMENTOS:
+1. Identifique a categoria (nome ou ID).
+2. Use create_budget (assuma mês/ano atual se não informado).
+
+FLUXO PARA METAS:
+1. Use create_goal (nome + valor_meta, prazo opcional).
+
+FLUXO PARA PROJETOS:
+1. Para criar: use create_project (apenas título, a menos que o usuário forneça descrição explícita).
+2. NÃO crie tarefas/checklists/objetivos sem solicitação explícita.
+3. Para vincular tarefas: use add_task_to_project (crie tarefa se necessário).
+4. Para listar tarefas do projeto: use query_project_tasks.
+5. Para remover tarefas do projeto: use remove_task_from_project.
+6. Para excluir projeto: use delete_project.
+
+FLUXO PARA TRANSFERÊNCIAS:
+1. Use create_transfer (origem, destino, valor; data opcional).
 ${onboardingInstructions}
 Hoje: ${today}`;
 }
@@ -244,6 +294,36 @@ const TOOLS = [
           priority: { type: "string", enum: ["low", "medium", "high"], description: "Filtrar por prioridade" },
         },
         required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "query_projects",
+      description: "Consulta projetos do usuário com status e contagem de tarefas.",
+      parameters: {
+        type: "object",
+        properties: {
+          status: { type: "string", enum: ["active", "completed", "archived", "all"], description: "Filtrar por status" },
+          search_term: { type: "string", description: "Busca por título do projeto" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "query_project_tasks",
+      description: "Lista tarefas vinculadas a um projeto.",
+      parameters: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", description: "ID ou nome do projeto" },
+          status: { type: "string", enum: ["open", "in_progress", "done", "all"], description: "Filtrar por status" },
+        },
+        required: ["project_id"],
       },
     },
   },
@@ -455,6 +535,41 @@ const TOOLS = [
   {
     type: "function",
     function: {
+      name: "create_project",
+      description: "Cria um novo projeto para organizar tarefas.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Nome do projeto" },
+          description: { type: "string", description: "Descrição opcional" },
+          status: { type: "string", enum: ["active", "completed", "archived"] },
+        },
+        required: ["title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "add_task_to_project",
+      description: "Vincula uma tarefa a um projeto. Pode criar a tarefa se for necessário.",
+      parameters: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", description: "ID ou nome do projeto" },
+          task_id: { type: "string", description: "ID da tarefa (opcional)" },
+          task_title: { type: "string", description: "Título da tarefa (se não houver task_id)" },
+          task_description: { type: "string", description: "Descrição da tarefa" },
+          due_at: { type: "string", description: "Data YYYY-MM-DD" },
+          priority: { type: "string", enum: ["low", "medium", "high"] },
+        },
+        required: ["project_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "create_reminder",
       description: "Cria um lembrete.",
       parameters: {
@@ -472,7 +587,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "create_memory",
-      description: "Salva uma informação na memória do JARVIS.",
+      description: "Salva uma informação na memória da GUTA.",
       parameters: {
         type: "object",
         properties: {
@@ -575,14 +690,14 @@ const TOOLS = [
     type: "function",
     function: {
       name: "create_transaction",
-      description: "Registra despesa ou receita. Use list_wallets e list_categories antes para obter os IDs corretos.",
+      description: "Registra despesa ou receita. Aceita wallet_id como ID ou nome da carteira. Use list_wallets e list_categories para desambiguação.",
       parameters: {
         type: "object",
         properties: {
           tipo: { type: "string", enum: ["despesa", "receita"], description: "Tipo" },
           descricao: { type: "string", description: "Descrição" },
           valor: { type: "number", description: "Valor em reais" },
-          wallet_id: { type: "string", description: "ID da carteira (UUID)" },
+          wallet_id: { type: "string", description: "ID ou nome da carteira" },
           category_id: { type: "string", description: "ID da categoria (UUID) ou nome da categoria" },
           data: { type: "string", description: "Data YYYY-MM-DD" },
           status: { type: "string", enum: ["paga", "pendente"], description: "Status" },
@@ -687,6 +802,23 @@ const TOOLS = [
   {
     type: "function",
     function: {
+      name: "update_project",
+      description: "Atualiza dados de um projeto.",
+      parameters: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", description: "ID ou nome do projeto" },
+          title: { type: "string" },
+          description: { type: "string" },
+          status: { type: "string", enum: ["active", "completed", "archived"] },
+        },
+        required: ["project_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "delete_task",
       description: "Exclui uma tarefa.",
       parameters: {
@@ -695,6 +827,35 @@ const TOOLS = [
           task_id: { type: "string", description: "ID da tarefa" },
         },
         required: ["task_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_project",
+      description: "Exclui um projeto (as tarefas não são apagadas, apenas o vínculo).",
+      parameters: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", description: "ID ou nome do projeto" },
+        },
+        required: ["project_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "remove_task_from_project",
+      description: "Remove uma tarefa de um projeto (desvincula).",
+      parameters: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", description: "ID ou nome do projeto" },
+          task_id: { type: "string", description: "ID da tarefa" },
+        },
+        required: ["project_id", "task_id"],
       },
     },
   },
@@ -1158,7 +1319,7 @@ async function extractDocumentText(
   fileName: string
 ): Promise<string> {
   try {
-    console.log(`[JARVIS] Downloading document: ${fileName} (${mimeType})`);
+    console.log(`[GUTA] Downloading document: ${fileName} (${mimeType})`);
     const response = await fetch(documentUrl);
     if (!response.ok) {
       throw new Error(`Failed to download document: ${response.status}`);
@@ -1167,14 +1328,14 @@ async function extractDocumentText(
     // Plain text files: read directly
     if (mimeType === "text/plain" || fileName.endsWith(".txt")) {
       const text = await response.text();
-      console.log(`[JARVIS] Extracted ${text.length} chars from text file`);
+      console.log(`[GUTA] Extracted ${text.length} chars from text file`);
       return text;
     }
 
     // CSV files: read directly  
     if (mimeType === "text/csv" || fileName.endsWith(".csv")) {
       const text = await response.text();
-      console.log(`[JARVIS] Extracted ${text.length} chars from CSV file`);
+      console.log(`[GUTA] Extracted ${text.length} chars from CSV file`);
       return text;
     }
 
@@ -1184,89 +1345,16 @@ async function extractDocumentText(
       try {
         const json = JSON.parse(text);
         const formatted = JSON.stringify(json, null, 2);
-        console.log(`[JARVIS] Extracted ${formatted.length} chars from JSON file`);
+        console.log(`[GUTA] Extracted ${formatted.length} chars from JSON file`);
         return formatted;
       } catch {
         return text;
       }
     }
 
-    // PDF files: use pdfjs-dist legacy build (no canvas dependency)
+    // PDF files: not supported in Edge runtime (canvas dependency)
     if (mimeType === "application/pdf" || fileName.endsWith(".pdf")) {
-      try {
-        const arrayBuffer = await response.arrayBuffer();
-        const uint8Array = new Uint8Array(arrayBuffer);
-        
-        // Use legacy build which doesn't require canvas
-        const pdfjsLib = await import("https://esm.sh/pdfjs-dist@3.11.174/legacy/build/pdf.mjs");
-        
-        // CRITICAL: Disable worker (not available in edge functions)
-        pdfjsLib.GlobalWorkerOptions.workerSrc = "";
-        
-        // Load PDF document with minimal options
-        const loadingTask = pdfjsLib.getDocument({
-          data: uint8Array,
-          useWorkerFetch: false,
-          isEvalSupported: false,
-          useSystemFonts: false,
-        });
-        
-        const pdf = await loadingTask.promise;
-        const numPages = pdf.numPages;
-        const maxPages = Math.min(numPages, 10); // Process up to 10 pages
-        
-        let fullText = "";
-        let pagesWithText = 0;
-        let visualPages: number[] = [];
-        
-        console.log(`[JARVIS] Processing PDF: ${numPages} total pages, extracting up to ${maxPages}`);
-        
-        for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
-          try {
-            const page = await pdf.getPage(pageNum);
-            const textContent = await page.getTextContent();
-            
-            const pageText = textContent.items
-              .map((item: any) => item.str || "")
-              .join(" ")
-              .trim();
-            
-            if (pageText && pageText.length > 10) {
-              pagesWithText++;
-              fullText += `\n[Página ${pageNum}]\n${pageText}\n`;
-            } else {
-              visualPages.push(pageNum);
-            }
-          } catch (pageError) {
-            console.error(`[JARVIS] Error extracting page ${pageNum}:`, pageError);
-            visualPages.push(pageNum);
-          }
-        }
-        
-        console.log(`[JARVIS] PDF extraction complete: ${pagesWithText} pages with text, ${visualPages.length} visual pages`);
-        
-        // Build response based on what was extracted
-        if (pagesWithText === 0) {
-          return `[PDF "${fileName}" contém ${numPages} página(s), mas sem texto extraível. Este PDF parece ser baseado em imagens/diagrama visual. Para análise completa, envie as páginas como imagens/screenshots.]`;
-        }
-        
-        let result = fullText.trim();
-        
-        if (visualPages.length > 0 && numPages <= 10) {
-          result += `\n\n[Nota: Página(s) ${visualPages.join(", ")} parecem ser visuais/imagens e não puderam ser lidas como texto.]`;
-        }
-        
-        if (numPages > 10) {
-          result += `\n\n[Nota: PDF tem ${numPages} páginas, foram processadas apenas as primeiras 10.]`;
-        }
-        
-        console.log(`[JARVIS] Extracted ${result.length} chars from PDF`);
-        return result;
-        
-      } catch (pdfError) {
-        console.error(`[JARVIS] PDF parse error:`, pdfError);
-        return `[PDF "${fileName}" recebido, mas não foi possível processar. Erro: ${pdfError instanceof Error ? pdfError.message : 'desconhecido'}. Tente enviar como imagem/screenshot.]`;
-      }
+      return `[PDF "${fileName}" recebido. A extração de texto via PDF está desativada nesta versão. Para análise, envie as páginas como imagens/screenshots ou cole o texto no chat.]`;
     }
 
     // Word documents (.docx): inform limitation
@@ -1278,7 +1366,7 @@ async function extractDocumentText(
     return `[Documento "${fileName}" (${mimeType}) anexado. Formato não suportado para extração automática de texto.]`;
 
   } catch (e) {
-    console.error(`[JARVIS] Document extraction failed for ${fileName}:`, e);
+    console.error(`[GUTA] Document extraction failed for ${fileName}:`, e);
     return `[Documento "${fileName}" anexado - não foi possível extrair texto: ${e instanceof Error ? e.message : 'erro desconhecido'}]`;
   }
 }
@@ -1358,9 +1446,16 @@ async function resolveCategoryId(
     return { id: filtered[0].id, error: null };
   }
 
-  // Multiple matches - return first but log
+  // Multiple matches - require disambiguation
+  const options = filtered
+    .slice(0, 6)
+    .map((c: any, idx: number) => `${idx + 1}) ${c.nome} (${c.tipo})`)
+    .join("\n");
   console.log(`Multiple categories match "${categoryInput}":`, filtered.map((c: any) => c.nome));
-  return { id: filtered[0].id, error: null };
+  return {
+    id: null,
+    error: `Encontrei várias categorias parecidas com "${categoryInput}":\n${options}\nResponda com o número ou o nome exato (ou selecione uma opção).`,
+  };
 }
 
 // ==================== HELPER: Resolve wallet by name ====================
@@ -1393,8 +1488,54 @@ async function resolveWalletId(
     return { id: wallets[0].id, error: null };
   }
 
+  const options = wallets
+    .slice(0, 6)
+    .map((w: any, idx: number) => `${idx + 1}) ${w.nome}`)
+    .join("\n");
   console.log(`Multiple wallets match "${walletInput}":`, wallets.map((w: any) => w.nome));
-  return { id: wallets[0].id, error: null };
+  return {
+    id: null,
+    error: `Encontrei várias carteiras parecidas com "${walletInput}":\n${options}\nResponda com o número ou o nome exato (ou selecione uma opção).`,
+  };
+}
+
+// ==================== HELPER: Resolve project by name ====================
+async function resolveProjectId(
+  supabase: any,
+  tenantId: string,
+  projectInput: string
+): Promise<{ id: string | null; error: string | null }> {
+  if (isUUID(projectInput)) {
+    return { id: projectInput, error: null };
+  }
+
+  const { data: projects, error } = await supabase
+    .from("ff_projects")
+    .select("id, title, status")
+    .eq("tenant_id", tenantId)
+    .ilike("title", `%${projectInput}%`);
+
+  if (error) {
+    return { id: null, error: `Erro ao buscar projeto: ${error.message}` };
+  }
+
+  if (!projects || projects.length === 0) {
+    return { id: null, error: `Projeto "${projectInput}" não encontrado. Use query_projects para ver os disponíveis.` };
+  }
+
+  if (projects.length === 1) {
+    return { id: projects[0].id, error: null };
+  }
+
+  const options = projects
+    .slice(0, 6)
+    .map((p: any, idx: number) => `${idx + 1}) ${p.title} (${p.status})`)
+    .join("\n");
+
+  return {
+    id: null,
+    error: `Encontrei vários projetos parecidos com "${projectInput}":\n${options}\nResponda com o número ou o nome exato (ou selecione uma opção).`,
+  };
 }
 
 // ==================== HELPER: Check for duplicate transaction ====================
@@ -1781,6 +1922,81 @@ async function executeTool(
       })));
     }
 
+    case "query_projects": {
+      let query = supabase
+        .from("ff_projects")
+        .select("id, title, description, status, created_at")
+        .eq("tenant_id", tenantId)
+        .order("created_at", { ascending: false });
+
+      if (args.status && args.status !== "all") {
+        query = query.eq("status", args.status);
+      }
+
+      if (args.search_term) {
+        query = query.ilike("title", `%${args.search_term}%`);
+      }
+
+      const { data: projects, error } = await query.limit(20);
+      if (error) return `Erro: ${error.message}`;
+      if (!projects?.length) return "Nenhum projeto encontrado.";
+
+      const projectIds = projects.map((p: any) => p.id);
+      const { data: links, error: linksError } = await supabase
+        .from("ff_project_tasks")
+        .select("project_id")
+        .in("project_id", projectIds);
+
+      if (linksError) return `Erro: ${linksError.message}`;
+
+      const counts = (links || []).reduce((acc: Record<string, number>, link: any) => {
+        acc[link.project_id] = (acc[link.project_id] || 0) + 1;
+        return acc;
+      }, {});
+
+      return JSON.stringify(projects.map((p: any) => ({
+        id: p.id,
+        titulo: p.title,
+        status: p.status,
+        descricao: p.description,
+        tarefas: counts[p.id] || 0,
+      })));
+    }
+
+    case "query_project_tasks": {
+      const projectInput = args.project_id as string;
+      if (!projectInput) return "Projeto é obrigatório.";
+
+      const { id: projectId, error: projectError } = await resolveProjectId(
+        supabase,
+        tenantId,
+        projectInput
+      );
+      if (projectError) return projectError;
+      if (!projectId) return "Projeto inválido. Use query_projects para ver os disponíveis.";
+
+      const { data, error } = await supabase
+        .from("ff_project_tasks")
+        .select("task:ff_tasks(id,title,description,status,priority,due_at)")
+        .eq("project_id", projectId);
+
+      if (error) return `Erro: ${error.message}`;
+      const tasks = (data || []).map((row: any) => row.task).filter(Boolean);
+      if (!tasks.length) return "Nenhuma tarefa vinculada ao projeto.";
+
+      const filtered = args.status && args.status !== "all"
+        ? tasks.filter((t: any) => t.status === args.status)
+        : tasks;
+
+      return JSON.stringify(filtered.map((t: any) => ({
+        id: t.id,
+        titulo: t.title,
+        status: t.status,
+        prioridade: t.priority,
+        vencimento: t.due_at,
+      })));
+    }
+
     case "query_events": {
       let startDate = today;
       let endDate = today;
@@ -2074,10 +2290,13 @@ async function executeTool(
       if (walletError) return `Erro: ${walletError.message}`;
       if (!wallets?.length) return "Nenhuma carteira encontrada.";
 
-      const { data: balances } = await supabase
+      const { data: balances, error: balanceError } = await supabase
         .from("v_wallet_balance")
         .select("wallet_id, saldo")
         .eq("user_id", userId);
+      if (balanceError) {
+        console.warn("[GUTA] v_wallet_balance indisponível, usando saldo_inicial.", balanceError.message);
+      }
 
       const merged = wallets.map((w: any) => {
         const balance = balances?.find((b: any) => b.wallet_id === w.id);
@@ -2307,10 +2526,13 @@ async function executeTool(
       if (error) return `Erro: ${error.message}`;
       if (!data?.length) return "Nenhuma carteira cadastrada. Sugira criar uma com create_wallet.";
 
-      const { data: balances } = await supabase
+      const { data: balances, error: balanceError } = await supabase
         .from("v_wallet_balance")
         .select("wallet_id, saldo")
         .eq("user_id", userId);
+      if (balanceError) {
+        console.warn("[GUTA] v_wallet_balance indisponível, usando saldo_inicial.", balanceError.message);
+      }
 
       const walletsWithBalance = data.map((w: any) => {
         const balance = balances?.find((b: any) => b.wallet_id === w.id);
@@ -2373,6 +2595,81 @@ async function executeTool(
 
       if (error) return `Erro: ${error.message}`;
       return `Tarefa "${data.title}" criada!`;
+    }
+
+    case "create_project": {
+      const { data, error } = await supabase
+        .from("ff_projects")
+        .insert({
+          tenant_id: tenantId,
+          created_by: userId,
+          title: args.title,
+          description: args.description || null,
+          status: args.status || "active",
+        })
+        .select()
+        .single();
+
+      if (error) return `Erro: ${error.message}`;
+      return `Projeto "${data.title}" criado!`;
+    }
+
+    case "add_task_to_project": {
+      const projectInput = args.project_id as string;
+      if (!projectInput) return "Projeto é obrigatório.";
+
+      const { id: projectId, error: projectError } = await resolveProjectId(
+        supabase,
+        tenantId,
+        projectInput
+      );
+      if (projectError) return projectError;
+      if (!projectId) return "Projeto inválido. Use query_projects para ver os disponíveis.";
+
+      let taskId = args.task_id as string | undefined;
+
+      if (!taskId) {
+        const taskTitle = args.task_title as string | undefined;
+        if (!taskTitle) {
+          return "Informe task_id ou task_title para vincular ao projeto.";
+        }
+
+        const { data: createdTask, error: taskError } = await supabase
+          .from("ff_tasks")
+          .insert({
+            tenant_id: tenantId,
+            created_by: userId,
+            title: taskTitle,
+            description: args.task_description || null,
+            priority: args.priority || "medium",
+            due_at: args.due_at || null,
+            status: "open",
+            source: "jarvis",
+            tags: [],
+          })
+          .select("id, title")
+          .single();
+
+        if (taskError) return `Erro: ${taskError.message}`;
+        taskId = createdTask.id;
+      }
+
+      const { error: linkError } = await supabase
+        .from("ff_project_tasks")
+        .insert({
+          tenant_id: tenantId,
+          project_id: projectId,
+          task_id: taskId,
+        });
+
+      if (linkError) {
+        if (linkError.code === "23505") {
+          return "Essa tarefa já está vinculada ao projeto.";
+        }
+        return `Erro: ${linkError.message}`;
+      }
+
+      return "Tarefa vinculada ao projeto com sucesso.";
     }
 
     case "create_reminder": {
@@ -2567,6 +2864,13 @@ async function executeTool(
       const transactionDate = (args.data as string) || today;
       const descricao = args.descricao as string;
       const valor = Number(args.valor);
+      const rawCategoryInput =
+        typeof args.category_id === "string" ? args.category_id.trim() : "";
+      const isCategoryTypeToken =
+        rawCategoryInput.length > 0 &&
+        ["despesa", "despesas", "receita", "receitas"].includes(
+          rawCategoryInput.toLowerCase()
+        );
 
       if (Number.isNaN(valor)) {
         return "Valor inválido. Informe um número válido.";
@@ -2584,6 +2888,18 @@ async function executeTool(
         return wallets?.[0] || null;
       };
 
+      if (walletId) {
+        const { id: resolvedId, error: walletError } = await resolveWalletId(
+          supabase,
+          userId,
+          walletId
+        );
+        if (walletError) {
+          return walletError;
+        }
+        walletId = resolvedId || walletId;
+      }
+
       if (!walletId) {
         const wallet = await fetchLatestWallet();
         if (!wallet) {
@@ -2595,7 +2911,7 @@ async function executeTool(
       let resolvedCategoryId: string | null = null;
       let categoryNote = "";
 
-      if (args.category_id) {
+      if (args.category_id && !isCategoryTypeToken) {
         const { id: resolvedId, error: categoryError } = await resolveCategoryId(
           supabase,
           userId,
@@ -2882,6 +3198,41 @@ async function executeTool(
       return `Tarefa "${data.title}" atualizada!`;
     }
 
+    case "update_project": {
+      const projectInput = args.project_id as string;
+      if (!projectInput) return "Projeto é obrigatório.";
+
+      const { id: projectId, error: projectError } = await resolveProjectId(
+        supabase,
+        tenantId,
+        projectInput
+      );
+      if (projectError) return projectError;
+      if (!projectId) return "Projeto inválido. Use query_projects para ver os disponíveis.";
+
+      const updateData: any = {
+        updated_at: new Date().toISOString(),
+      };
+      let hasUpdates = false;
+
+      if (args.title !== undefined) { updateData.title = args.title; hasUpdates = true; }
+      if (args.description !== undefined) { updateData.description = args.description || null; hasUpdates = true; }
+      if (args.status !== undefined) { updateData.status = args.status; hasUpdates = true; }
+
+      if (!hasUpdates) return "Nenhum dado para atualizar.";
+
+      const { data, error } = await supabase
+        .from("ff_projects")
+        .update(updateData)
+        .eq("id", projectId)
+        .eq("tenant_id", tenantId)
+        .select("id, title, status")
+        .single();
+
+      if (error) return `Erro: ${error.message}`;
+      return `Projeto "${data.title}" atualizado!`;
+    }
+
     case "delete_task": {
       const { error } = await supabase
         .from("ff_tasks")
@@ -2891,6 +3242,51 @@ async function executeTool(
 
       if (error) return `Erro: ${error.message}`;
       return "Tarefa removida com sucesso.";
+    }
+
+    case "delete_project": {
+      const projectInput = args.project_id as string;
+      if (!projectInput) return "Projeto é obrigatório.";
+
+      const { id: projectId, error: projectError } = await resolveProjectId(
+        supabase,
+        tenantId,
+        projectInput
+      );
+      if (projectError) return projectError;
+      if (!projectId) return "Projeto inválido. Use query_projects para ver os disponíveis.";
+
+      const { error } = await supabase
+        .from("ff_projects")
+        .delete()
+        .eq("id", projectId)
+        .eq("tenant_id", tenantId);
+
+      if (error) return `Erro: ${error.message}`;
+      return "Projeto removido com sucesso.";
+    }
+
+    case "remove_task_from_project": {
+      const projectInput = args.project_id as string;
+      const taskId = args.task_id as string | undefined;
+      if (!projectInput || !taskId) return "Informe project_id e task_id.";
+
+      const { id: projectId, error: projectError } = await resolveProjectId(
+        supabase,
+        tenantId,
+        projectInput
+      );
+      if (projectError) return projectError;
+      if (!projectId) return "Projeto inválido. Use query_projects para ver os disponíveis.";
+
+      const { error } = await supabase
+        .from("ff_project_tasks")
+        .delete()
+        .eq("project_id", projectId)
+        .eq("task_id", taskId);
+
+      if (error) return `Erro: ${error.message}`;
+      return "Tarefa removida do projeto.";
     }
 
     case "update_event": {
@@ -3574,7 +3970,7 @@ async function executeTool(
       if (!data?.length) return "Nenhuma conversa encontrada com esse termo.";
       
       return JSON.stringify(data.map((m: any) => ({
-        role: m.role === "user" ? "Você" : "JARVIS",
+        role: m.role === "user" ? "Você" : "GUTA",
         mensagem: m.content.substring(0, 200) + (m.content.length > 200 ? "..." : ""),
         data: new Date(m.created_at).toLocaleDateString('pt-BR'),
       })));
@@ -3814,13 +4210,13 @@ serve(async (req) => {
     for (const att of processedAttachments) {
       if (att.type === "audio") {
         try {
-          console.log(`[JARVIS] Transcribing audio: ${att.name}`);
+          console.log(`[GUTA] Transcribing audio: ${att.name}`);
           const transcription = await transcribeAudio(att.url, OPENAI_API_KEY);
           if (transcription) {
             processedMessage = `[Áudio transcrito: "${transcription}"]\n\n${processedMessage}`.trim();
           }
         } catch (e) {
-          console.error(`[JARVIS] Audio transcription failed:`, e);
+          console.error(`[GUTA] Audio transcription failed:`, e);
           processedMessage = `[Áudio enviado: ${att.name} - transcrição falhou]\n\n${processedMessage}`.trim();
         }
       }
@@ -3830,7 +4226,7 @@ serve(async (req) => {
     for (const att of processedAttachments) {
       if (att.type === "document") {
         try {
-          console.log(`[JARVIS] Extracting text from document: ${att.name}`);
+          console.log(`[GUTA] Extracting text from document: ${att.name}`);
           const documentText = await extractDocumentText(
             att.url,
             att.mime_type || "application/pdf",
@@ -3843,10 +4239,10 @@ serve(async (req) => {
             const isTruncated = documentText.length > 8000;
             
             processedMessage = `[Documento "${att.name}":\n${truncatedText}${isTruncated ? '\n... (texto truncado, documento completo tem ' + documentText.length + ' caracteres)' : ''}]\n\n${processedMessage}`.trim();
-            console.log(`[JARVIS] Document text extracted: ${truncatedText.length} chars (truncated: ${isTruncated})`);
+            console.log(`[GUTA] Document text extracted: ${truncatedText.length} chars (truncated: ${isTruncated})`);
           }
         } catch (e) {
-          console.error(`[JARVIS] Document extraction failed:`, e);
+          console.error(`[GUTA] Document extraction failed:`, e);
           processedMessage = `[Documento enviado: ${att.name} - extração de texto falhou]\n\n${processedMessage}`.trim();
         }
       }
@@ -3880,7 +4276,7 @@ serve(async (req) => {
       lastHistoryMsg.content === processedMessage;
 
     if (!userMsgIncluded && insertedUserMsg) {
-      console.log("[JARVIS] User message not in history, forcing inclusion");
+      console.log("[GUTA] User message not in history, forcing inclusion");
       history.push({
         id: insertedUserMsg.id,
         role: "user",
@@ -3891,7 +4287,7 @@ serve(async (req) => {
       });
     }
 
-    console.log(`[JARVIS] Conv=${convId}, History count=${history.length}, Last msg role=${history[history.length - 1]?.role}, Attachments=${processedAttachments.length}`);
+    console.log(`[GUTA] Conv=${convId}, History count=${history.length}, Last msg role=${history[history.length - 1]?.role}, Attachments=${processedAttachments.length}`);
 
     const systemPrompt = buildSystemPrompt(userProfile, userContext);
 
@@ -3902,7 +4298,11 @@ serve(async (req) => {
     
     // Dynamic model selection based on complexity
     const modelToUse = selectModel(processedMessage, hasImages, isNewUser, historyLength);
-    console.log(`[JARVIS] Selected model: ${modelToUse}`);
+    console.log(`[GUTA] Selected model: ${modelToUse}`);
+    const forceCreateProject = shouldForceCreateProject(processedMessage);
+    const toolChoice = forceCreateProject
+      ? { type: "function", function: { name: "create_project" } }
+      : undefined;
 
 
     // Build messages array
@@ -3939,12 +4339,13 @@ serve(async (req) => {
         model: modelToUse,
         messages,
         tools: TOOLS,
+        ...(toolChoice ? { tool_choice: toolChoice } : {}),
       }),
     });
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error(`[JARVIS][${errorId}] OpenAI error:`, aiResponse.status, errorText);
+      console.error(`[GUTA][${errorId}] OpenAI error:`, aiResponse.status, errorText);
       
       if (aiResponse.status === 429) {
         return new Response(
@@ -3967,10 +4368,11 @@ serve(async (req) => {
     // Handle tool calls loop
     let toolIterations = 0;
     const MAX_TOOL_ITERATIONS = 10;
+    const executedTools: Array<{ name: string; result: string }> = [];
 
     while (assistantMessage?.tool_calls?.length > 0 && toolIterations < MAX_TOOL_ITERATIONS) {
       toolIterations++;
-      console.log(`[JARVIS] Tool iteration ${toolIterations}:`, assistantMessage.tool_calls.map((tc: any) => tc.function.name));
+      console.log(`[GUTA] Tool iteration ${toolIterations}:`, assistantMessage.tool_calls.map((tc: any) => tc.function.name));
 
       // Save assistant message with tool_calls
       await supabase.from("ff_conversation_messages").insert({
@@ -3996,9 +4398,10 @@ serve(async (req) => {
             user.id
           );
         } catch (toolError) {
-          console.error(`[JARVIS][${errorId}] Tool execution error:`, toolError);
+          console.error(`[GUTA][${errorId}] Tool execution error:`, toolError);
           result = `Erro ao executar ${toolCall.function.name}: ${toolError instanceof Error ? toolError.message : 'Erro desconhecido'}`;
         }
+        executedTools.push({ name: toolCall.function.name, result });
 
         toolResults.push({
           role: "tool",
@@ -4028,13 +4431,13 @@ serve(async (req) => {
         body: JSON.stringify({
           model: AGENT_MODEL,
           messages,
-          tools: TOOLS,
+          tools: forceCreateProject ? [] : TOOLS,
         }),
       });
 
       if (!aiResponse.ok) {
         const errorText = await aiResponse.text();
-        console.error(`[JARVIS][${errorId}] OpenAI tool follow-up error:`, aiResponse.status, errorText);
+        console.error(`[GUTA][${errorId}] OpenAI tool follow-up error:`, aiResponse.status, errorText);
         throw new Error(`OpenAI error on tool follow-up: ${aiResponse.status}`);
       }
 
@@ -4046,8 +4449,17 @@ serve(async (req) => {
     let finalContent = assistantMessage?.content;
     
     if (!finalContent || finalContent.trim().length === 0) {
-      console.error(`[JARVIS][${errorId}] Empty response from AI`);
+      console.error(`[GUTA][${errorId}] Empty response from AI`);
       finalContent = "Tive um problema ao gerar a resposta. Pode tentar novamente?";
+    }
+
+    // Fallback: ensure structured summary if tools were executed
+    if (executedTools.length > 0 && !/Resumo/i.test(finalContent)) {
+      const summaryLines = executedTools.slice(0, 6).map((t) => {
+        const isError = /^Erro\b|não encontrada|não encontrado|inválid|falh|duplicata/i.test(t.result);
+        return `- ${isError ? "⚠️" : "✅"} ${t.result}`;
+      });
+      finalContent = `${finalContent}\n\nResumo:\n${summaryLines.join("\n")}`;
     }
 
     await supabase.from("ff_conversation_messages").insert({
@@ -4061,7 +4473,7 @@ serve(async (req) => {
     const isNewConversation = !conversationId;
     if (isNewConversation && message) {
       try {
-        console.log(`[JARVIS] Generating title for new conversation ${convId}`);
+        console.log(`[GUTA] Generating title for new conversation ${convId}`);
         
         const titleRes = await fetch(OPENAI_API_URL, {
           method: "POST",
@@ -4099,10 +4511,10 @@ serve(async (req) => {
               })
               .eq("id", convId);
             
-            console.log(`[JARVIS] Title generated: "${generatedTitle}"`);
+            console.log(`[GUTA] Title generated: "${generatedTitle}"`);
           }
         } else {
-          console.error(`[JARVIS] Failed to generate title: ${titleRes.status}`);
+          console.error(`[GUTA] Failed to generate title: ${titleRes.status}`);
           // Fallback: use first words of the message
           const fallbackTitle = message.split(' ').slice(0, 4).join(' ');
           await supabase
@@ -4114,7 +4526,7 @@ serve(async (req) => {
             .eq("id", convId);
         }
       } catch (titleError) {
-        console.error(`[JARVIS] Error generating title:`, titleError);
+        console.error(`[GUTA] Error generating title:`, titleError);
         // Fallback: use first words of the message
         const fallbackTitle = message.split(' ').slice(0, 4).join(' ');
         await supabase
@@ -4135,7 +4547,7 @@ serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error(`[JARVIS][${errorId}] Chat error:`, error);
+    console.error(`[GUTA][${errorId}] Chat error:`, error);
     return new Response(
       JSON.stringify({ 
         error: "Ocorreu um erro ao processar sua mensagem. Tente novamente.",

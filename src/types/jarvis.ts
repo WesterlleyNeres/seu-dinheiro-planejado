@@ -14,6 +14,27 @@ export interface JarvisTask {
   updated_at: string;
 }
 
+export interface JarvisProject {
+  id: string;
+  tenant_id: string;
+  created_by: string;
+  title: string;
+  description?: string | null;
+  status: 'active' | 'completed' | 'archived';
+  created_at: string;
+  updated_at: string;
+  task_count?: number;
+}
+
+export interface JarvisProjectTask {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  task_id: string;
+  created_at: string;
+  task?: JarvisTask;
+}
+
 export interface JarvisEvent {
   id: string;
   tenant_id: string;

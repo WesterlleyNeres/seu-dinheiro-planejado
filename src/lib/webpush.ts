@@ -1,5 +1,5 @@
 /**
- * Web Push Utilities for JARVIS Reminders
+ * Web Push Utilities for GUTA Reminders
  * Handles Service Worker registration, permission requests, and subscription management
  */
 

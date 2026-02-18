@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -43,6 +42,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { categorySchema } from '@/lib/validations';
 import { Plus, Pencil, Trash2, Tag } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageShell } from '@/components/layout/PageShell';
 
 const categoryTypeLabels = {
   despesa: 'Despesa',
@@ -117,8 +117,7 @@ export default function Categories() {
   }, {} as Record<string, Category[]>);
 
   return (
-    <AppLayout>
-      <div className="space-y-6">
+    <PageShell>
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">Categorias</h1>
@@ -192,8 +191,6 @@ export default function Categories() {
             )}
           </div>
         )}
-      </div>
-
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent>
           <DialogHeader>
@@ -273,6 +270,6 @@ export default function Categories() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </AppLayout>
+    </PageShell>
   );
 }

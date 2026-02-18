@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { formatCurrency } from '@/lib/currency';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
+import { PageShell } from '@/components/layout/PageShell';
 
 const investmentTypeLabels: Record<string, string> = {
   rf: 'Renda Fixa',
@@ -139,7 +140,7 @@ const Investments = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Investimentos</h1>
@@ -378,7 +379,7 @@ const Investments = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageShell>
   );
 };
 

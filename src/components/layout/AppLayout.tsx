@@ -48,7 +48,7 @@ const navigation = [
 ];
 
 const jarvisNavigation = [
-  { name: "JARVIS", href: "/jarvis", icon: Brain },
+  { name: "GUTA", href: "/jarvis", icon: Brain },
   { name: "Tarefas", href: "/jarvis/tasks", icon: CheckSquare },
   { name: "Agenda", href: "/jarvis/calendar", icon: CalendarDays },
   { name: "Hábitos", href: "/jarvis/habits", icon: Repeat },
@@ -98,7 +98,7 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
 
           {/* Navigation */}
           <nav className="flex-1 space-y-1 p-4 overflow-y-auto">
-            {/* JARVIS Section */}
+            {/* GUTA Section */}
             <div className="mb-4">
               <p className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Assistente

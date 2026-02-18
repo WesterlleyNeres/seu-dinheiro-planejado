@@ -1,6 +1,7 @@
 import { Brain, User, FileText, Download } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 interface Attachment {
   type: "image" | "audio" | "document";
@@ -20,6 +21,7 @@ interface Message {
 
 interface ChatMessageProps {
   message: Message;
+  onSelectOption?: (value: string) => void;
 }
 
 function formatFileSize(bytes?: number): string {
@@ -29,8 +31,33 @@ function formatFileSize(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({ message, onSelectOption }: ChatMessageProps) {
   const isUser = message.role === "user";
+  const isAssistant = message.role === "assistant";
+  const content = message.content || "";
+
+  const hasDisambiguation =
+    /Encontrei v[aá]rias (carteiras|categorias) parecidas/i.test(content) ||
+    /Responda com o n[úu]mero ou o nome exato/i.test(content);
+
+  const options = hasDisambiguation
+    ? content
+        .split("\n")
+        .map((line) => {
+          const match = line.match(/^\s*\d+[\)\.]\s+(.+)\s*$/);
+          return match ? match[1].trim() : null;
+        })
+        .filter((value): value is string => Boolean(value))
+    : [];
+
+  const normalizeOptionValue = (label: string) => {
+    const typeMatch = label.match(/\(([^)]+)\)\s*$/);
+    if (!typeMatch) return label.trim();
+    const typeValue = typeMatch[1].toLowerCase();
+    const knownTypes = ["despesa", "receita", "investimento", "divida", "fixa", "variavel"];
+    if (!knownTypes.includes(typeValue)) return label.trim();
+    return label.replace(/\s*\(([^)]+)\)\s*$/, "").trim();
+  };
 
   return (
     <div
@@ -133,6 +160,23 @@ export function ChatMessage({ message }: ChatMessageProps) {
               </ReactMarkdown>
             </div>
           )
+        )}
+
+        {isAssistant && options.length > 0 && onSelectOption && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {options.map((option, idx) => (
+              <Button
+                key={`${option}-${idx}`}
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="h-7 px-3 text-xs"
+                onClick={() => onSelectOption(normalizeOptionValue(option))}
+              >
+                {option}
+              </Button>
+            ))}
+          </div>
         )}
       </div>
     </div>

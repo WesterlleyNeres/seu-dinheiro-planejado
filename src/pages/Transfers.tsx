@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus } from 'lucide-react';
@@ -7,6 +6,7 @@ import { useTransfers } from '@/hooks/useTransfers';
 import { TransferForm } from '@/components/transfers/TransferForm';
 import { TransferCard } from '@/components/transfers/TransferCard';
 import { WalletBalance } from '@/hooks/useTransfers';
+import { PageShell } from '@/components/layout/PageShell';
 
 const Transfers = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -31,8 +31,7 @@ const Transfers = () => {
   };
 
   return (
-    <AppLayout>
-      <div className="space-y-6">
+    <PageShell>
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">Transferências</h1>
@@ -82,8 +81,7 @@ const Transfers = () => {
             />
           </DialogContent>
         </Dialog>
-      </div>
-    </AppLayout>
+    </PageShell>
   );
 };
 
