@@ -26,7 +26,7 @@ export const MonthlyBarChart = ({ data }: MonthlyBarChartProps) => {
         Receitas: { label: 'Receitas', color: 'hsl(var(--success))' },
         Despesas: { label: 'Despesas', color: 'hsl(var(--destructive))' },
       }}
-      className="h-[400px]"
+      className="h-[260px] sm:h-[400px]"
     >
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData}>

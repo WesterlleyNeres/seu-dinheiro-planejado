@@ -127,10 +127,10 @@ const Calendar = () => {
   }
 
   return (
-    <PageShell>
+    <PageShell className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold">Calendário</h1>
+        <h1 className="text-2xl font-bold sm:text-3xl">Calendário</h1>
         <p className="text-muted-foreground">Visualize e gerencie suas transações de forma visual</p>
       </div>
 
@@ -178,26 +178,28 @@ const Calendar = () => {
 
       {/* Navegação do calendário */}
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
+        <CardHeader className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
               <CalendarDays className="h-5 w-5 text-primary" />
-              <CardTitle className="text-xl">
+              <CardTitle className="text-lg sm:text-xl">
                 {formatMonthYearFull(currentYear, currentMonth)}
               </CardTitle>
             </div>
             
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={goToToday}>
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+              <Button variant="outline" size="sm" onClick={goToToday} className="w-full sm:w-auto">
                 Hoje
               </Button>
-              <Button variant="outline" size="icon" onClick={prevMonth}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" size="icon" onClick={nextMonth}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-              <Button onClick={() => handleCreateNew()}>
+              <div className="flex w-full gap-2 sm:w-auto">
+                <Button variant="outline" size="icon" onClick={prevMonth} className="flex-1 sm:flex-none">
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" size="icon" onClick={nextMonth} className="flex-1 sm:flex-none">
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+              <Button onClick={() => handleCreateNew()} className="w-full sm:w-auto">
                 <Plus className="h-4 w-4 mr-2" />
                 Nova Transação
               </Button>
@@ -215,7 +217,7 @@ const Calendar = () => {
           />
 
           {/* Legenda */}
-          <div className="flex items-center gap-4 text-sm text-muted-foreground mt-4">
+          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mt-4">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-success" />
               <span>Receita</span>

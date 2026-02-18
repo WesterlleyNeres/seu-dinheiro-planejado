@@ -90,7 +90,7 @@ const JarvisReminders = () => {
           </div>
         </div>
 
-        <Button onClick={() => setFormOpen(true)}>
+        <Button onClick={() => setFormOpen(true)} className="w-full sm:w-auto">
           <Plus className="h-4 w-4 mr-1" />
           Novo Lembrete
         </Button>
@@ -98,7 +98,7 @@ const JarvisReminders = () => {
 
       {/* Tabs */}
       <Tabs defaultValue="pending" className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className="grid w-full max-w-none sm:max-w-md grid-cols-2">
           <TabsTrigger value="pending">
             Pendentes ({pendingReminders.length})
           </TabsTrigger>

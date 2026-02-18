@@ -25,8 +25,8 @@ export const DayEventGroup = ({ date, events, onEdit, onDelete }: DayEventGroupP
 
   return (
     <Card className="border-border/50">
-      <CardHeader className="py-3 px-4 flex flex-row items-center justify-between">
-        <div className="flex items-center gap-1">
+      <CardHeader className="py-3 px-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-1">
           <span
             className={cn(
               "text-sm font-medium capitalize",
@@ -39,7 +39,7 @@ export const DayEventGroup = ({ date, events, onEdit, onDelete }: DayEventGroupP
             {format(date, ", d 'de' MMMM", { locale: ptBR })}
           </span>
         </div>
-        <Badge variant="outline" className="text-xs">
+        <Badge variant="outline" className="text-xs self-start sm:self-auto">
           {events.length} {events.length === 1 ? "evento" : "eventos"}
         </Badge>
       </CardHeader>

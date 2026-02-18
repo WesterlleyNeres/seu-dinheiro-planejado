@@ -1,7 +1,8 @@
-import { Brain, CheckSquare, Wallet, Repeat, Calendar, Lightbulb, Sparkles, Map } from "lucide-react";
+import { CheckSquare, Wallet, Repeat, Calendar, Lightbulb, Sparkles, Map } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { useTour } from "@/contexts/TourContext";
+import { GutaMark } from "@/components/brand/GutaMark";
 
 interface ChatWelcomeProps {
   onQuickAction: (action: string) => void;
@@ -53,25 +54,24 @@ export function ChatWelcome({ onQuickAction }: ChatWelcomeProps) {
   // UI para novos usuários (onboarding)
   if (needsOnboarding || isNewUser) {
     return (
-      <div className="flex flex-col items-center justify-center h-full py-8 px-4">
-        <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 mb-6">
-          <Brain className="h-10 w-10 text-primary animate-pulse" />
+    <div className="flex flex-col items-center justify-center h-full py-8 px-4">
+        <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/10 to-accent/10 mb-6">
+          <GutaMark className="h-12 w-12" />
         </div>
         
         <h2 className="text-2xl font-bold mb-2 text-center">
-          Bem-vindo ao <span className="text-primary">Fractto Flow</span>!
+          Eu sou a <span className="text-primary">Guta</span>.
         </h2>
-        <p className="text-muted-foreground text-center max-w-md mb-6">
-          Eu sou a <span className="font-semibold text-primary">GUTA</span>, 
-          sua assistente pessoal inteligente. Vou te ajudar a organizar suas finanças, 
-          tarefas e hábitos de um jeito simples e eficiente.
-        </p>
-
-        <div className="bg-muted/50 rounded-xl p-4 mb-6 max-w-md text-center">
-          <p className="text-sm text-muted-foreground">
-            🎯 Como você quer começar? Posso te mostrar o sistema ou você pode explorar por conta própria!
-          </p>
+        <div className="text-muted-foreground text-center max-w-md mb-5 space-y-1.5">
+          <p>Eu organizo o que importa.</p>
+          <p>Eu estruturo o que está solto.</p>
+          <p>Eu transformo intenção em ação.</p>
+          <p className="mt-2 text-foreground/80">Você não precisa lembrar de tudo.</p>
+          <p className="text-foreground/80">Eu lembro.</p>
         </div>
+        <p className="text-sm font-medium text-muted-foreground mb-4 text-center">
+          Por onde começamos?
+        </p>
 
         <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md">
           <Button 
@@ -83,14 +83,14 @@ export function ChatWelcome({ onQuickAction }: ChatWelcomeProps) {
             Fazer Tour Guiado
           </Button>
           
-          <Button 
+          <Button
             size="lg"
             variant="outline"
-            onClick={() => onQuickAction("Olá GUTA! Vamos começar?")}
+            onClick={() => onQuickAction("Olá Guta! Vamos começar?")}
             className="flex-1 gap-2 text-base"
           >
             <Sparkles className="h-5 w-5" />
-            Conversar com GUTA
+            Conversar com Guta
           </Button>
         </div>
 
@@ -111,31 +111,36 @@ export function ChatWelcome({ onQuickAction }: ChatWelcomeProps) {
 
   // UI para usuários existentes
   return (
-    <div className="flex flex-col items-center justify-center h-full py-8">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 mb-6">
-        <Brain className="h-8 w-8 text-primary" />
+    <div className="flex flex-col items-center justify-center h-full px-3 py-6 sm:px-0 sm:py-8">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/10 to-accent/10 mb-5">
+        <GutaMark className="h-10 w-10" />
       </div>
       
-      <h2 className="text-2xl font-semibold mb-2">Olá! Eu sou a GUTA</h2>
-      <p className="text-muted-foreground text-center max-w-md mb-8">
-        Sua assistente pessoal inteligente. Posso ajudar você a gerenciar suas tarefas,
-        finanças, hábitos e muito mais.
+      <h2 className="text-xl font-semibold mb-3 sm:text-2xl text-center">
+        Eu sou a <span className="text-primary">Guta</span>.
+      </h2>
+      <div className="text-center text-sm sm:text-base text-muted-foreground space-y-1.5 max-w-md mb-5 sm:mb-6">
+        <p>Eu organizo o que importa.</p>
+        <p>Eu estruturo o que está solto.</p>
+        <p>Eu transformo intenção em ação.</p>
+        <p className="mt-2 text-foreground/80">Você não precisa lembrar de tudo.</p>
+        <p className="text-foreground/80">Eu lembro.</p>
+      </div>
+      <p className="text-sm font-medium text-muted-foreground mb-3 text-center">
+        Por onde começamos?
       </p>
 
       <div className="w-full max-w-lg">
-        <p className="text-sm font-medium text-muted-foreground mb-3 text-center">
-          Comece com uma pergunta rápida:
-        </p>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {quickActionsRegular.map((action) => (
             <Button
               key={action.label}
               variant="outline"
-              className="h-auto py-3 px-4 justify-start gap-3 hover:bg-muted"
+              className="h-auto w-full py-2.5 px-3 justify-start gap-2 hover:bg-muted text-left whitespace-normal leading-snug sm:py-3 sm:px-4 sm:gap-3"
               onClick={() => onQuickAction(action.prompt)}
             >
               <action.icon className="h-4 w-4 text-primary shrink-0" />
-              <span className="text-sm text-left">{action.label}</span>
+              <span className="text-sm">{action.label}</span>
             </Button>
           ))}
         </div>

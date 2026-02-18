@@ -1,5 +1,6 @@
 import { Pie, PieChart, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface CategoryPieChartProps {
   data: Array<{
@@ -18,6 +19,8 @@ const COLORS = [
 ];
 
 export const CategoryPieChart = ({ data }: CategoryPieChartProps) => {
+  const isMobile = useIsMobile();
+  const radius = isMobile ? 80 : 100;
   const chartData = data.map((item, index) => ({
     name: item.category_name,
     value: item.percentage,
@@ -27,7 +30,7 @@ export const CategoryPieChart = ({ data }: CategoryPieChartProps) => {
   return (
     <ChartContainer
       config={{}}
-      className="h-[350px]"
+      className="h-[260px] sm:h-[350px]"
     >
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
@@ -36,8 +39,8 @@ export const CategoryPieChart = ({ data }: CategoryPieChartProps) => {
             cx="50%"
             cy="50%"
             labelLine={false}
-            label={(entry) => `${entry.name}: ${entry.value.toFixed(1)}%`}
-            outerRadius={100}
+            label={isMobile ? undefined : (entry) => `${entry.name}: ${entry.value.toFixed(1)}%`}
+            outerRadius={radius}
             dataKey="value"
           >
             {chartData.map((entry, index) => (

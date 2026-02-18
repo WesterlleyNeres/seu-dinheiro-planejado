@@ -25,7 +25,7 @@ export const BalanceLineChart = ({ data, showProjection = false }: BalanceLineCh
       config={{
         Saldo: { label: 'Saldo', color: 'hsl(var(--primary))' },
       }}
-      className="h-[400px]"
+      className="h-[260px] sm:h-[400px]"
     >
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={chartData}>

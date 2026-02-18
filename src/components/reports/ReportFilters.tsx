@@ -93,11 +93,11 @@ export const ReportFiltersComponent = ({ onFiltersChange }: ReportFiltersProps) 
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="outline"
           onClick={() => setShowFilters(!showFilters)}
-          className="relative"
+          className="relative w-full sm:w-auto"
         >
           <Filter className="h-4 w-4 mr-2" />
           Filtros
@@ -113,6 +113,7 @@ export const ReportFiltersComponent = ({ onFiltersChange }: ReportFiltersProps) 
             variant="ghost"
             size="sm"
             onClick={handleClearFilters}
+            className="w-full sm:w-auto"
           >
             <X className="h-4 w-4 mr-2" />
             Limpar Filtros
@@ -244,11 +245,11 @@ export const ReportFiltersComponent = ({ onFiltersChange }: ReportFiltersProps) 
               </div>
             </div>
 
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setShowFilters(false)}>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={() => setShowFilters(false)} className="w-full sm:w-auto">
                 Cancelar
               </Button>
-              <Button onClick={handleApplyFilters}>
+              <Button onClick={handleApplyFilters} className="w-full sm:w-auto">
                 Aplicar Filtros
               </Button>
             </div>

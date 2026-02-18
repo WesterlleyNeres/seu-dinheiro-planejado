@@ -39,15 +39,15 @@ export const WeeklyHabitsCard = ({
   const activeHabits = habits.filter((h) => h.active).slice(0, 3);
 
   return (
-    <Card className="border-border/50 bg-card/80 backdrop-blur">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+    <Card className="w-full min-w-0 border-border/50 bg-card/80 backdrop-blur">
+      <CardHeader className="flex flex-col items-start gap-2 pb-3 sm:flex-row sm:items-center sm:justify-between">
         <CardTitle className="text-base font-medium flex items-center gap-2">
           <div className="h-8 w-8 rounded-lg bg-success/10 flex items-center justify-center">
             <Repeat className="h-4 w-4 text-success" />
           </div>
           Hábitos da semana
         </CardTitle>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <Button
             variant="ghost"
             size="sm"
@@ -137,7 +137,7 @@ export const WeeklyHabitsCard = ({
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-tight truncate">
+                  <p className="text-sm font-medium leading-tight break-words line-clamp-2 sm:line-clamp-1">
                     {habit.title}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">

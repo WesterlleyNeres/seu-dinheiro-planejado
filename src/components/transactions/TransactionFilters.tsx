@@ -41,22 +41,23 @@ export const TransactionFilters = ({ filters, onFiltersChange }: TransactionFilt
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="outline"
           size="sm"
           onClick={() => setShowFilters(!showFilters)}
+          className="w-full sm:w-auto"
         >
           <Filter className="h-4 w-4 mr-2" />
           Filtros
         </Button>
 
-        <Button variant="outline" size="sm" onClick={setCurrentMonth}>
+        <Button variant="outline" size="sm" onClick={setCurrentMonth} className="w-full sm:w-auto">
           Mês Atual
         </Button>
 
         {hasActiveFilters && (
-          <Button variant="ghost" size="sm" onClick={handleClearFilters}>
+          <Button variant="ghost" size="sm" onClick={handleClearFilters} className="w-full sm:w-auto">
             <X className="h-4 w-4 mr-2" />
             Limpar Filtros
           </Button>

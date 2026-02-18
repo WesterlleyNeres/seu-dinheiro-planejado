@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Brain, Loader2, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Loader2, PanelLeftClose, PanelLeft, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useJarvisChat } from "@/hooks/useJarvisChat";
@@ -8,6 +8,8 @@ import { ChatWelcome } from "@/components/jarvis/chat/ChatWelcome";
 import { ChatSidebar } from "@/components/jarvis/chat/ChatSidebar";
 import { ChatInput, LocalAttachment } from "@/components/jarvis/chat/ChatInput";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { GutaMark } from "@/components/brand/GutaMark";
 
 const JarvisChat = () => {
   const {
@@ -25,6 +27,7 @@ const JarvisChat = () => {
   } = useJarvisChat();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
 
@@ -61,6 +64,11 @@ const JarvisChat = () => {
     await sendMessage({ message: value });
   };
 
+  const handleSelectConversation = (id: string) => {
+    selectConversation(id);
+    setMobileSidebarOpen(false);
+  };
+
   return (
     <div className="flex h-[calc(100vh-8rem)]" data-tour="chat-area">
       {/* Sidebar */}
@@ -79,9 +87,18 @@ const JarvisChat = () => {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-border px-4">
+        <div className="flex items-center justify-between border-b border-border px-3 py-3 sm:px-4 sm:pb-4">
           <div className="flex items-center gap-3">
-            {!isMobile && (
+            {isMobile ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setMobileSidebarOpen(true)}
+                className="h-9 w-9"
+              >
+                <PanelLeft className="h-4 w-4" />
+              </Button>
+            ) : (
               <Button
                 variant="ghost"
                 size="icon"
@@ -96,7 +113,7 @@ const JarvisChat = () => {
               </Button>
             )}
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-              <Brain className="h-5 w-5 text-primary" />
+              <GutaMark className="h-5 w-5" />
             </div>
             <div>
               <h1 className="text-xl font-semibold truncate max-w-[200px] sm:max-w-none">
@@ -108,17 +125,17 @@ const JarvisChat = () => {
           {isMobile && (
             <Button
               variant="outline"
-              size="sm"
+              size="icon"
               onClick={startNewConversation}
-              className="gap-2"
+              className="h-9 w-9"
             >
-              Nova
+              <Plus className="h-4 w-4" />
             </Button>
           )}
         </div>
 
         {/* Messages */}
-        <ScrollArea viewportRef={scrollViewportRef} className="flex-1 py-4 px-4">
+        <ScrollArea viewportRef={scrollViewportRef} className="flex-1 px-2 py-3 sm:px-4 sm:py-4">
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -126,7 +143,7 @@ const JarvisChat = () => {
           ) : messages.length === 0 ? (
             <ChatWelcome onQuickAction={handleQuickAction} />
           ) : (
-            <div className="space-y-4 pr-4">
+            <div className="mx-auto w-full max-w-[720px] space-y-3 pr-0 sm:space-y-4 sm:pr-4">
               {messages.map((message) => (
                 <ChatMessage
                   key={message.id}
@@ -137,7 +154,7 @@ const JarvisChat = () => {
               {isSending && (
                 <div className="flex items-start gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                    <Brain className="h-4 w-4 text-primary" />
+                    <GutaMark className="h-4 w-4" />
                   </div>
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -155,6 +172,29 @@ const JarvisChat = () => {
           isSending={isSending}
         />
       </div>
+
+      {/* Mobile Conversations Sheet */}
+      {isMobile && (
+        <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+          <SheetContent side="left" className="flex h-full w-[85vw] max-w-sm flex-col p-0">
+            <SheetHeader className="border-b border-border px-4 py-3">
+              <SheetTitle>Conversas</SheetTitle>
+            </SheetHeader>
+            <ChatSidebar
+              conversations={conversations}
+              activeId={conversationId}
+              onSelectConversation={handleSelectConversation}
+              onNewConversation={() => {
+                startNewConversation();
+                setMobileSidebarOpen(false);
+              }}
+              onRename={(id, title) => renameConversation({ id, title })}
+              onDelete={deleteConversation}
+              isCollapsed={false}
+            />
+          </SheetContent>
+        </Sheet>
+      )}
     </div>
   );
 };

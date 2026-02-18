@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/lib/currency';
+import { PageShell } from '@/components/layout/PageShell';
 import { Plus, Target, TrendingUp, Wallet } from 'lucide-react';
 
 const Goals = () => {
@@ -60,9 +61,9 @@ const Goals = () => {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6 space-y-6">
+      <PageShell className="space-y-6">
         <Skeleton className="h-12 w-64" />
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
             <Skeleton key={i} className="h-32" />
           ))}
@@ -72,21 +73,21 @@ const Goals = () => {
             <Skeleton key={i} className="h-64" />
           ))}
         </div>
-      </div>
+      </PageShell>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6" data-tour="goals-content">
+    <PageShell className="space-y-6" data-tour="goals-content">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Metas</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Metas</h1>
           <p className="text-muted-foreground">
             Defina e acompanhe suas metas financeiras
           </p>
         </div>
-        <Button onClick={handleNewGoal}>
+        <Button onClick={handleNewGoal} className="w-full sm:w-auto">
           <Plus className="mr-2 h-4 w-4" />
           Nova Meta
         </Button>
@@ -110,7 +111,7 @@ const Goals = () => {
       ) : (
         <>
           {/* Summary Cards */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -207,7 +208,7 @@ const Goals = () => {
         goalName={selectedGoalForContribution?.nome || ''}
         onSubmit={handleContributionSubmit}
       />
-    </div>
+    </PageShell>
   );
 };
 

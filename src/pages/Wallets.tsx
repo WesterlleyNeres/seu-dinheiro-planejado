@@ -160,19 +160,19 @@ export default function Wallets() {
 
   return (
     <PageShell data-tour="wallets-content" className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Carteiras</h1>
+            <h1 className="text-2xl font-bold sm:text-3xl">Carteiras</h1>
             <p className="text-muted-foreground">Gerencie suas contas, cartões e faturas</p>
           </div>
-          <Button onClick={handleNew}>
+          <Button onClick={handleNew} className="w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-2" />
             Nova Carteira
           </Button>
         </div>
 
         <Tabs defaultValue="wallets" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsList className="grid w-full grid-cols-2 max-w-none sm:max-w-md">
             <TabsTrigger value="wallets">Carteiras</TabsTrigger>
             <TabsTrigger value="statements">Faturas</TabsTrigger>
           </TabsList>
@@ -232,10 +232,11 @@ export default function Wallets() {
                               </div>
                             )}
                             
-                            <div className="flex gap-2">
+                            <div className="flex flex-col gap-2 sm:flex-row">
                               <Button
                                 variant="outline"
                                 size="sm"
+                                className="w-full sm:w-auto"
                                 onClick={() => handleEdit(wallet)}
                               >
                                 <Pencil className="h-4 w-4 mr-2" />
@@ -244,6 +245,7 @@ export default function Wallets() {
                               <Button
                                 variant="outline"
                                 size="sm"
+                                className="w-full sm:w-auto"
                                 onClick={() => handleDeleteClick(wallet.id)}
                               >
                                 <Trash2 className="h-4 w-4 mr-2" />
@@ -301,10 +303,11 @@ export default function Wallets() {
                               />
                             )}
 
-                            <div className="flex gap-2">
+                            <div className="flex flex-col gap-2 sm:flex-row">
                               <Button
                                 variant="outline"
                                 size="sm"
+                                className="w-full sm:w-auto"
                                 onClick={() => handleEdit(wallet)}
                               >
                                 <Pencil className="h-4 w-4 mr-2" />
@@ -313,6 +316,7 @@ export default function Wallets() {
                               <Button
                                 variant="outline"
                                 size="sm"
+                                className="w-full sm:w-auto"
                                 onClick={() => handleDeleteClick(wallet.id)}
                               >
                                 <Trash2 className="h-4 w-4 mr-2" />

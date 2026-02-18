@@ -24,11 +24,11 @@ export const CalendarGrid = ({
   return (
     <div className="space-y-2">
       {/* Cabeçalho dos dias da semana */}
-      <div className="grid grid-cols-7 gap-2">
+      <div className="grid grid-cols-7 gap-1 sm:gap-2">
         {WEEKDAYS.map((day) => (
           <div
             key={day}
-            className="text-center text-sm font-semibold text-muted-foreground py-2"
+            className="text-center text-[10px] font-semibold text-muted-foreground py-1 sm:py-2 sm:text-sm"
           >
             {day}
           </div>
@@ -36,7 +36,7 @@ export const CalendarGrid = ({
       </div>
 
       {/* Grade de dias */}
-      <div className="grid grid-cols-7 gap-2">
+      <div className="grid grid-cols-7 gap-1 sm:gap-2">
         {calendarDays.map((date, index) => {
           const dateKey = formatDateKey(date);
           const dayTransactions = transactionsByDay.get(dateKey) || [];

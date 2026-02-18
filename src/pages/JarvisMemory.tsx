@@ -127,7 +127,7 @@ const JarvisMemory = () => {
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <ChatGPTImporterTrigger onClick={() => setImporterOpen(true)} />
           <MemoryForm onSubmit={handleCreate} isLoading={createMemoryItem.isPending} />
         </div>

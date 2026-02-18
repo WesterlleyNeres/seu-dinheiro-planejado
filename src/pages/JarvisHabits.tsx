@@ -82,7 +82,7 @@ const JarvisHabits = () => {
           </div>
         </div>
 
-        <Button onClick={() => setFormOpen(true)}>
+        <Button onClick={() => setFormOpen(true)} className="w-full sm:w-auto">
           <Plus className="h-4 w-4 mr-1" />
           Novo Hábito
         </Button>

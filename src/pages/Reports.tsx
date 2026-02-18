@@ -109,15 +109,15 @@ const Reports = () => {
   }
 
   return (
-    <PageShell className="space-y-8">
-      <div className="flex items-center justify-between">
+    <PageShell className="space-y-6 sm:space-y-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Relatórios e Análises</h1>
+          <h1 className="text-2xl font-bold sm:text-3xl">Relatórios e Análises</h1>
           <p className="text-muted-foreground">Visualize e analise suas finanças</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
           <Select value={period} onValueChange={(v: any) => setPeriod(v)}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -125,11 +125,11 @@ const Reports = () => {
               <SelectItem value="12">Últimos 12 meses</SelectItem>
             </SelectContent>
           </Select>
-          <Button onClick={handleExportCSV} variant="outline">
+          <Button onClick={handleExportCSV} variant="outline" className="w-full sm:w-auto">
             <Download className="h-4 w-4 mr-2" />
             CSV
           </Button>
-          <Button onClick={handleExportPDF} variant="outline">
+          <Button onClick={handleExportPDF} variant="outline" className="w-full sm:w-auto">
             <FileText className="h-4 w-4 mr-2" />
             PDF
           </Button>
@@ -165,7 +165,7 @@ const Reports = () => {
       )}
 
       <Tabs defaultValue="evolution" className="space-y-6">
-        <TabsList>
+        <TabsList className="w-full max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="evolution">Evolução</TabsTrigger>
           <TabsTrigger value="categories">Categorias</TabsTrigger>
           <TabsTrigger value="projection">Projeção</TabsTrigger>

@@ -136,7 +136,7 @@ export function MobileSidebar({ open, onOpenChange }: MobileSidebarProps) {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="left" className="w-[280px] p-0 flex flex-col">
+      <SheetContent side="left" className="w-[280px] p-0 flex flex-col pt-[var(--safe-area-top)]">
         <SheetHeader className="p-4 border-b border-border">
           <SheetTitle className="flex items-center gap-3">
             <img src={fracttoLogo} alt="FRACTTO FLOW" className="h-10 w-10 object-contain" />

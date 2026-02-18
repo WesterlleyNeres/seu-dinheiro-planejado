@@ -40,7 +40,7 @@ export const CalendarDay = ({
     <button
       onClick={onClick}
       className={cn(
-        "min-h-[100px] p-2 border rounded-lg text-left transition-all hover:shadow-md hover:border-primary/50",
+        "min-h-[64px] p-1 border rounded-lg text-left transition-all hover:shadow-md hover:border-primary/50 sm:min-h-[100px] sm:p-2",
         "flex flex-col gap-1",
         !isCurrentMonth && "opacity-40 hover:opacity-60",
         isToday && "ring-2 ring-primary",
@@ -50,7 +50,7 @@ export const CalendarDay = ({
     >
       <div className="flex items-center justify-between">
         <span className={cn(
-          "text-sm font-medium",
+          "text-xs font-medium sm:text-sm",
           isToday && "text-primary font-bold"
         )}>
           {date.getDate()}
@@ -69,7 +69,7 @@ export const CalendarDay = ({
       </div>
 
       {hasTransactions && (
-        <div className="flex-1 flex flex-col justify-end gap-1">
+        <div className="hidden flex-1 flex-col justify-end gap-1 sm:flex">
           {hasReceitas && (
             <Badge 
               variant="outline" 

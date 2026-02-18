@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export interface LocalAttachment {
   id: string;
@@ -23,7 +24,14 @@ interface ChatInputProps {
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_AUDIO_SIZE = 25 * 1024 * 1024; // 25MB
 
-const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const ACCEPTED_IMAGE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+];
 const ACCEPTED_AUDIO_TYPES = ["audio/mp3", "audio/mpeg", "audio/wav", "audio/m4a", "audio/ogg", "audio/webm"];
 const ACCEPTED_DOCUMENT_TYPES = ["application/pdf", "text/plain"];
 
@@ -45,6 +53,7 @@ export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [isDragOver, setIsDragOver] = useState(false);
+  const isMobile = useIsMobile();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -56,9 +65,10 @@ export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
+      const maxHeight = isMobile ? 96 : 150;
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, maxHeight)}px`;
     }
-  }, [input]);
+  }, [input, isMobile]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -72,10 +82,85 @@ export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
     };
   }, []);
 
-  const handleFileSelect = useCallback((files: FileList | File[]) => {
+  const convertPdfToImages = useCallback(async (file: File) => {
+    try {
+      const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf");
+      const workerSrc = new URL(
+        "pdfjs-dist/legacy/build/pdf.worker.min.js",
+        import.meta.url
+      ).toString();
+      // @ts-expect-error - pdfjs legacy types are not perfect
+      pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+
+      const data = await file.arrayBuffer();
+      // @ts-expect-error - pdfjs legacy types are not perfect
+      const pdf = await pdfjsLib.getDocument({ data }).promise;
+
+      const maxPages = Math.min(pdf.numPages, 3);
+      const converted: LocalAttachment[] = [];
+
+      for (let pageNumber = 1; pageNumber <= maxPages; pageNumber += 1) {
+        const page = await pdf.getPage(pageNumber);
+        const viewport = page.getViewport({ scale: 2 });
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        if (!context) continue;
+
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        await page.render({ canvasContext: context, viewport }).promise;
+
+        const blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob(resolve, "image/png", 0.92)
+        );
+
+        if (!blob) continue;
+
+        const imageFile = new File(
+          [blob],
+          `${file.name.replace(/\.pdf$/i, "")}-p${pageNumber}.png`,
+          { type: "image/png" }
+        );
+
+        converted.push({
+          id: crypto.randomUUID(),
+          type: "image",
+          file: imageFile,
+          name: imageFile.name,
+          size: imageFile.size,
+          preview: URL.createObjectURL(imageFile),
+        });
+      }
+
+      if (pdf.numPages > maxPages) {
+        toast.info(
+          `PDF com ${pdf.numPages} páginas. Converti as primeiras ${maxPages}.`
+        );
+      } else {
+        toast.success("PDF convertido para imagens.");
+      }
+
+      return converted;
+    } catch (error) {
+      console.error("PDF conversion error:", error);
+      toast.error("Não foi possível converter o PDF. Envie como imagem.");
+      return [];
+    }
+  }, []);
+
+  const handleFileSelect = useCallback(async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
 
-    fileArray.forEach((file) => {
+    for (const file of fileArray) {
+      if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+        const images = await convertPdfToImages(file);
+        if (images.length > 0) {
+          setAttachments((prev) => [...prev, ...images]);
+        }
+        continue;
+      }
+
       const type = getAttachmentType(file.type);
       const maxSize = type === "audio" ? MAX_AUDIO_SIZE : MAX_FILE_SIZE;
 
@@ -103,8 +188,8 @@ export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
       };
 
       setAttachments((prev) => [...prev, attachment]);
-    });
-  }, []);
+    }
+  }, [convertPdfToImages]);
 
   const removeAttachment = useCallback((id: string) => {
     setAttachments((prev) => {
@@ -221,7 +306,7 @@ export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="pt-4 border-t border-border px-4">
+    <form onSubmit={handleSubmit} className="border-t border-border px-3 pt-2 sm:px-4 sm:pt-4">
       {/* Attachment Previews */}
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-3">
@@ -276,7 +361,7 @@ export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
       {/* Input Area */}
       <div
         className={cn(
-          "relative flex items-end gap-2 rounded-lg border border-input p-2 transition-colors",
+          "relative flex items-end gap-1.5 rounded-lg border border-input p-1.5 transition-colors sm:gap-2 sm:p-2",
           isDragOver && "border-primary bg-primary/5"
         )}
         onDragOver={handleDragOver}
@@ -303,7 +388,7 @@ export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
           type="button"
           variant="ghost"
           size="icon"
-          className="h-8 w-8 shrink-0"
+          className="h-9 w-9 shrink-0 sm:h-8 sm:w-8"
           onClick={() => fileInputRef.current?.click()}
           disabled={isSending || isRecording}
         >
@@ -315,7 +400,7 @@ export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
           type="button"
           variant={isRecording ? "destructive" : "ghost"}
           size="icon"
-          className="h-8 w-8 shrink-0"
+          className="h-9 w-9 shrink-0 sm:h-8 sm:w-8"
           onClick={isRecording ? stopRecording : startRecording}
           disabled={isSending}
         >
@@ -329,7 +414,7 @@ export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Digite sua mensagem..."
-          className="min-h-[36px] max-h-[150px] resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0"
+          className="min-h-[32px] max-h-[96px] resize-none border-0 p-0 text-sm focus-visible:ring-0 focus-visible:ring-offset-0 sm:min-h-[36px] sm:max-h-[150px]"
           rows={1}
           disabled={isSending || isRecording}
         />
@@ -339,7 +424,7 @@ export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
           type="submit"
           size="icon"
           disabled={(!input.trim() && attachments.length === 0) || isSending}
-          className="h-8 w-8 shrink-0"
+          className="h-9 w-9 shrink-0 sm:h-8 sm:w-8"
         >
           {isSending ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -355,7 +440,7 @@ export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
         </div>
       )}
 
-      <p className="mt-2 text-xs text-muted-foreground text-center">
+      <p className="mt-1 hidden text-[10px] text-muted-foreground text-center sm:mt-2 sm:block sm:text-xs">
         GUTA pode analisar imagens, transcrever áudios e ler documentos.
       </p>
     </form>

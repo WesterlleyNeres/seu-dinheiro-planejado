@@ -283,7 +283,7 @@ export function ChatGPTImporter({ open, onOpenChange }: ChatGPTImporterProps) {
 // Trigger button separado para uso externo
 export function ChatGPTImporterTrigger({ onClick }: { onClick: () => void }) {
   return (
-    <Button variant="outline" onClick={onClick} className="gap-2">
+    <Button variant="outline" onClick={onClick} className="gap-2 w-full sm:w-auto">
       <FileJson className="h-4 w-4" />
       <span className="hidden sm:inline">Importar ChatGPT</span>
       <span className="sm:hidden">Importar</span>

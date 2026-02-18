@@ -46,7 +46,7 @@ export const QuickEventInput = ({ onAdd, isLoading }: QuickEventInputProps) => {
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="w-40"
+            className="w-full sm:w-40"
           />
 
           {/* Hora (se não for dia inteiro) */}
@@ -55,7 +55,7 @@ export const QuickEventInput = ({ onAdd, isLoading }: QuickEventInputProps) => {
               type="time"
               value={time}
               onChange={(e) => setTime(e.target.value)}
-              className="w-28"
+              className="w-full sm:w-28"
             />
           )}
 

@@ -342,7 +342,7 @@ export default function JarvisProjects() {
           </div>
         </div>
 
-        <Button onClick={() => setProjectFormOpen(true)}>
+        <Button onClick={() => setProjectFormOpen(true)} className="w-full sm:w-auto">
           <Plus className="h-4 w-4 mr-1" />
           Novo Projeto
         </Button>
@@ -402,35 +402,42 @@ export default function JarvisProjects() {
                           </p>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setEditingProject(selectedProject);
-                            setProjectFormOpen(true);
-                          }}
-                        >
-                          <Pencil className="h-4 w-4 mr-1" />
-                          Editar
-                        </Button>
-                        <Button variant="secondary" size="sm" onClick={() => setLinkDialogOpen(true)}>
-                          <LayoutGrid className="h-4 w-4 mr-1" />
-                          Vincular tarefa
-                        </Button>
-                        <Button size="sm" onClick={() => setTaskFormOpen(true)}>
-                          <Plus className="h-4 w-4 mr-1" />
-                          Nova tarefa
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDeleteProject(selectedProject)}
-                        >
-                          <Trash2 className="h-4 w-4 mr-1" />
-                          Excluir
-                        </Button>
-                      </div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full sm:w-auto"
+                        onClick={() => {
+                          setEditingProject(selectedProject);
+                          setProjectFormOpen(true);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4 mr-1" />
+                        Editar
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="w-full sm:w-auto"
+                        onClick={() => setLinkDialogOpen(true)}
+                      >
+                        <LayoutGrid className="h-4 w-4 mr-1" />
+                        Vincular tarefa
+                      </Button>
+                      <Button size="sm" className="w-full sm:w-auto" onClick={() => setTaskFormOpen(true)}>
+                        <Plus className="h-4 w-4 mr-1" />
+                        Nova tarefa
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="w-full sm:w-auto"
+                        onClick={() => handleDeleteProject(selectedProject)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Excluir
+                      </Button>
+                    </div>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
@@ -449,6 +456,7 @@ export default function JarvisProjects() {
                       </Select>
                       <Button
                         variant="secondary"
+                        className="w-full sm:w-auto"
                         onClick={handleApplyTemplate}
                         disabled={!selectedTemplate || isApplyingTemplate}
                       >

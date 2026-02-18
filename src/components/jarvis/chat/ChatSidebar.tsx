@@ -278,7 +278,7 @@ export const ChatSidebar = ({
   }
 
   return (
-    <div className="w-64 border-r border-border flex flex-col bg-muted/30">
+    <div className="w-full border-r border-border flex flex-col bg-muted/30 sm:w-64">
       {/* Header */}
       <div className="p-3 space-y-2">
         <Button

@@ -188,11 +188,17 @@ export default function Transactions() {
 
   const saldo = totalReceitas - totalDespesas;
 
+  const mobileTransactions = useMemo(() => {
+    return [...transactions].sort(
+      (a, b) => new Date(b.data).getTime() - new Date(a.data).getTime()
+    );
+  }, [transactions]);
+
   return (
     <PageShell data-tour="transactions-content" className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Lançamentos</h1>
+            <h1 className="text-2xl font-bold sm:text-3xl">Lançamentos</h1>
             <p className="text-muted-foreground">Gerencie suas receitas e despesas</p>
           </div>
         </div>
@@ -237,7 +243,7 @@ export default function Transactions() {
         </div>
 
         <Tabs defaultValue="transactions" className="space-y-6">
-          <TabsList>
+          <TabsList className="w-full max-w-full justify-start overflow-x-auto">
             <TabsTrigger value="transactions">Lançamentos</TabsTrigger>
             <TabsTrigger value="recurring">
               <Repeat className="h-4 w-4 mr-2" />
@@ -246,8 +252,8 @@ export default function Transactions() {
           </TabsList>
 
         <TabsContent value="transactions" className="space-y-6">
-          <div className="flex justify-end">
-            <Button onClick={handleNewTransaction}>
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button onClick={handleNewTransaction} className="w-full sm:w-auto">
               <Plus className="h-4 w-4 mr-2" />
               Novo Lançamento
             </Button>
@@ -270,107 +276,190 @@ export default function Transactions() {
                   </p>
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[50px]"></TableHead>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Categoria</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Valor</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sortedGroups.map((item) =>
-                      item.type === 'group' ? (
-                        <InstallmentGroupRow
-                          key={`group-${item.data.groupId}`}
-                          parcels={item.data.parcels}
-                          onEdit={handleEdit}
-                          onDelete={handleDeleteClick}
-                          onDeleteDirect={deleteTransaction}
-                          onToggleStatus={toggleStatus}
-                        />
-                      ) : (
-                        <TableRow key={item.data.id}>
-                          <TableCell></TableCell>
-                          <TableCell>{formatDate(item.data.data)}</TableCell>
-                          <TableCell>
-                            <span className="font-medium">{item.data.descricao}</span>
-                          </TableCell>
-                          <TableCell>{item.data.category?.nome}</TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={
-                                item.data.tipo === 'receita' ? 'default' : 'secondary'
-                              }
+                <>
+                  <div className="space-y-3 p-4 sm:hidden">
+                    {mobileTransactions.map((txn) => (
+                      <div
+                        key={txn.id}
+                        className="rounded-lg border bg-background p-3 shadow-sm"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-xs text-muted-foreground">
+                              {formatDate(txn.data)}
+                            </p>
+                            <p className="font-medium truncate">{txn.descricao}</p>
+                            <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                              <span>{txn.category?.nome || "Sem categoria"}</span>
+                              {txn.parcela_numero && (
+                                <span>
+                                  Parcela {txn.parcela_numero}/{txn.parcela_total}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p
+                              className={`text-sm font-semibold ${
+                                txn.tipo === "receita"
+                                  ? "text-success"
+                                  : "text-destructive"
+                              }`}
                             >
-                              {item.data.tipo}
+                              {txn.tipo === "receita" ? "+" : "-"}
+                              {formatCurrency(Number(txn.valor))}
+                            </p>
+                            <Badge
+                              variant={txn.tipo === "receita" ? "default" : "secondary"}
+                              className="mt-1"
+                            >
+                              {txn.tipo}
                             </Badge>
-                          </TableCell>
-                          <TableCell>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex items-center justify-between">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2"
+                            onClick={() => toggleStatus(txn.id, txn.status)}
+                          >
+                            {txn.status === "paga" ? (
+                              <CheckCircle2 className="h-4 w-4 text-success" />
+                            ) : (
+                              <Clock className="h-4 w-4 text-warning" />
+                            )}
+                            <span className="ml-2 text-xs">
+                              {txn.status === "paga" ? "Paga" : "Pendente"}
+                            </span>
+                          </Button>
+                          <div className="flex gap-2">
                             <Button
                               variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                toggleStatus(item.data.id, item.data.status)
-                              }
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => handleEdit(txn)}
                             >
-                              {item.data.status === 'paga' ? (
-                                <CheckCircle2 className="h-4 w-4 text-success" />
-                              ) : (
-                                <Clock className="h-4 w-4 text-warning" />
-                              )}
+                              <Pencil className="h-4 w-4" />
                             </Button>
-                          </TableCell>
-                          <TableCell
-                            className={`text-right font-semibold ${
-                              item.data.tipo === 'receita'
-                                ? 'text-success'
-                                : 'text-destructive'
-                            }`}
-                          >
-                            {item.data.tipo === 'receita' ? '+' : '-'}
-                            {formatCurrency(Number(item.data.valor))}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleEdit(item.data)}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleDeleteClick(item.data.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => handleDeleteClick(txn.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="hidden sm:block">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[50px]"></TableHead>
+                          <TableHead>Data</TableHead>
+                          <TableHead>Descrição</TableHead>
+                          <TableHead>Categoria</TableHead>
+                          <TableHead>Tipo</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-right">Valor</TableHead>
+                          <TableHead className="text-right">Ações</TableHead>
                         </TableRow>
-                      )
-                    )}
-                  </TableBody>
-                </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {sortedGroups.map((item) =>
+                          item.type === 'group' ? (
+                            <InstallmentGroupRow
+                              key={`group-${item.data.groupId}`}
+                              parcels={item.data.parcels}
+                              onEdit={handleEdit}
+                              onDelete={handleDeleteClick}
+                              onDeleteDirect={deleteTransaction}
+                              onToggleStatus={toggleStatus}
+                            />
+                          ) : (
+                            <TableRow key={item.data.id}>
+                              <TableCell></TableCell>
+                              <TableCell>{formatDate(item.data.data)}</TableCell>
+                              <TableCell>
+                                <span className="font-medium">{item.data.descricao}</span>
+                              </TableCell>
+                              <TableCell>{item.data.category?.nome}</TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={
+                                    item.data.tipo === 'receita' ? 'default' : 'secondary'
+                                  }
+                                >
+                                  {item.data.tipo}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    toggleStatus(item.data.id, item.data.status)
+                                  }
+                                >
+                                  {item.data.status === 'paga' ? (
+                                    <CheckCircle2 className="h-4 w-4 text-success" />
+                                  ) : (
+                                    <Clock className="h-4 w-4 text-warning" />
+                                  )}
+                                </Button>
+                              </TableCell>
+                              <TableCell
+                                className={`text-right font-semibold ${
+                                  item.data.tipo === 'receita'
+                                    ? 'text-success'
+                                    : 'text-destructive'
+                                }`}
+                              >
+                                {item.data.tipo === 'receita' ? '+' : '-'}
+                                {formatCurrency(Number(item.data.valor))}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex justify-end gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleEdit(item.data)}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleDeleteClick(item.data.id)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="recurring" className="space-y-6">
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => processRecurringTransactions()}>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={() => processRecurringTransactions()} className="w-full sm:w-auto">
                 <Play className="h-4 w-4 mr-2" />
                 Processar Recorrências
               </Button>
-              <Button onClick={handleNewRecurring}>
+              <Button onClick={handleNewRecurring} className="w-full sm:w-auto">
                 <Plus className="h-4 w-4 mr-2" />
                 Nova Recorrência
               </Button>

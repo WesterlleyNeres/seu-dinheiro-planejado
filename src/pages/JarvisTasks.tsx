@@ -227,7 +227,7 @@ const JarvisTasks = () => {
           </div>
         </div>
 
-        <Button onClick={() => setFormOpen(true)}>
+        <Button onClick={() => setFormOpen(true)} className="w-full sm:w-auto">
           <Plus className="h-4 w-4 mr-1" />
           Nova Tarefa
         </Button>
@@ -257,7 +257,7 @@ const JarvisTasks = () => {
 
       {/* Tabs Temporais */}
       <Tabs value={tab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full max-w-lg grid-cols-4 bg-muted/50">
+        <TabsList className="grid w-full max-w-none sm:max-w-lg grid-cols-4 bg-muted/50">
           <TabsTrigger value="today" className="flex items-center gap-1.5">
             <Sun className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Hoje</span>

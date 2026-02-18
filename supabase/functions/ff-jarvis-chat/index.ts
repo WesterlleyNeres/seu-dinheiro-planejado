@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 // ==================== MULTI-AGENT CONFIGURATION ====================
-const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
+const OPENAI_API_URL = "https://api.openai.com/v1/responses";
 
 // Dynamic model selection based on complexity
 const MODEL_FAST = "gpt-4o-mini";     // Quick responses (~2s) - default
@@ -227,6 +227,12 @@ MULTI-INTENÇÃO (OBRIGATÓRIO):
 - Só faça perguntas se faltar informação essencial.
 - Se houver ambiguidade (carteira/categoria/projeto), mostre opções numeradas e peça para escolher pelo número ou nome exato.
 
+PESQUISA NA WEB (OBRIGATÓRIO):
+- Use web_search para QUALQUER pedido de pesquisa externa: viagens, restaurantes, praias, notícias, preços, recomendações ou informações atuais.
+- Se o usuário pedir endereço/local e só informar o nome (empresa/lugar), faça web_search para encontrar o endereço.
+- Sempre que possível, responda com o endereço encontrado e um link do Google Maps e Waze usando esse endereço.
+- Se não encontrar o endereço, gere o link usando o nome do local como consulta.
+
 RESUMO E ERROS (OBRIGATÓRIO):
 - Se você executou tools nesta mensagem, responda com um **Resumo estruturado**.
 - Formato recomendado:
@@ -243,6 +249,17 @@ REGRAS FINANCEIRAS (OBRIGATÓRIO):
 - Orçamento: use create_budget (não registrar como transação).
 - Meta: use create_goal.
 - Categoria: use create_category.
+
+ANEXOS (OBRIGATÓRIO):
+- Se houver anexo (imagem/áudio/documento), SEMPRE analise o conteúdo.
+- Notas fiscais, comprovantes, extratos e faturas: extraia data, valor, descrição e forma de pagamento.
+- Se houver dados suficientes, registre a(s) transação(ões) via create_transaction.
+- Se for extrato com várias linhas, crie múltiplas transações SOMENTE se cada linha tiver data + valor + descrição claros. Caso contrário, peça confirmação antes.
+- Carteira: se só existir 1, use automaticamente; se houver várias, peça a escolha.
+- Categoria: tente mapear por nome; se ambíguo, sugira opções; se inexistente, pergunte se deseja criar.
+- Se a data não estiver explícita, use hoje.
+- Áudio: use a transcrição como instrução principal.
+- PDF convertido em imagens deve ser tratado como imagem.
 ${contextSections}
 
 CAPACIDADES: Finanças (carteiras, transações, categorias, orçamentos, metas, transferências), Tarefas, Projetos, Eventos, Hábitos, Memórias, Lembretes.
@@ -1269,6 +1286,11 @@ const TOOLS = [
   },
 ];
 
+const OPENAI_TOOLS = [
+  ...TOOLS,
+  { type: "web_search" },
+];
+
 // ==================== HELPER: Safe JSON Parse ====================
 function safeJsonParse(jsonString: string, fallback: Record<string, unknown> = {}): Record<string, unknown> {
   try {
@@ -1391,17 +1413,37 @@ function buildMessageWithAttachments(
     return {
       role: "user",
       content: [
-        { type: "text", text: message || "Analise esta imagem." },
+        { type: "input_text", text: message || "Analise esta imagem." },
         ...imageAttachments.map((img) => ({
-          type: "image_url",
-          image_url: { url: img.url, detail: "auto" },
+          type: "input_image",
+          image_url: img.url,
         })),
       ],
     };
   }
   
   // Text-only message
-  return { role: "user", content: message };
+  return { role: "user", content: [{ type: "input_text", text: message }] };
+}
+
+function extractAssistantText(aiData: any): string {
+  if (aiData?.output_text) return aiData.output_text;
+  const messageItems = (aiData?.output || []).filter(
+    (item: any) => item.type === "message" && item.role === "assistant"
+  );
+  let text = "";
+  for (const msg of messageItems) {
+    for (const part of msg.content || []) {
+      if (part.type === "output_text" && part.text) {
+        text += part.text;
+      }
+    }
+  }
+  return text;
+}
+
+function extractFunctionCalls(aiData: any): any[] {
+  return (aiData?.output || []).filter((item: any) => item.type === "function_call");
 }
 
 // ==================== HELPER: Check if string is UUID ====================
@@ -4305,9 +4347,8 @@ serve(async (req) => {
       : undefined;
 
 
-    // Build messages array
-    const messages: any[] = [
-      { role: "system", content: systemPrompt },
+    // Build input array (Responses API)
+    const inputMessages: any[] = [
       ...(history || [])
         .slice(0, -1) // All history except the last one (current message)
         .filter((m: any) => {
@@ -4323,47 +4364,57 @@ serve(async (req) => {
 
     // Add current user message with multimodal support
     if (hasImages) {
-      messages.push(buildMessageWithAttachments(processedMessage, processedAttachments));
+      inputMessages.push(buildMessageWithAttachments(processedMessage, processedAttachments));
     } else {
-      messages.push({ role: "user", content: processedMessage });
+      inputMessages.push({ role: "user", content: [{ type: "input_text", text: processedMessage }] });
     }
 
-    // Call OpenAI API
-    let aiResponse = await fetch(OPENAI_API_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: modelToUse,
-        messages,
-        tools: TOOLS,
-        ...(toolChoice ? { tool_choice: toolChoice } : {}),
-      }),
+    const buildOpenAIError = (status: number, message: string) => {
+      const err = new Error(message);
+      (err as any).status = status;
+      return err;
+    };
+
+    const callOpenAI = async (payload: any) => {
+      const aiResponse = await fetch(OPENAI_API_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!aiResponse.ok) {
+        const errorText = await aiResponse.text();
+        console.error(`[GUTA][${errorId}] OpenAI error:`, aiResponse.status, errorText);
+        throw buildOpenAIError(aiResponse.status, errorText);
+      }
+
+      return await aiResponse.json();
+    };
+
+    let aiData = await callOpenAI({
+      model: modelToUse,
+      instructions: systemPrompt,
+      input: inputMessages,
+      tools: OPENAI_TOOLS,
+      ...(toolChoice ? { tool_choice: toolChoice } : {}),
     });
 
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      console.error(`[GUTA][${errorId}] OpenAI error:`, aiResponse.status, errorText);
-      
-      if (aiResponse.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns segundos." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (aiResponse.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Créditos insuficientes na conta OpenAI." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      throw new Error(`OpenAI error: ${aiResponse.status} - ${errorText}`);
-    }
-
-    let aiData = await aiResponse.json();
-    let assistantMessage = aiData.choices?.[0]?.message;
+    let assistantContent = extractAssistantText(aiData);
+    let functionCalls = extractFunctionCalls(aiData);
+    let assistantMessage = {
+      content: assistantContent,
+      tool_calls: functionCalls.map((call: any) => ({
+        id: call.call_id,
+        type: "function",
+        function: {
+          name: call.name,
+          arguments: call.arguments || "{}",
+        },
+      })),
+    };
 
     // Handle tool calls loop
     let toolIterations = 0;
@@ -4404,9 +4455,9 @@ serve(async (req) => {
         executedTools.push({ name: toolCall.function.name, result });
 
         toolResults.push({
-          role: "tool",
-          tool_call_id: toolCall.id,
-          content: result,
+          type: "function_call_output",
+          call_id: toolCall.id,
+          output: result,
         });
 
         await supabase.from("ff_conversation_messages").insert({
@@ -4418,31 +4469,32 @@ serve(async (req) => {
         });
       }
 
-      messages.push(assistantMessage);
-      messages.push(...toolResults);
+      if (assistantMessage.content && assistantMessage.content.trim().length > 0) {
+        inputMessages.push({ role: "assistant", content: assistantMessage.content });
+      }
+      inputMessages.push(...toolResults);
 
       // Use gpt-4o-mini for tool follow-ups (cost optimization)
-      aiResponse = await fetch(OPENAI_API_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: AGENT_MODEL,
-          messages,
-          tools: forceCreateProject ? [] : TOOLS,
-        }),
+      aiData = await callOpenAI({
+        model: AGENT_MODEL,
+        instructions: systemPrompt,
+        input: inputMessages,
+        tools: forceCreateProject ? [] : OPENAI_TOOLS,
       });
 
-      if (!aiResponse.ok) {
-        const errorText = await aiResponse.text();
-        console.error(`[GUTA][${errorId}] OpenAI tool follow-up error:`, aiResponse.status, errorText);
-        throw new Error(`OpenAI error on tool follow-up: ${aiResponse.status}`);
-      }
-
-      aiData = await aiResponse.json();
-      assistantMessage = aiData.choices?.[0]?.message;
+      assistantContent = extractAssistantText(aiData);
+      functionCalls = extractFunctionCalls(aiData);
+      assistantMessage = {
+        content: assistantContent,
+        tool_calls: functionCalls.map((call: any) => ({
+          id: call.call_id,
+          type: "function",
+          function: {
+            name: call.name,
+            arguments: call.arguments || "{}",
+          },
+        })),
+      };
     }
 
     // Final response
@@ -4474,56 +4526,29 @@ serve(async (req) => {
     if (isNewConversation && message) {
       try {
         console.log(`[GUTA] Generating title for new conversation ${convId}`);
-        
-        const titleRes = await fetch(OPENAI_API_URL, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${OPENAI_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: AGENT_MODEL,
-            messages: [
-              {
-                role: "system",
-                content: "Gere um título MUITO CURTO (2-5 palavras) que resume o assunto da conversa. Apenas o título, sem aspas ou pontuação final. Seja conciso e direto."
-              },
-              {
-                role: "user",
-                content: `Primeira mensagem do usuário: "${message.substring(0, 150)}"`
-              }
-            ],
-            max_tokens: 20,
-            temperature: 0.7,
-          }),
+        const titleData = await callOpenAI({
+          model: AGENT_MODEL,
+          instructions: "Gere um título MUITO CURTO (2-5 palavras) que resume o assunto da conversa. Apenas o título, sem aspas ou pontuação final. Seja conciso e direto.",
+          input: [
+            {
+              role: "user",
+              content: `Primeira mensagem do usuário: "${message.substring(0, 150)}"`,
+            },
+          ],
         });
 
-        if (titleRes.ok) {
-          const titleData = await titleRes.json();
-          const generatedTitle = titleData.choices?.[0]?.message?.content?.trim();
+        const generatedTitle = extractAssistantText(titleData)?.trim();
 
-          if (generatedTitle) {
-            await supabase
-              .from("ff_conversations")
-              .update({ 
-                title: generatedTitle, 
-                updated_at: new Date().toISOString() 
-              })
-              .eq("id", convId);
-            
-            console.log(`[GUTA] Title generated: "${generatedTitle}"`);
-          }
-        } else {
-          console.error(`[GUTA] Failed to generate title: ${titleRes.status}`);
-          // Fallback: use first words of the message
-          const fallbackTitle = message.split(' ').slice(0, 4).join(' ');
+        if (generatedTitle) {
           await supabase
             .from("ff_conversations")
             .update({ 
-              title: fallbackTitle,
-              updated_at: new Date().toISOString()
+              title: generatedTitle, 
+              updated_at: new Date().toISOString() 
             })
             .eq("id", convId);
+          
+          console.log(`[GUTA] Title generated: "${generatedTitle}"`);
         }
       } catch (titleError) {
         console.error(`[GUTA] Error generating title:`, titleError);
@@ -4548,6 +4573,19 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error(`[GUTA][${errorId}] Chat error:`, error);
+    const status = (error as any)?.status;
+    if (status === 429) {
+      return new Response(
+        JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns segundos." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (status === 402) {
+      return new Response(
+        JSON.stringify({ error: "Créditos insuficientes na conta OpenAI." }),
+        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     return new Response(
       JSON.stringify({ 
         error: "Ocorreu um erro ao processar sua mensagem. Tente novamente.",

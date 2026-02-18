@@ -1,7 +1,8 @@
-import { Brain, User, FileText, Download } from "lucide-react";
+import { User, FileText, Download } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { GutaMark } from "@/components/brand/GutaMark";
 
 interface Attachment {
   type: "image" | "audio" | "document";
@@ -62,7 +63,7 @@ export function ChatMessage({ message, onSelectOption }: ChatMessageProps) {
   return (
     <div
       className={cn(
-        "flex items-start gap-3",
+        "flex items-start gap-2 sm:gap-3",
         isUser && "flex-row-reverse"
       )}
     >
@@ -75,15 +76,15 @@ export function ChatMessage({ message, onSelectOption }: ChatMessageProps) {
         {isUser ? (
           <User className="h-4 w-4 text-primary-foreground" />
         ) : (
-          <Brain className="h-4 w-4 text-primary" />
+          <GutaMark className="h-4 w-4" />
         )}
       </div>
       <div
         className={cn(
-          "max-w-[80%] rounded-2xl px-4 py-2",
+          "w-fit max-w-[calc(100%-3rem)] sm:max-w-[80%] min-w-0 rounded-2xl px-3 py-2 break-words sm:px-4",
           isUser
             ? "bg-primary text-primary-foreground"
-            : "bg-muted"
+            : "bg-muted/80"
         )}
       >
         {/* Attachments */}
@@ -96,7 +97,7 @@ export function ChatMessage({ message, onSelectOption }: ChatMessageProps) {
                     <img
                       src={att.url}
                       alt={att.name}
-                      className="rounded-lg max-w-[280px] max-h-[200px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                      className="rounded-lg max-w-full sm:max-w-[280px] max-h-[200px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
                     />
                   </a>
                 )}
@@ -139,18 +140,29 @@ export function ChatMessage({ message, onSelectOption }: ChatMessageProps) {
         {/* Text Content */}
         {message.content && (
           isUser ? (
-            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+            <p className="text-sm whitespace-pre-wrap break-words leading-snug">
+              {message.content}
+            </p>
           ) : (
-            <div className="prose prose-sm dark:prose-invert max-w-none">
+            <div className="text-sm leading-snug max-w-none break-words whitespace-pre-wrap">
               <ReactMarkdown
                 components={{
-                  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                  ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
-                  ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
-                  li: ({ children }) => <li className="mb-1">{children}</li>,
+                  p: ({ children }) => (
+                    <p className="mb-1 last:mb-0 break-words whitespace-pre-wrap leading-snug">
+                      {children}
+                    </p>
+                  ),
+                  ul: ({ children }) => <ul className="mb-1 ml-4 list-disc">{children}</ul>,
+                  ol: ({ children }) => <ol className="mb-1 ml-4 list-decimal">{children}</ol>,
+                  li: ({ children }) => <li className="mb-0.5">{children}</li>,
                   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                  pre: ({ children }) => (
+                    <pre className="mb-2 max-w-full rounded-lg bg-background/70 p-2 text-[11px] overflow-x-auto whitespace-pre-wrap break-words break-all sm:p-3 sm:text-xs">
+                      {children}
+                    </pre>
+                  ),
                   code: ({ children }) => (
-                    <code className="rounded bg-background/50 px-1 py-0.5 text-xs font-mono">
+                    <code className="rounded bg-background/50 px-1 py-0.5 text-[11px] font-mono break-words break-all whitespace-pre-wrap sm:text-xs">
                       {children}
                     </code>
                   ),

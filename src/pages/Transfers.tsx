@@ -31,15 +31,15 @@ const Transfers = () => {
   };
 
   return (
-    <PageShell>
-        <div className="flex items-center justify-between">
+    <PageShell className="space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Transferências</h1>
+            <h1 className="text-2xl font-bold sm:text-3xl">Transferências</h1>
             <p className="text-muted-foreground">
               Gerencie transferências entre suas carteiras
             </p>
           </div>
-          <Button onClick={handleOpenForm}>
+          <Button onClick={handleOpenForm} className="w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-2" />
             Nova Transferência
           </Button>
@@ -70,7 +70,7 @@ const Transfers = () => {
         </div>
 
         <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="w-full sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>Nova Transferência</DialogTitle>
             </DialogHeader>

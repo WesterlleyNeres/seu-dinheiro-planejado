@@ -47,7 +47,7 @@ export const QuickSummaryCard = ({
   ];
 
   return (
-    <Card className="border-border/50 bg-card/80 backdrop-blur">
+    <Card className="w-full min-w-0 border-border/50 bg-card/80 backdrop-blur">
       <CardHeader className="pb-3">
         <CardTitle className="text-base font-medium flex items-center gap-2">
           <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -57,25 +57,27 @@ export const QuickSummaryCard = ({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {stats.map((stat) => (
             <div
               key={stat.label}
-              className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50"
+              className="flex min-w-0 items-center gap-2 rounded-lg bg-secondary/50 p-2.5 sm:gap-3 sm:p-3"
             >
               <div
                 className={cn(
-                  "h-10 w-10 rounded-lg flex items-center justify-center",
+                  "h-9 w-9 rounded-lg flex items-center justify-center sm:h-10 sm:w-10",
                   stat.bgColor
                 )}
               >
                 <stat.icon className={cn("h-5 w-5", stat.color)} />
               </div>
-              <div>
-                <p className={cn("text-2xl font-bold", stat.color)}>
+              <div className="min-w-0">
+                <p className={cn("text-xl font-bold sm:text-2xl", stat.color)}>
                   {stat.value}
                 </p>
-                <p className="text-xs text-muted-foreground">{stat.label}</p>
+                <p className="text-xs text-muted-foreground leading-tight break-words">
+                  {stat.label}
+                </p>
               </div>
             </div>
           ))}

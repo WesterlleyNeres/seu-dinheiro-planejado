@@ -165,8 +165,8 @@ const Budget = () => {
     <PageShell data-tour="budget-content">
       {/* Header */}
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold capitalize">Orçamento - {monthName}</h1>
-        <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold capitalize sm:text-3xl">Orçamento - {monthName}</h1>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <p className="text-muted-foreground">
             Defina limites de gastos por categoria
           </p>
@@ -186,22 +186,25 @@ const Budget = () => {
       </div>
 
       {/* Month Navigation */}
-      <div className="flex items-center justify-between gap-4">
-        <Button variant="outline" size="icon" onClick={prevMonth}>
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <Button variant="outline" onClick={goToToday}>
-          Mês Atual
-        </Button>
-        <Button variant="outline" size="icon" onClick={nextMonth}>
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-        
-        <div className="ml-auto flex gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={prevMonth}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" onClick={goToToday} className="flex-1 sm:flex-none">
+            Mês Atual
+          </Button>
+          <Button variant="outline" size="icon" onClick={nextMonth}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:ml-auto">
           {periodStatus === 'closed' && (
             <>
               <Button 
                 variant="outline"
+                className="w-full sm:w-auto"
                 onClick={() => setReopenDialogOpen(true)}
                 disabled={periodLoading}
               >
@@ -210,6 +213,7 @@ const Budget = () => {
               </Button>
               <Button 
                 variant="outline"
+                className="w-full sm:w-auto"
                 onClick={() => setRolloverDialogOpen(true)}
                 disabled={periodLoading}
               >
@@ -222,6 +226,7 @@ const Budget = () => {
           {periodStatus === 'open' && (
             <Button 
               variant="outline"
+              className="w-full sm:w-auto"
               onClick={() => setCloseDialogOpen(true)}
               disabled={periodLoading}
             >
@@ -237,6 +242,7 @@ const Budget = () => {
                   <Button 
                     onClick={() => setFormOpen(true)}
                     disabled={periodStatus === 'closed'}
+                    className="w-full sm:w-auto"
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     Novo Orçamento
