@@ -1286,10 +1286,25 @@ const TOOLS = [
   },
 ];
 
-const OPENAI_TOOLS = [
-  ...TOOLS,
-  { type: "web_search" },
-];
+const BASE_TOOLS = [...TOOLS];
+const WEB_SEARCH_TOOL = { type: "web_search" };
+const WEB_SEARCH_PREVIEW_TOOL = { type: "web_search_preview" };
+
+type WebSearchMode = "web_search" | "web_search_preview" | "none";
+
+function buildTools(mode: WebSearchMode) {
+  if (mode === "web_search") return [...BASE_TOOLS, WEB_SEARCH_TOOL];
+  if (mode === "web_search_preview") return [...BASE_TOOLS, WEB_SEARCH_PREVIEW_TOOL];
+  return BASE_TOOLS;
+}
+
+function isWebSearchToolError(message: string) {
+  return /web_search_preview|web_search|unsupported tool|unknown tool|tool.*not.*supported/i.test(message || "");
+}
+
+function needsWebSearch(text: string) {
+  return /(previs[aã]o|tempo|clima|pesquise|pesquisa|endere[cç]o|maps|waze|google maps|restaurante|praia|praias|ponto tur[ií]stico|hot[eé]is|hotel|voo|passagem|not[ií]cia|hoje|agora|melhores|melhor)/i.test(text || "");
+}
 
 // ==================== HELPER: Safe JSON Parse ====================
 function safeJsonParse(jsonString: string, fallback: Record<string, unknown> = {}): Record<string, unknown> {
@@ -4343,7 +4358,7 @@ serve(async (req) => {
     console.log(`[GUTA] Selected model: ${modelToUse}`);
     const forceCreateProject = shouldForceCreateProject(processedMessage);
     const toolChoice = forceCreateProject
-      ? { type: "function", function: { name: "create_project" } }
+      ? { type: "function", name: "create_project" }
       : undefined;
 
 
@@ -4369,9 +4384,10 @@ serve(async (req) => {
       inputMessages.push({ role: "user", content: [{ type: "input_text", text: processedMessage }] });
     }
 
-    const buildOpenAIError = (status: number, message: string) => {
+    const buildOpenAIError = (status: number, message: string, raw?: string) => {
       const err = new Error(message);
       (err as any).status = status;
+      if (raw) (err as any).raw = raw;
       return err;
     };
 
@@ -4387,20 +4403,57 @@ serve(async (req) => {
 
       if (!aiResponse.ok) {
         const errorText = await aiResponse.text();
+        let errorMessage = errorText;
+        try {
+          const parsed = JSON.parse(errorText);
+          errorMessage = parsed?.error?.message || errorText;
+        } catch {
+          // keep raw text
+        }
         console.error(`[GUTA][${errorId}] OpenAI error:`, aiResponse.status, errorText);
-        throw buildOpenAIError(aiResponse.status, errorText);
+        throw buildOpenAIError(aiResponse.status, errorMessage, errorText);
       }
 
       return await aiResponse.json();
     };
 
-    let aiData = await callOpenAI({
+    let webSearchMode: WebSearchMode = "web_search";
+    let webSearchFailed = false;
+
+    const basePayload = {
       model: modelToUse,
       instructions: systemPrompt,
       input: inputMessages,
-      tools: OPENAI_TOOLS,
       ...(toolChoice ? { tool_choice: toolChoice } : {}),
-    });
+    };
+
+    const callWithTools = async (mode: WebSearchMode) =>
+      callOpenAI({ ...basePayload, tools: buildTools(mode) });
+
+    let aiData;
+    try {
+      aiData = await callWithTools("web_search");
+      webSearchMode = "web_search";
+    } catch (err) {
+      const errorMessage = (err as any)?.message || "";
+      if (isWebSearchToolError(errorMessage)) {
+        try {
+          aiData = await callWithTools("web_search_preview");
+          webSearchMode = "web_search_preview";
+        } catch (err2) {
+          const errorMessage2 = (err2 as any)?.message || "";
+          if (isWebSearchToolError(errorMessage2)) {
+            webSearchFailed = true;
+            webSearchMode = "none";
+            aiData = await callWithTools("none");
+          } else {
+            throw err2;
+          }
+        }
+      } else {
+        throw err;
+      }
+    }
 
     let assistantContent = extractAssistantText(aiData);
     let functionCalls = extractFunctionCalls(aiData);
@@ -4479,7 +4532,7 @@ serve(async (req) => {
         model: AGENT_MODEL,
         instructions: systemPrompt,
         input: inputMessages,
-        tools: forceCreateProject ? [] : OPENAI_TOOLS,
+        tools: forceCreateProject ? [] : buildTools(webSearchMode),
       });
 
       assistantContent = extractAssistantText(aiData);
@@ -4499,6 +4552,10 @@ serve(async (req) => {
 
     // Final response
     let finalContent = assistantMessage?.content;
+
+    if (webSearchFailed && needsWebSearch(processedMessage)) {
+      finalContent = "Não consegui acessar a internet agora para pesquisar isso. Tente novamente em instantes.";
+    }
     
     if (!finalContent || finalContent.trim().length === 0) {
       console.error(`[GUTA][${errorId}] Empty response from AI`);
