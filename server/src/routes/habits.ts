@@ -224,7 +224,15 @@ export async function registerHabitRoutes(fastify: FastifyInstance) {
         return { error: "Sem permissão" };
       }
 
-      const logDate = data.date ? new Date(data.date) : new Date();
+      let logDate = new Date();
+      if (data.date) {
+        const parsed = new Date(data.date);
+        if (Number.isNaN(parsed.getTime())) {
+          reply.code(400);
+          return { error: "Data inválida" };
+        }
+        logDate = parsed;
+      }
       const dateKey = new Date(Date.UTC(logDate.getFullYear(), logDate.getMonth(), logDate.getDate()));
 
       const existingLog = await fastify.prisma.jarvisHabitLog.findFirst({

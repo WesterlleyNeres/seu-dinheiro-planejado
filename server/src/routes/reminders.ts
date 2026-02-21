@@ -56,12 +56,18 @@ export async function registerReminderRoutes(fastify: FastifyInstance) {
         return { error: "Sem permissão" };
       }
 
+      const remindAt = new Date(data.remind_at);
+      if (Number.isNaN(remindAt.getTime())) {
+        reply.code(400);
+        return { error: "Data inválida" };
+      }
+
       const created = await fastify.prisma.jarvisReminder.create({
         data: {
           tenant_id: data.tenant_id,
           created_by: userId,
           title: data.title,
-          remind_at: new Date(data.remind_at),
+          remind_at: remindAt,
           channel: data.channel ?? "push",
           status: "pending",
           attempt_count: 0,
@@ -111,7 +117,14 @@ export async function registerReminderRoutes(fastify: FastifyInstance) {
       }
 
       const updateData: Record<string, unknown> = { ...data };
-      if (data.remind_at) updateData.remind_at = new Date(data.remind_at);
+      if (data.remind_at) {
+        const remindAt = new Date(data.remind_at);
+        if (Number.isNaN(remindAt.getTime())) {
+          reply.code(400);
+          return { error: "Data inválida" };
+        }
+        updateData.remind_at = remindAt;
+      }
 
       const updated = await fastify.prisma.jarvisReminder.update({
         where: { id },

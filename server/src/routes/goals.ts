@@ -97,12 +97,22 @@ export async function registerGoalRoutes(fastify: FastifyInstance) {
       const data = bodySchema.parse(request.body);
       const userId = request.user!.id;
 
+      let prazo: Date | null = null;
+      if (data.prazo !== undefined) {
+        const parsed = new Date(data.prazo);
+        if (Number.isNaN(parsed.getTime())) {
+          reply.code(400);
+          return { error: "Data inválida" };
+        }
+        prazo = parsed;
+      }
+
       const created = await fastify.prisma.goal.create({
         data: {
           user_id: userId,
           nome: data.nome,
           valor_meta: new Prisma.Decimal(data.valor_meta),
-          prazo: data.prazo ? new Date(data.prazo) : null,
+          prazo,
         },
       });
 
@@ -142,7 +152,16 @@ export async function registerGoalRoutes(fastify: FastifyInstance) {
         updateData.valor_meta = new Prisma.Decimal(data.valor_meta);
       }
       if (data.prazo !== undefined) {
-        updateData.prazo = data.prazo ? new Date(data.prazo) : null;
+        if (!data.prazo) {
+          reply.code(400);
+          return { error: "Data inválida" };
+        }
+        const parsed = new Date(data.prazo);
+        if (Number.isNaN(parsed.getTime())) {
+          reply.code(400);
+          return { error: "Data inválida" };
+        }
+        updateData.prazo = parsed;
       }
 
       const updated = await fastify.prisma.goal.updateMany({
@@ -205,11 +224,17 @@ export async function registerGoalRoutes(fastify: FastifyInstance) {
         return { error: "Meta não encontrada" };
       }
 
+      const contribDate = new Date(data.data);
+      if (Number.isNaN(contribDate.getTime())) {
+        reply.code(400);
+        return { error: "Data inválida" };
+      }
+
       const created = await fastify.prisma.goalContribution.create({
         data: {
           goal_id: id,
           valor: new Prisma.Decimal(data.valor),
-          data: new Date(data.data),
+          data: contribDate,
         },
       });
 

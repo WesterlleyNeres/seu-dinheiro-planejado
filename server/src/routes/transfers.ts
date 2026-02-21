@@ -97,9 +97,35 @@ export async function registerTransferRoutes(fastify: FastifyInstance) {
       const data = bodySchema.parse(request.body);
       const userId = request.user!.id;
 
+      const walletIds =
+        data.from_wallet_id === data.to_wallet_id
+          ? [data.from_wallet_id]
+          : [data.from_wallet_id, data.to_wallet_id];
+
+      const wallets = await fastify.prisma.wallet.findMany({
+        where: {
+          id: { in: walletIds },
+          user_id: userId,
+          deleted_at: null,
+        },
+        select: { id: true },
+      });
+      if (wallets.length !== walletIds.length) {
+        reply.code(404);
+        return { error: "Carteira não encontrada" };
+      }
+
       if (data.from_wallet_id === data.to_wallet_id) {
         reply.code(400);
         return { error: "Carteiras de origem e destino devem ser diferentes" };
+      }
+
+      if (data.data) {
+        const parsed = new Date(data.data);
+        if (Number.isNaN(parsed.getTime())) {
+          reply.code(400);
+          return { error: "Data inválida" };
+        }
       }
 
       const created = await fastify.prisma.transfer.create({
@@ -143,9 +169,46 @@ export async function registerTransferRoutes(fastify: FastifyInstance) {
         return { error: "Nada para atualizar" };
       }
 
-      if (data.from_wallet_id && data.to_wallet_id && data.from_wallet_id === data.to_wallet_id) {
+      const existing = await fastify.prisma.transfer.findFirst({
+        where: { id, user_id: userId, deleted_at: null },
+        select: { from_wallet_id: true, to_wallet_id: true },
+      });
+
+      if (!existing) {
+        reply.code(404);
+        return { error: "Transferência não encontrada" };
+      }
+
+      const finalFrom = data.from_wallet_id ?? existing.from_wallet_id;
+      const finalTo = data.to_wallet_id ?? existing.to_wallet_id;
+
+      const walletIds =
+        finalFrom === finalTo ? [finalFrom] : [finalFrom, finalTo];
+
+      const wallets = await fastify.prisma.wallet.findMany({
+        where: {
+          id: { in: walletIds },
+          user_id: userId,
+          deleted_at: null,
+        },
+        select: { id: true },
+      });
+      if (wallets.length !== walletIds.length) {
+        reply.code(404);
+        return { error: "Carteira não encontrada" };
+      }
+
+      if (finalFrom === finalTo) {
         reply.code(400);
         return { error: "Carteiras de origem e destino devem ser diferentes" };
+      }
+
+      if (data.data) {
+        const parsed = new Date(data.data);
+        if (Number.isNaN(parsed.getTime())) {
+          reply.code(400);
+          return { error: "Data inválida" };
+        }
       }
 
       const updateData: Prisma.TransferUpdateManyMutationInput = {
@@ -159,15 +222,10 @@ export async function registerTransferRoutes(fastify: FastifyInstance) {
         updateData.data = new Date(data.data);
       }
 
-      const updated = await fastify.prisma.transfer.updateMany({
-        where: { id, user_id: userId, deleted_at: null },
+      await fastify.prisma.transfer.update({
+        where: { id },
         data: updateData,
       });
-
-      if (updated.count === 0) {
-        reply.code(404);
-        return { error: "Transferência não encontrada" };
-      }
 
       return { ok: true };
     }

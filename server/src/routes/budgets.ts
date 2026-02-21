@@ -9,7 +9,13 @@ const resolveCategoryId = async (
   userId: string,
   input: string
 ): Promise<string | null> => {
-  if (/^[0-9a-fA-F-]{36}$/.test(input)) return input;
+  if (/^[0-9a-fA-F-]{36}$/.test(input)) {
+    const category = await fastify.prisma.category.findFirst({
+      where: { id: input, user_id: userId, deleted_at: null },
+      select: { id: true },
+    });
+    return category?.id || null;
+  }
 
   const category = await fastify.prisma.category.findFirst({
     where: {

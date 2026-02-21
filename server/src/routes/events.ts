@@ -72,6 +72,20 @@ export async function registerEventRoutes(fastify: FastifyInstance) {
         return { error: "Sem permissão" };
       }
 
+      const startAt = new Date(data.start_at);
+      if (Number.isNaN(startAt.getTime())) {
+        reply.code(400);
+        return { error: "Data inválida" };
+      }
+      let endAt: Date | null = null;
+      if (data.end_at !== undefined && data.end_at !== null) {
+        endAt = new Date(data.end_at);
+        if (Number.isNaN(endAt.getTime())) {
+          reply.code(400);
+          return { error: "Data inválida" };
+        }
+      }
+
       const created = await fastify.prisma.jarvisEvent.create({
         data: {
           tenant_id: data.tenant_id,
@@ -79,8 +93,8 @@ export async function registerEventRoutes(fastify: FastifyInstance) {
           title: data.title,
           description: data.description ?? null,
           location: data.location ?? null,
-          start_at: new Date(data.start_at),
-          end_at: data.end_at ? new Date(data.end_at) : null,
+          start_at: startAt,
+          end_at: endAt,
           all_day: data.all_day ?? false,
           priority: data.priority ?? "medium",
           status: "scheduled",
@@ -135,9 +149,25 @@ export async function registerEventRoutes(fastify: FastifyInstance) {
       }
 
       const updateData: Record<string, unknown> = { ...data };
-      if (data.start_at) updateData.start_at = new Date(data.start_at);
+      if (data.start_at) {
+        const startAt = new Date(data.start_at);
+        if (Number.isNaN(startAt.getTime())) {
+          reply.code(400);
+          return { error: "Data inválida" };
+        }
+        updateData.start_at = startAt;
+      }
       if (data.end_at !== undefined) {
-        updateData.end_at = data.end_at ? new Date(data.end_at) : null;
+        if (data.end_at === null) {
+          updateData.end_at = null;
+        } else {
+          const endAt = new Date(data.end_at);
+          if (Number.isNaN(endAt.getTime())) {
+            reply.code(400);
+            return { error: "Data inválida" };
+          }
+          updateData.end_at = endAt;
+        }
       }
 
       const updated = await fastify.prisma.jarvisEvent.update({

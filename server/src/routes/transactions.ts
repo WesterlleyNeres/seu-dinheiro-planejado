@@ -6,13 +6,13 @@ const transactionTypeSchema = z.enum(["despesa", "receita"]);
 const transactionStatusSchema = z.enum(["paga", "pendente"]);
 const naturezaSchema = z.enum(["fixa", "variavel"]);
 
-const parseDate = (value?: string): Date => {
-  if (!value) return new Date();
+const parseDate = (value?: string): { date: Date; error?: string } => {
+  if (!value) return { date: new Date() };
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    throw new Error("Data inválida");
+    return { date: new Date(), error: "Data inválida" };
   }
-  return date;
+  return { date };
 };
 
 const toMesReferencia = (date: Date): string => {
@@ -128,7 +128,31 @@ export async function registerTransactionRoutes(fastify: FastifyInstance) {
 
       const data = bodySchema.parse(request.body);
       const userId = request.user!.id;
-      const date = parseDate(data.data);
+      const { date, error: dateError } = parseDate(data.data);
+      if (dateError) {
+        reply.code(400);
+        return { error: dateError };
+      }
+
+      const category = await fastify.prisma.category.findFirst({
+        where: { id: data.category_id, user_id: userId, deleted_at: null },
+        select: { id: true },
+      });
+      if (!category) {
+        reply.code(404);
+        return { error: "Categoria não encontrada" };
+      }
+
+      if (data.wallet_id) {
+        const wallet = await fastify.prisma.wallet.findFirst({
+          where: { id: data.wallet_id, user_id: userId, deleted_at: null },
+          select: { id: true },
+        });
+        if (!wallet) {
+          reply.code(404);
+          return { error: "Carteira não encontrada" };
+        }
+      }
       const mesRef = toMesReferencia(date);
       const mesRefInt = toMesReferenciaInt(mesRef);
 
@@ -213,6 +237,28 @@ export async function registerTransactionRoutes(fastify: FastifyInstance) {
         ...data,
       };
 
+      if (data.category_id) {
+        const category = await fastify.prisma.category.findFirst({
+          where: { id: data.category_id, user_id: userId, deleted_at: null },
+          select: { id: true },
+        });
+        if (!category) {
+          reply.code(404);
+          return { error: "Categoria não encontrada" };
+        }
+      }
+
+      if (data.wallet_id) {
+        const wallet = await fastify.prisma.wallet.findFirst({
+          where: { id: data.wallet_id, user_id: userId, deleted_at: null },
+          select: { id: true },
+        });
+        if (!wallet) {
+          reply.code(404);
+          return { error: "Carteira não encontrada" };
+        }
+      }
+
       if (data.valor !== undefined) {
         updateData.valor = new Prisma.Decimal(data.valor);
       }
@@ -224,7 +270,11 @@ export async function registerTransactionRoutes(fastify: FastifyInstance) {
       }
 
       if (data.data) {
-        const date = parseDate(data.data);
+        const { date, error: dateError } = parseDate(data.data);
+        if (dateError) {
+          reply.code(400);
+          return { error: dateError };
+        }
         const mesRef = toMesReferencia(date);
         const mesRefInt = toMesReferenciaInt(mesRef);
         updateData.data = date;
