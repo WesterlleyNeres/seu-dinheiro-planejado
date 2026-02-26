@@ -45,10 +45,10 @@ export async function registerTaskRoutes(fastify: FastifyInstance) {
       const bodySchema = z.object({
         tenant_id: z.string().uuid(),
         title: z.string().min(1),
-        description: z.string().optional(),
+        description: z.string().nullable().optional(),
         priority: prioritySchema.optional(),
-        due_at: z.string().optional(),
-        tags: z.array(z.string()).optional(),
+        due_at: z.string().nullable().optional(),
+        tags: z.array(z.string()).nullable().optional(),
       });
 
       const data = bodySchema.parse(request.body);
@@ -86,10 +86,10 @@ export async function registerTaskRoutes(fastify: FastifyInstance) {
       const paramsSchema = z.object({ id: z.string().uuid() });
       const bodySchema = z.object({
         title: z.string().min(1).optional(),
-        description: z.string().optional(),
+        description: z.string().nullable().optional(),
         priority: prioritySchema.optional(),
         due_at: z.string().nullable().optional(),
-        tags: z.array(z.string()).optional(),
+        tags: z.array(z.string()).nullable().optional(),
         status: statusSchema.optional(),
         completed_at: z.string().nullable().optional(),
       });

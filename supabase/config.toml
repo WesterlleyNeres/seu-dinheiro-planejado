@@ -18,6 +18,9 @@ verify_jwt = false
 
 
 [functions.ff-jarvis-chat]
+verify_jwt = true
+
+[functions.ff-westos-supervisor]
 verify_jwt = false
 
 [functions.ff-google-oauth-callback]

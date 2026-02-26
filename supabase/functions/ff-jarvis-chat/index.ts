@@ -24,6 +24,9 @@ function selectModel(
 ): string {
   // Always use vision model for images
   if (hasImages) return MODEL_VISION;
+
+  // Web search works best with 4o models
+  if (needsWebSearch(message)) return MODEL_FAST;
   
   // Onboarding should be fast and welcoming
   if (isNewUser && historyLength < 10) return MODEL_FAST;
@@ -64,6 +67,7 @@ function shouldForceCreateProject(message: string): boolean {
   const hasProject = /projeto/.test(text);
   const hasCreateVerb = /(crie|criar|cria|inicie|iniciar|abrir|novo)\b/.test(text);
   if (!hasProject || !hasCreateVerb) return false;
+  if (isProjectStructureRequest(message)) return false;
 
   // Se houver múltiplas ações, deixe o modelo decidir (multi-intenção)
   const otherActions = /(tarefa|lembrete|h[aá]bito|evento|transa[cç][aã]o|despesa|receita|categoria|or[cç]amento|meta|transfer|carteira)/i;
@@ -71,43 +75,92 @@ function shouldForceCreateProject(message: string): boolean {
 }
 
 // ==================== SYSTEM PROMPT BUILDER ====================
-function buildSystemPrompt(userProfile: any, userContext: any): string {
-  const today = new Date().toLocaleDateString('pt-BR', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
+function buildSystemPrompt(userProfile: any, userContext: any, westosState: any, projectStructureMode: boolean): string {
+  const today = new Date().toLocaleDateString('pt-BR', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
   });
 
   const nickname = userProfile?.nickname || userProfile?.full_name || 'usuário';
   const isNewUser = !userProfile || !userProfile.onboarding_completed;
+  const humorLevel = Number(userProfile?.preferences?.westos?.humor_level ?? 2);
+  const humorTone = humorLevel <= 0 ? 'seco' : humorLevel === 1 ? 'leve' : 'provocativo';
+  const checkinRequired = Boolean(westosState?.checkin_required);
+  const patterns = westosState?.patterns || [];
+  const hasSensitivePatterns = patterns.some((p: any) => p.pattern_type === 'emotional' || p.pattern_type === 'relational');
+  const projectStructureModeActive = Boolean(projectStructureMode);
+
+  const projectStructureInstruction = projectStructureModeActive
+    ? `
+MODO ESTRUTURA DE PROJETO:
+- O usuário descreveu etapas, subtarefas e checklist.
+- Crie etapa com create_project_stage.
+- Crie subtarefa com create_project_item.
+- Crie checklist com create_project_checklist_item (use titles para vários).
+- NÃO use create_task ou add_task_to_project neste fluxo.`
+    : '';
 
   // Build compact context sections
   let contextSections = '';
-  
+
   // === FINANCIAL SUMMARY ===
   if (userContext?.wallets?.length > 0) {
-    contextSections += `\nFINANÇAS: Saldo R$ ${userContext.totalBalance?.toFixed(2) || '0.00'} em ${userContext.wallets.length} carteira(s).`;
+    contextSections += `
+FINANÇAS: Saldo R$ ${userContext.totalBalance?.toFixed(2) || '0.00'} em ${userContext.wallets.length} carteira(s).`;
     if (userContext.billsTodayCount > 0) {
       contextSections += ` ⚠️ ${userContext.billsTodayCount} conta(s) vencendo HOJE (R$ ${userContext.billsTodayTotal?.toFixed(2)}).`;
     }
   } else {
-    contextSections += `\nFINANÇAS: Sem carteiras cadastradas.`;
+    contextSections += `
+FINANÇAS: Sem carteiras cadastradas.`;
   }
 
   // === HABITS ===
   if (userContext?.habitsWithProgress?.length > 0) {
-    contextSections += `\nHÁBITOS HOJE: ${userContext.habitsCompleted}/${userContext.habitsWithProgress.length} concluídos.`;
+    contextSections += `
+HÁBITOS HOJE: ${userContext.habitsCompleted}/${userContext.habitsWithProgress.length} concluídos.`;
   }
 
   // === TASKS ===
   if (userContext?.tasksToday?.length > 0) {
-    contextSections += `\nTAREFAS HOJE: ${userContext.tasksToday.length} pendente(s).`;
+    contextSections += `
+TAREFAS HOJE: ${userContext.tasksToday.length} pendente(s).`;
   }
 
   // === EVENTS ===
   if (userContext?.upcomingEvents?.length > 0) {
-    contextSections += `\nPRÓXIMOS EVENTOS: ${userContext.upcomingEvents.length} nas próximas 24h.`;
+    contextSections += `
+PRÓXIMOS EVENTOS: ${userContext.upcomingEvents.length} nas próximas 24h.`;
+  }
+
+  // === WESTOS STATE ===
+  if (westosState?.cycle) {
+    contextSections += `
+WESTOS CICLO: ${westosState.cycle.start_date} → ${westosState.cycle.end_date} (${westosState.cycle.tier}).`;
+  }
+
+  if (westosState?.last_checkin) {
+    const daysAgo = westosState.last_checkin_days_ago ?? 0;
+    contextSections += `
+WESTOS CHECK-IN: ${westosState.last_checkin.checkin_date} (${daysAgo} dia(s) atrás).`;
+  } else {
+    contextSections += `
+WESTOS CHECK-IN: nenhum registrado.`;
+  }
+
+  if (patterns.length > 0) {
+    const patternSummary = patterns
+      .map((p: any) => `${p.pattern_key}(${p.pattern_type},s${p.severity})`)
+      .join(', ');
+    contextSections += `
+WESTOS PADRÕES ATIVOS: ${patternSummary}.`;
+  }
+
+  if (checkinRequired) {
+    contextSections += `
+WESTOS: CHECK-IN PENDENTE HOJE.`;
   }
 
   // === LEARNED INSIGHTS (Auto-learning) ===
@@ -115,14 +168,18 @@ function buildSystemPrompt(userProfile: any, userContext: any): string {
     const insights = userContext.learnedInsights.slice(0, 10)
       .map((i: any) => `• ${i.content}`)
       .join('\n');
-    contextSections += `\n\nAPRENDIZADOS SOBRE VOCÊ:\n${insights}`;
+    contextSections += `
+
+APRENDIZADOS SOBRE VOCÊ:
+${insights}`;
   }
 
   // === MEMORIES ===
   if (userContext?.memories?.length > 0) {
     const profileMem = userContext.memories.filter((m: any) => m.kind === 'profile').slice(0, 2);
     if (profileMem.length > 0) {
-      contextSections += `\nMEMÓRIAS: ${profileMem.map((m: any) => m.content.substring(0, 40)).join('; ')}`;
+      contextSections += `
+MEMÓRIAS: ${profileMem.map((m: any) => m.content.substring(0, 40)).join('; ')}`;
     }
   }
 
@@ -189,16 +246,33 @@ REGRAS DO ONBOARDING:
 ESTADO ATUAL DO ONBOARDING: ${userProfile?.onboarding_step || 'welcome'}
 ` : '';
 
-  return `Você é GUTA, a assistente pessoal superinteligente de ${nickname}. 
+  return `Você é GUTA, a assistente pessoal superinteligente de ${nickname}.
 Você é o CÉREBRO de um sistema multi-agente com capacidade de raciocínio avançado.
 
-PERSONALIDADE:
-- Elegante, sofisticado, levemente sarcástico (estilo Tony Stark)
-- Extremamente inteligente e sempre prestativo
-- Proativo e atencioso aos detalhes
+PERSONALIDADE (WestOS):
+- Competitiva, direta e sem infantilizar.
+- Humor ${humorTone} (ajuste conforme humor_level = ${humorLevel}).
+- Provocativa quando necessário, mas sempre respeitosa.
+
+WESTOS SUPERVISOR:
+- CHECKIN_REQUIRED: ${checkinRequired ? 'true' : 'false'}
+- Padrões sensíveis ativos: ${hasSensitivePatterns ? 'sim' : 'não'}
+- Se CHECKIN_REQUIRED=true: faça o check-in diário ANTES de qualquer outra ação.
+- Use create_daily_checkin para registrar (mesmo se o usuário disser "pular").
+- Perguntas do check-in (rápidas):
+  1) foco principal do dia (dominant_vector)
+  2) bloco nuclear feito? (sim/não)
+  3) conexão humana real? (sim/não)
+  4) dispersão/foco (0-3)
+  5) humor (0-10)
+  Nota opcional.
+- Se resposta parcial, peça só o que faltou.
+- Se o usuário pedir para pular: registre note "check-in pulado" e siga.
+- Se houver padrões sensíveis (emocional/relacional): peça CONSENTIMENTO antes de explorar.
+- Se o usuário aceitar ou recusar explorar, use update_westos_consent com consent_status "granted" ou "declined".
 
 REGRAS OBRIGATÓRIAS:
-1. RESPONDA a pergunta do usuário PRIMEIRO - nunca ignore
+1. Se CHECKIN_REQUIRED=false, responda a pergunta do usuário PRIMEIRO. Se CHECKIN_REQUIRED=true, faça o check-in antes de seguir.
 2. Respostas CURTAS: máximo 2-3 parágrafos
 3. NÃO repita informações já ditas na conversa
 4. Vá direto ao ponto
@@ -260,9 +334,9 @@ ANEXOS (OBRIGATÓRIO):
 - Se a data não estiver explícita, use hoje.
 - Áudio: use a transcrição como instrução principal.
 - PDF convertido em imagens deve ser tratado como imagem.
-${contextSections}
+${contextSections}${projectStructureInstruction}
 
-CAPACIDADES: Finanças (carteiras, transações, categorias, orçamentos, metas, transferências), Tarefas, Projetos, Eventos, Hábitos, Memórias, Lembretes.
+CAPACIDADES: Finanças (carteiras, transações, categorias, orçamentos, metas, transferências), Tarefas (módulo geral), Projetos (estrutura com etapas/subtarefas/checklist + tarefas vinculadas), Eventos, Hábitos, Memórias, Lembretes.
 
 FLUXO PARA DESPESAS:
 1. list_wallets (verificar se existe)
@@ -282,11 +356,15 @@ FLUXO PARA METAS:
 1. Use create_goal (nome + valor_meta, prazo opcional).
 
 FLUXO PARA PROJETOS:
-1. Para criar: use create_project (apenas título, a menos que o usuário forneça descrição explícita).
-2. NÃO crie tarefas/checklists/objetivos sem solicitação explícita.
-3. Para vincular tarefas: use add_task_to_project (crie tarefa se necessário).
-4. Para listar tarefas do projeto: use query_project_tasks.
-5. Para remover tarefas do projeto: use remove_task_from_project.
+1. Para criar projeto simples: use create_project (apenas título, a menos que o usuário forneça descrição explícita).
+2. Se o usuário descrever **estrutura de projeto** (etapas → subtarefas → checklist), use:
+   - create_project_stage (etapa)
+   - create_project_item (subtarefa)
+   - create_project_checklist_item (itens do checklist)
+   - NÃO use create_task/add_task_to_project nesse caso.
+3. Para tarefas vinculadas ao Kanban (opcional): use add_task_to_project (crie tarefa se necessário).
+4. Para listar tarefas vinculadas do projeto: use query_project_tasks.
+5. Para remover tarefas vinculadas: use remove_task_from_project.
 6. Para excluir projeto: use delete_project.
 
 FLUXO PARA TRANSFERÊNCIAS:
@@ -508,6 +586,35 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "get_westos_state",
+      description: "Retorna o estado atual do WestOS (ciclo ativo, último check-in e padrões).",
+      parameters: {
+        type: "object",
+        properties: {
+          include_patterns: { type: "boolean", description: "Incluir padrões ativos" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_westos_consent",
+      description: "Atualiza o consentimento do usuário para explorar padrões sensíveis do WestOS.",
+      parameters: {
+        type: "object",
+        properties: {
+          pattern_key: { type: "string", description: "Chave do padrão (opcional; usa o sensível mais recente se omitido)" },
+          consent_status: { type: "string", enum: ["granted", "declined"], description: "Consentimento do usuário" },
+        },
+        required: ["consent_status"],
+      },
+    },
+  },
   // === LISTAGENS ===
   {
     type: "function",
@@ -532,6 +639,27 @@ const TOOLS = [
     },
   },
   // === CRIAÇÕES ===
+  {
+    type: "function",
+    function: {
+      name: "create_daily_checkin",
+      description: "Registra ou atualiza o check-in diário WestOS.",
+      parameters: {
+        type: "object",
+        properties: {
+          dominant_vector: { type: "string", description: "Foco dominante do dia" },
+          nuclear_block_done: { type: "boolean", description: "Bloco nuclear concluído" },
+          human_connection_done: { type: "boolean", description: "Conexão humana feita" },
+          focus_drift: { type: "number", description: "Dispersão/foco (0-3)" },
+          mood: { type: "number", description: "Humor (0-10)" },
+          note: { type: "string", description: "Observações livres" },
+          checkin_date: { type: "string", description: "Data YYYY-MM-DD (default hoje)" },
+        },
+        required: [],
+      },
+    },
+  },
+
   {
     type: "function",
     function: {
@@ -562,6 +690,66 @@ const TOOLS = [
           status: { type: "string", enum: ["active", "completed", "archived"] },
         },
         required: ["title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_project_stage",
+      description: "Cria uma etapa (fase) dentro da estrutura do projeto.",
+      parameters: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", description: "ID ou nome do projeto" },
+          title: { type: "string", description: "Título da etapa" },
+          sort_order: { type: "number", description: "Ordem de exibição (opcional)" },
+          status: { type: "string", enum: ["open", "in_progress", "done"] },
+        },
+        required: ["project_id", "title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_project_item",
+      description: "Cria uma subtarefa dentro de uma etapa do projeto (estrutura interna).",
+      parameters: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", description: "ID ou nome do projeto" },
+          stage_id: { type: "string", description: "ID da etapa (opcional)" },
+          stage_title: { type: "string", description: "Nome da etapa (opcional)" },
+          title: { type: "string", description: "Título da subtarefa" },
+          description: { type: "string", description: "Descrição opcional" },
+          status: { type: "string", enum: ["open", "in_progress", "done"] },
+          priority: { type: "string", enum: ["low", "medium", "high"] },
+          due_at: { type: "string", description: "Data YYYY-MM-DD" },
+          sort_order: { type: "number", description: "Ordem de exibição (opcional)" },
+        },
+        required: ["project_id", "title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_project_checklist_item",
+      description: "Cria itens de checklist dentro de uma subtarefa de projeto. Use 'titles' para vários itens de uma vez.",
+      parameters: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", description: "ID ou nome do projeto" },
+          item_id: { type: "string", description: "ID da subtarefa (opcional)" },
+          item_title: { type: "string", description: "Título da subtarefa (opcional)" },
+          stage_id: { type: "string", description: "ID da etapa (opcional)" },
+          stage_title: { type: "string", description: "Nome da etapa (opcional)" },
+          title: { type: "string", description: "Título do checklist (use se for apenas 1)" },
+          titles: { type: "array", items: { type: "string" }, description: "Lista de itens do checklist" },
+          sort_order: { type: "number", description: "Ordem (opcional)" },
+        },
+        required: ["project_id"],
       },
     },
   },
@@ -1286,7 +1474,20 @@ const TOOLS = [
   },
 ];
 
-const BASE_TOOLS = [...TOOLS];
+const normalizeTool = (tool: any) => {
+  if (tool?.type === "function" && tool.function?.name) {
+    return {
+      type: "function",
+      name: tool.function.name,
+      description: tool.function.description,
+      parameters: tool.function.parameters,
+    };
+  }
+  return tool;
+};
+
+const BASE_TOOLS = TOOLS.map(normalizeTool);
+const TOOL_NAME_SET = new Set(BASE_TOOLS.map((tool: any) => tool.name).filter(Boolean));
 const WEB_SEARCH_TOOL = { type: "web_search" };
 const WEB_SEARCH_PREVIEW_TOOL = { type: "web_search_preview" };
 
@@ -1306,6 +1507,219 @@ function needsWebSearch(text: string) {
   return /(previs[aã]o|tempo|clima|pesquise|pesquisa|endere[cç]o|maps|waze|google maps|restaurante|praia|praias|ponto tur[ií]stico|hot[eé]is|hotel|voo|passagem|not[ií]cia|hoje|agora|melhores|melhor)/i.test(text || "");
 }
 
+function isProjectStructureRequest(text: string) {
+  const value = text || "";
+  const hasProjectWord = /(projeto|etapa|subtarefa|checklist|estrutura)/i.test(value);
+  const hasStructureWord = /(etapa|subtarefa|checklist|estrutura)/i.test(value);
+  return hasProjectWord && hasStructureWord;
+}
+type ParsedProjectStructure = {
+  projectTitle: string | null;
+  stages: Array<{
+    title: string;
+    items: Array<{ title: string; checklist: string[] }>;
+  }>;
+};
+
+function cleanStructureLabel(value: string): string {
+  return (value || "")
+    .replace(/^[-*\s]+/, "")
+    .replace(/^#+\s*/, "")
+    .replace(/^\"|\"$/g, "")
+    .replace(/^\'|\'$/g, "")
+    .replace(/\s*OK\s*$/i, "")
+    .replace(/,$/, "")
+    .replace(/:$/, "")
+    .trim();
+}
+
+function extractProjectTitle(text: string): string | null {
+  const lines = (text || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  let lastHeading: string | null = null;
+  for (const line of lines) {
+    const heading = line.match(/^#+\s*(.+)$/);
+    if (heading) lastHeading = cleanStructureLabel(heading[1]);
+  }
+  if (lastHeading) return lastHeading;
+
+  const direct = (text || "").match(/projeto\s+([\w\W]{2,80})/i);
+  if (direct) {
+    return cleanStructureLabel(direct[1].split("\n")[0]);
+  }
+  if (lines.length > 0 && lines[0].length <= 60 && !/[:.]/.test(lines[0])) {
+    return cleanStructureLabel(lines[0]);
+  }
+  return null;
+}
+
+function shouldIgnoreStructureLine(value: string): boolean {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return true;
+  const lowered = trimmed.toLowerCase();
+  const patterns = [
+    /conseguiu entender/i,
+    /e os dados que est[aã]o/i,
+    /dados que est[aã]o dentro/i,
+    /s[aã]o subtarefas/i,
+    /sao subtarefas/i,
+    /subtarefas da/i,
+    /subtarefa dentro/i,
+    /checklist que devem/i,
+    /checklist.*devem/i,
+    /é uma etapa/i,
+    /e uma etapa/i,
+    /etapa grande/i,
+    /para completar a subtarefa/i,
+    /para completar/i,
+  ];
+  return patterns.some((pattern) => pattern.test(lowered));
+}
+
+function getPrimaryLabel(value: string): string {
+  const cleaned = cleanStructureLabel(value);
+  if (!cleaned) return "";
+  const colonIndex = cleaned.indexOf(":");
+  if (colonIndex === -1) return cleaned;
+  const left = cleaned.slice(0, colonIndex);
+  return cleanStructureLabel(left) || cleaned;
+}
+
+function parseProjectStructure(text: string): ParsedProjectStructure | null {
+  const rawLinesAll = (text || "").replace(/\t/g, "  ").split(/\r?\n/);
+  let lastHeadingIndex = -1;
+  rawLinesAll.forEach((line, index) => {
+    if (/^#+\s*/.test(line.trim())) lastHeadingIndex = index;
+  });
+  const rawLines = lastHeadingIndex >= 0 ? rawLinesAll.slice(lastHeadingIndex + 1) : rawLinesAll;
+
+  const projectTitle = extractProjectTitle(text);
+  const stages: ParsedProjectStructure["stages"] = [];
+  let currentStage: ParsedProjectStructure["stages"][number] | null = null;
+  let currentItem: ParsedProjectStructure["stages"][number]["items"][number] | null = null;
+
+  const pushStage = (title: string) => {
+    const clean = getPrimaryLabel(title);
+    if (!clean) return null;
+    const stage = { title: clean, items: [] as Array<{ title: string; checklist: string[] }> };
+    stages.push(stage);
+    return stage;
+  };
+
+  const pushItem = (title: string) => {
+    if (!currentStage) return null;
+    const clean = getPrimaryLabel(title);
+    if (!clean) return null;
+    const item = { title: clean, checklist: [] as string[] };
+    currentStage.items.push(item);
+    return item;
+  };
+
+  const pushChecklist = (title: string) => {
+    if (!currentItem) return;
+    const clean = cleanStructureLabel(title);
+    if (!clean) return;
+    const leftSide = clean.split(":")[0].trim();
+    const finalTitle = cleanStructureLabel(leftSide || clean);
+    if (!finalTitle) return;
+    currentItem.checklist.push(finalTitle);
+  };
+
+  for (const line of rawLines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (/^#+\s*/.test(trimmed)) continue;
+    if (/^crie um novo projeto|^criar um novo projeto|^crie o projeto/i.test(trimmed)) continue;
+    if (shouldIgnoreStructureLine(trimmed)) continue;
+
+    const numbered = trimmed.match(/^\d+\.\s*(.+)$/);
+    if (numbered) {
+      currentStage = pushStage(numbered[1]);
+      currentItem = null;
+      continue;
+    }
+
+    if (trimmed.endsWith(":") && !/^[-*]/.test(trimmed)) {
+      const title = getPrimaryLabel(trimmed);
+      if (title) {
+        currentStage = pushStage(title);
+        currentItem = null;
+        continue;
+      }
+    }
+
+    const bullet = trimmed.match(/^[-*]\s+(.+)$/);
+    if (bullet) {
+      const contentRaw = bullet[1];
+      if (shouldIgnoreStructureLine(contentRaw)) continue;
+      const content = cleanStructureLabel(contentRaw);
+      if (!content) continue;
+
+      if (!currentStage) {
+        currentStage = pushStage(content);
+        currentItem = null;
+        continue;
+      }
+
+      if (!currentItem) {
+        currentItem = pushItem(content);
+        continue;
+      }
+
+      const looksChecklist = /[:=]/.test(contentRaw) || /^"/.test(contentRaw.trim()) || /^#/.test(contentRaw.trim());
+      if (looksChecklist) {
+        pushChecklist(contentRaw);
+      } else {
+        currentItem = pushItem(content);
+      }
+      continue;
+    }
+
+    const clean = cleanStructureLabel(trimmed);
+    if (!clean) continue;
+    if (shouldIgnoreStructureLine(clean)) continue;
+
+    if (currentStage && !currentItem) {
+      currentItem = pushItem(clean);
+      continue;
+    }
+
+    if (currentItem) {
+      pushChecklist(clean);
+    }
+  }
+
+  if (stages.length === 0) return null;
+  return { projectTitle, stages };
+}
+
+function buildProjectStructureSummary(stats: {
+  projectTitle: string;
+  projectCreated: boolean;
+  stagesCreated: string[];
+  itemsCreated: string[];
+  checklistCount: number;
+}): string {
+  const lines: string[] = [];
+  if (stats.projectCreated) {
+    lines.push("✅ Projeto \"" + stats.projectTitle + "\" criado.");
+  } else if (stats.projectTitle) {
+    lines.push("✅ Projeto \"" + stats.projectTitle + "\" atualizado.");
+  }
+  if (stats.stagesCreated.length) {
+    lines.push("✅ Etapas criadas: " + stats.stagesCreated.join(", ") + ".");
+  }
+  if (stats.itemsCreated.length) {
+    lines.push("✅ Subtarefas criadas: " + stats.itemsCreated.length + ".");
+  }
+  if (stats.checklistCount > 0) {
+    lines.push("✅ Checklist: " + stats.checklistCount + " item(ns) adicionados.");
+  }
+  if (lines.length === 0) {
+    lines.push("Nenhuma nova etapa ou subtarefa foi criada.");
+  }
+  return "Resumo:\n" + lines.map((line) => "- " + line).join("\n");
+}
+
 // ==================== HELPER: Safe JSON Parse ====================
 function safeJsonParse(jsonString: string, fallback: Record<string, unknown> = {}): Record<string, unknown> {
   try {
@@ -1314,6 +1728,200 @@ function safeJsonParse(jsonString: string, fallback: Record<string, unknown> = {
     console.error("JSON parse error:", e, "Input:", jsonString?.substring(0, 200));
     return fallback;
   }
+}
+
+
+type ToolRollbackAction = {
+  tool: string;
+  args: Record<string, unknown>;
+  label?: string;
+};
+
+type ToolExecutionResult = {
+  ok: boolean;
+  message: string;
+  data?: Record<string, unknown>;
+  error?: string;
+  error_type?: string;
+  needs_clarification?: boolean;
+  options?: Array<{ id: string; label: string }>;
+  rollback?: ToolRollbackAction[];
+};
+
+function stripJsonFence(value: string): string {
+  const trimmed = (value || "").trim();
+  if (trimmed.startsWith("```")) {
+    return trimmed
+      .replace(/^```[a-zA-Z]*\n?/, "")
+      .replace(/```\s*$/, "")
+      .trim();
+  }
+  return trimmed;
+}
+
+function isErrorMessage(message: string): boolean {
+  return /^Erro\b|não encontrada|não encontrado|inválid|falh|duplicata|já existe|não foi possível/i.test(message || "");
+}
+
+
+function normalizeToolExecutionResult(raw: any, toolName?: string): ToolExecutionResult {
+  if (!raw) {
+    return { ok: false, message: "Erro: resultado vazio", error: "Erro: resultado vazio" };
+  }
+  if (typeof raw === "string") {
+    const errorFlag = isErrorMessage(raw);
+    return {
+      ok: !errorFlag,
+      message: raw,
+      error: errorFlag ? raw : undefined,
+    };
+  }
+  if (typeof raw === "object" && typeof raw.message === "string") {
+    return {
+      ok: raw.ok !== false,
+      message: raw.message,
+      data: raw.data,
+      error: raw.error,
+      error_type: raw.error_type,
+      needs_clarification: raw.needs_clarification,
+      options: raw.options,
+      rollback: raw.rollback,
+    };
+  }
+  return { ok: true, message: String(raw), data: { tool: toolName } };
+}
+
+
+function shouldUsePlanner(message: string, hasImages: boolean, projectStructureMode: boolean): boolean {
+  const text = (message || "").trim();
+  if (!text) return false;
+  if (hasImages) return false;
+  if (projectStructureMode) return true;
+  if (needsWebSearch(text)) return false;
+  if (text.length < 12) return false;
+  if (/^(ok|sim|não|nao|obrigado|valeu|certo|isso|show|top|1|2|3)$/i.test(text)) return false;
+
+  const listLike = /\s*(\d+\.|-|\*)\s+/;
+  const connectors = /\b(e|tamb[eé]m|al[eé]m disso|alem disso|junto|mais)\b/i;
+  const actionKeywords = [
+    /tarefa/, /lembrete/, /projeto/, /evento/, /habito/, /mem[oó]ria/,
+    /transa[cç][aã]o|despesa|receita/, /transfer/, /carteira/, /categoria/, /or[cç]amento/, /meta/
+  ];
+  const actionCount = actionKeywords.reduce((sum, r) => sum + (r.test(text) ? 1 : 0), 0);
+
+  return listLike.test(text) || actionCount >= 2 || (actionCount >= 1 && connectors.test(text));
+}
+
+function buildPlannerInstructions(projectStructureMode: boolean): string {
+  const toolList = Array.from(TOOL_NAME_SET).sort().join(", ");
+  return `Você é o planejador interno da GUTA.
+
+Regras:
+- Responda SOMENTE com JSON válido (sem Markdown).
+- Formato: {"intents":[{"tool":"create_task","args":{...}}]}
+- Use apenas ferramentas desta lista: ${toolList}.
+- Não use web_search. Se precisar pesquisar, retorne {"intents":[]}
+- Não invente dados. Se faltar algo essencial, deixe o campo ausente.
+- Para create_task, sempre inclua "title".
+- Para create_reminder, sempre inclua "title" e "remind_at" (YYYY-MM-DDTHH:MM).
+- Se o usuário disser hoje/amanhã, você pode usar isso em remind_at (ex: "amanhã 09:00").
+- Se for estrutura de projeto, use create_project_stage/create_project_item/create_project_checklist_item e NÃO use create_task/add_task_to_project.
+- Se houver múltiplas ações, inclua TODAS em intents, na ordem correta.
+- Evite duplicar intents iguais.
+
+Modo estrutura de projeto: ${projectStructureMode ? 'ativo' : 'inativo'}.`;
+}
+
+function buildPlannerContext(userContext: any, history: any[]): string {
+  const wallets = (userContext?.wallets || []).map((w: any) => w.nome).slice(0, 8).join(", ");
+  const recentUser = (history || [])
+    .filter((m: any) => m.role === "user")
+    .slice(-3)
+    .map((m: any) => `- ${m.content}`)
+    .join("\n");
+
+  return [
+    `Carteiras: ${wallets || 'nenhuma'}.`,
+    `Últimas mensagens do usuário:\n${recentUser || '- (nenhuma)'}`,
+  ].join("\n");
+}
+
+async function planMultiIntent(
+  callOpenAI: (payload: any) => Promise<any>,
+  message: string,
+  userContext: any,
+  history: any[],
+  projectStructureMode: boolean
+): Promise<{ intents: Array<{ tool: string; args: Record<string, unknown> }>; raw: any } | null> {
+  try {
+    const instructions = buildPlannerInstructions(projectStructureMode);
+    const contextText = buildPlannerContext(userContext, history);
+    const payload = {
+      model: MODEL_FAST,
+      instructions,
+      input: [
+        {
+          role: "user",
+          content: `Mensagem:
+${message}
+
+Contexto:
+${contextText}`,
+        },
+      ],
+    };
+
+    const plannerData = await callOpenAI(payload);
+    const rawText = extractAssistantText(plannerData) || "";
+    const parsed = safeJsonParse(stripJsonFence(rawText), {});
+    if (!parsed || !Array.isArray(parsed.intents)) {
+      return null;
+    }
+
+    const intents = parsed.intents
+      .filter((intent: any) => intent && typeof intent.tool === "string")
+      .filter((intent: any) => TOOL_NAME_SET.has(intent.tool))
+      .map((intent: any) => ({
+        tool: intent.tool,
+        args: (intent.args || {}) as Record<string, unknown>,
+      }))
+      .slice(0, 10);
+
+    if (intents.length === 0) return null;
+
+    return { intents, raw: parsed };
+  } catch (error) {
+    console.error('[GUTA] Planner error:', error);
+    return null;
+  }
+}
+
+function buildPlannedSummary(
+  executions: Array<{ tool: string; result: ToolExecutionResult }>,
+  rollbackResults: ToolExecutionResult[]
+): string {
+  const summaryLines = executions.map(({ result }) => {
+    const icon = result.ok ? "✅" : "⚠️";
+    return `- ${icon} ${result.message}`;
+  });
+
+  const pendingLines = executions
+    .filter(({ result }) => result.needs_clarification)
+    .map(({ result }) => `- ${result.message}`);
+
+  const rollbackLines = rollbackResults.map((result) => {
+    const icon = result.ok ? "✅" : "⚠️";
+    return `- ${icon} ${result.message}`;
+  });
+
+  let summary = `Resumo:\n${summaryLines.join("\n") || "- (sem ações)"}`;
+  if (rollbackLines.length > 0) {
+    summary += `\n\nRollback:\n${rollbackLines.join("\n")}`;
+  }
+  if (pendingLines.length > 0) {
+    summary += `\n\nPendências:\n${pendingLines.join("\n")}`;
+  }
+  return summary;
 }
 
 // ==================== HELPER: Transcribe Audio with Whisper ====================
@@ -1461,6 +2069,10 @@ function extractFunctionCalls(aiData: any): any[] {
   return (aiData?.output || []).filter((item: any) => item.type === "function_call");
 }
 
+function getFunctionCallId(call: any): string | undefined {
+  return call?.call_id || call?.id;
+}
+
 // ==================== HELPER: Check if string is UUID ====================
 function isUUID(str: string): boolean {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -1473,7 +2085,7 @@ async function resolveCategoryId(
   userId: string,
   categoryInput: string,
   tipo: string
-): Promise<{ id: string | null; error: string | null }> {
+): Promise<{ id: string | null; error: string | null; options?: Array<{ id: string; label: string }> }> {
   // Already a UUID
   if (isUUID(categoryInput)) {
     return { id: categoryInput, error: null };
@@ -1506,12 +2118,19 @@ async function resolveCategoryId(
   // Multiple matches - require disambiguation
   const options = filtered
     .slice(0, 6)
-    .map((c: any, idx: number) => `${idx + 1}) ${c.nome} (${c.tipo})`)
+    .map((c: any) => ({ id: c.id, label: `${c.nome} (${c.tipo})` }));
+
+  const optionLines = options
+    .map((c: any, idx: number) => `${idx + 1}) ${c.label}`)
     .join("\n");
+
   console.log(`Multiple categories match "${categoryInput}":`, filtered.map((c: any) => c.nome));
   return {
     id: null,
-    error: `Encontrei várias categorias parecidas com "${categoryInput}":\n${options}\nResponda com o número ou o nome exato (ou selecione uma opção).`,
+    error: `Encontrei várias categorias parecidas com "${categoryInput}":
+${optionLines}
+Responda com o número ou o nome exato (ou selecione uma opção).`,
+    options,
   };
 }
 
@@ -1520,7 +2139,7 @@ async function resolveWalletId(
   supabase: any,
   userId: string,
   walletInput: string
-): Promise<{ id: string | null; error: string | null }> {
+): Promise<{ id: string | null; error: string | null; options?: Array<{ id: string; label: string }> }> {
   if (isUUID(walletInput)) {
     return { id: walletInput, error: null };
   }
@@ -1547,12 +2166,19 @@ async function resolveWalletId(
 
   const options = wallets
     .slice(0, 6)
-    .map((w: any, idx: number) => `${idx + 1}) ${w.nome}`)
+    .map((w: any) => ({ id: w.id, label: w.nome }));
+
+  const optionLines = options
+    .map((w: any, idx: number) => `${idx + 1}) ${w.label}`)
     .join("\n");
+
   console.log(`Multiple wallets match "${walletInput}":`, wallets.map((w: any) => w.nome));
   return {
     id: null,
-    error: `Encontrei várias carteiras parecidas com "${walletInput}":\n${options}\nResponda com o número ou o nome exato (ou selecione uma opção).`,
+    error: `Encontrei várias carteiras parecidas com "${walletInput}":
+${optionLines}
+Responda com o número ou o nome exato (ou selecione uma opção).`,
+    options,
   };
 }
 
@@ -1561,7 +2187,7 @@ async function resolveProjectId(
   supabase: any,
   tenantId: string,
   projectInput: string
-): Promise<{ id: string | null; error: string | null }> {
+): Promise<{ id: string | null; error: string | null; options?: Array<{ id: string; label: string }> }> {
   if (isUUID(projectInput)) {
     return { id: projectInput, error: null };
   }
@@ -1586,12 +2212,108 @@ async function resolveProjectId(
 
   const options = projects
     .slice(0, 6)
-    .map((p: any, idx: number) => `${idx + 1}) ${p.title} (${p.status})`)
+    .map((p: any) => ({ id: p.id, label: `${p.title} (${p.status})` }));
+
+  const optionLines = options
+    .map((p: any, idx: number) => `${idx + 1}) ${p.label}`)
     .join("\n");
 
   return {
     id: null,
-    error: `Encontrei vários projetos parecidos com "${projectInput}":\n${options}\nResponda com o número ou o nome exato (ou selecione uma opção).`,
+    error: `Encontrei vários projetos parecidos com "${projectInput}":
+${optionLines}
+Responda com o número ou o nome exato (ou selecione uma opção).`,
+    options,
+  };
+}
+
+
+// ==================== HELPER: Resolve project stage by name ====================
+async function resolveProjectStageId(
+  supabase: any,
+  tenantId: string,
+  projectId: string,
+  stageInput: string
+): Promise<{ id: string | null; error: string | null; options?: Array<{ id: string; label: string }> }> {
+  if (isUUID(stageInput)) {
+    return { id: stageInput, error: null };
+  }
+
+  const { data: stages, error } = await supabase
+    .from("ff_project_stages")
+    .select("id, title")
+    .eq("tenant_id", tenantId)
+    .eq("project_id", projectId)
+    .ilike("title", `%${stageInput}%`);
+
+  if (error) return { id: null, error: `Erro ao buscar etapas: ${error.message}` };
+  if (!stages || stages.length === 0) {
+    return { id: null, error: `Etapa "${stageInput}" não encontrada no projeto.` };
+  }
+  if (stages.length === 1) return { id: stages[0].id, error: null };
+
+  const options = stages
+    .slice(0, 5)
+    .map((stage: any) => ({ id: stage.id, label: stage.title }));
+
+  const optionLines = options
+    .map((stage: any, index: number) => `${index + 1}. ${stage.label}`)
+    .join("\n");
+
+  return {
+    id: null,
+    error: `Encontrei várias etapas parecidas com "${stageInput}":
+${optionLines}
+Responda com o nome exato (ou selecione uma opção).`,
+    options,
+  };
+}
+
+// ==================== HELPER: Resolve project item by name ====================
+async function resolveProjectItemId(
+  supabase: any,
+  tenantId: string,
+  projectId: string,
+  itemInput: string,
+  stageId?: string
+): Promise<{ id: string | null; error: string | null; options?: Array<{ id: string; label: string }> }> {
+  if (isUUID(itemInput)) {
+    return { id: itemInput, error: null };
+  }
+
+  let query = supabase
+    .from("ff_project_items")
+    .select("id, title, stage_id")
+    .eq("tenant_id", tenantId)
+    .eq("project_id", projectId)
+    .ilike("title", `%${itemInput}%`);
+
+  if (stageId) {
+    query = query.eq("stage_id", stageId);
+  }
+
+  const { data: items, error } = await query;
+
+  if (error) return { id: null, error: `Erro ao buscar subtarefas: ${error.message}` };
+  if (!items || items.length === 0) {
+    return { id: null, error: `Subtarefa "${itemInput}" não encontrada no projeto.` };
+  }
+  if (items.length === 1) return { id: items[0].id, error: null };
+
+  const options = items
+    .slice(0, 5)
+    .map((item: any) => ({ id: item.id, label: item.title }));
+
+  const optionLines = options
+    .map((item: any, index: number) => `${index + 1}. ${item.label}`)
+    .join("\n");
+
+  return {
+    id: null,
+    error: `Encontrei várias subtarefas parecidas com "${itemInput}":
+${optionLines}
+Responda com o nome exato (ou informe a etapa para desambiguar).`,
+    options,
   };
 }
 
@@ -1924,19 +2646,548 @@ async function unlinkTransactionFromStatement(
   }
 }
 
+// ==================== WESTOS HELPERS ====================
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number) {
+  const parsed = Number(value);
+  if (Number.isNaN(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+function toDateOnlyISO(input: string | Date) {
+  const date = typeof input === 'string' ? new Date(input) : input;
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
+    .toISOString()
+    .split('T')[0];
+}
+
+function diffDaysISO(from: string, to: string) {
+  const fromTime = new Date(from + 'T00:00:00Z').getTime();
+  const toTime = new Date(to + 'T00:00:00Z').getTime();
+  return Math.floor((toTime - fromTime) / DAY_MS);
+}
+
+
+type ReminderDateParseResult = {
+  value?: string;
+  error?: 'missing_time' | 'missing_date' | 'past';
+};
+
+function pad2(value: number) {
+  return String(value).padStart(2, '0');
+}
+
+function formatLocalDateTime(date: Date, hour: number, minute: number) {
+  const year = date.getFullYear();
+  const month = pad2(date.getMonth() + 1);
+  const day = pad2(date.getDate());
+  return `${year}-${month}-${day}T${pad2(hour)}:${pad2(minute)}`;
+}
+
+function extractTimeFromText(text: string): { hour: number; minute: number } | null {
+  const normalized = text.toLowerCase();
+  let match = normalized.match(/\b(\d{1,2})\s*[:h]\s*(\d{2})\b/);
+  if (match) {
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+      return { hour, minute };
+    }
+  }
+
+  match = normalized.match(/\b(\d{1,2})\s*h\b/);
+  if (match) {
+    const hour = Number(match[1]);
+    if (hour >= 0 && hour <= 23) {
+      return { hour, minute: 0 };
+    }
+  }
+
+  match = normalized.match(/\b(?:as|às)\s*(\d{1,2})\b/);
+  if (match) {
+    const hour = Number(match[1]);
+    if (hour >= 0 && hour <= 23) {
+      return { hour, minute: 0 };
+    }
+  }
+
+  return null;
+}
+
+function parseAbsoluteDateFromText(text: string, now: Date): Date | null {
+  const normalized = text.toLowerCase();
+  let match = normalized.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    return new Date(year, month - 1, day);
+  }
+
+  match = normalized.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
+  if (match) {
+    const day = Number(match[1]);
+    const month = Number(match[2]);
+    const year = Number(match[3]);
+    return new Date(year, month - 1, day);
+  }
+
+  match = normalized.match(/\b(\d{1,2})\/(\d{1,2})\b/);
+  if (match) {
+    const day = Number(match[1]);
+    const month = Number(match[2]);
+    let year = now.getFullYear();
+    let candidate = new Date(year, month - 1, day);
+    if (candidate.getTime() < now.getTime() - DAY_MS) {
+      year += 1;
+      candidate = new Date(year, month - 1, day);
+    }
+    return candidate;
+  }
+
+  return null;
+}
+
+function parseReminderDateTime(raw: string, now: Date): ReminderDateParseResult {
+  const value = (raw || '').trim();
+  if (!value) return { error: 'missing_date' };
+
+  const normalized = value.toLowerCase();
+  const time = extractTimeFromText(normalized);
+
+  if (/depois de amanh[aã]/.test(normalized)) {
+    if (!time) return { error: 'missing_time' };
+    const base = new Date(now);
+    base.setDate(base.getDate() + 2);
+    return { value: formatLocalDateTime(base, time.hour, time.minute) };
+  }
+
+  if (/amanh[aã]/.test(normalized)) {
+    if (!time) return { error: 'missing_time' };
+    const base = new Date(now);
+    base.setDate(base.getDate() + 1);
+    return { value: formatLocalDateTime(base, time.hour, time.minute) };
+  }
+
+  if (/\bhoje\b/.test(normalized)) {
+    if (!time) return { error: 'missing_time' };
+    return { value: formatLocalDateTime(now, time.hour, time.minute) };
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) {
+    const dt = new Date(value);
+    if (!Number.isNaN(dt.getTime()) && dt.getTime() < now.getTime() - 60 * 1000) {
+      return { error: 'past' };
+    }
+    return { value };
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}/.test(value)) {
+    const isoValue = value.replace(' ', 'T');
+    const dt = new Date(isoValue);
+    if (!Number.isNaN(dt.getTime()) && dt.getTime() < now.getTime() - 60 * 1000) {
+      return { error: 'past' };
+    }
+    return { value: isoValue };
+  }
+
+  const absoluteDate = parseAbsoluteDateFromText(normalized, now);
+  if (absoluteDate) {
+    if (!time) return { error: 'missing_time' };
+    const isoValue = formatLocalDateTime(absoluteDate, time.hour, time.minute);
+    const dt = new Date(isoValue);
+    if (!Number.isNaN(dt.getTime()) && dt.getTime() < now.getTime() - 60 * 1000) {
+      return { error: 'past' };
+    }
+    return { value: isoValue };
+  }
+
+  if (time) {
+    return { error: 'missing_date' };
+  }
+
+  return { error: 'missing_date' };
+}
+
+type CheckinDraft = {
+  dominant_vector?: string | null;
+  nuclear_block_done?: boolean;
+  human_connection_done?: boolean;
+  focus_drift?: number;
+  mood?: number;
+};
+
+function parseDominantVector(text: string): string | null {
+  const normalized = text.toLowerCase();
+  if (/(produtiv|trabalh|execu[cç][aã]o|foco)/.test(normalized)) return 'produtividade';
+  if (/(emoc|humor|ansied|estress|sentim)/.test(normalized)) return 'emocional';
+  if (/(relacion|social|famil|amig|pessoas|conex[aã]o)/.test(normalized)) return 'relacional';
+  if (/(fisic|sa[uú]de|corpo|energia|trein)/.test(normalized)) return 'fisico';
+  return null;
+}
+
+function parseYesNo(text: string): boolean | null {
+  const normalized = text.toLowerCase();
+  const yes = /\b(sim|s|fiz|feito|consegui|ok|claro|y)\b/.test(normalized);
+  const no = /\b(n[aã]o|nao|n|negativo|ainda n[aã]o|n[aã]o fiz|nao fiz)\b/.test(normalized);
+  if (yes && !no) return true;
+  if (no && !yes) return false;
+  return null;
+}
+
+function parseNumberInRange(text: string, min: number, max: number): number | null {
+  const match = text.match(/-?\d+/);
+  if (!match) return null;
+  const value = Number(match[0]);
+  if (Number.isNaN(value)) return null;
+  if (value < min || value > max) return null;
+  return value;
+}
+
+function getNextCheckinField(draft: CheckinDraft): keyof CheckinDraft | null {
+  if (!draft.dominant_vector) return 'dominant_vector';
+  if (draft.nuclear_block_done === undefined) return 'nuclear_block_done';
+  if (draft.human_connection_done === undefined) return 'human_connection_done';
+  if (draft.focus_drift === undefined) return 'focus_drift';
+  if (draft.mood === undefined) return 'mood';
+  return null;
+}
+
+function buildCheckinPrompt(field: keyof CheckinDraft | null): string {
+  if (!field) return 'Check-in rápido: responda para continuarmos.';
+  switch (field) {
+    case 'dominant_vector':
+      return 'Check-in rápido (1/5). Qual foi sua prioridade dominante hoje? (produtividade, emocional, relacional ou físico). Se preferir, digite "pular".';
+    case 'nuclear_block_done':
+      return 'Check-in rápido (2/5). Você fez o bloco nuclear hoje? (sim/não)';
+    case 'human_connection_done':
+      return 'Check-in rápido (3/5). Teve conexão humana significativa hoje? (sim/não)';
+    case 'focus_drift':
+      return 'Check-in rápido (4/5). Nível de deriva de foco de 0 a 3?';
+    case 'mood':
+      return 'Check-in rápido (5/5). Como está seu humor agora de 0 a 10?';
+    default:
+      return 'Check-in rápido: responda para continuarmos.';
+  }
+}
+
+async function updateWestosPreferences(
+  supabase: any,
+  tenantId: string,
+  userId: string,
+  currentPrefs: any,
+  westosPatch: Record<string, unknown>
+) {
+  const westosPrefs = { ...(currentPrefs?.westos || {}), ...westosPatch };
+  const nextPrefs = { ...(currentPrefs || {}), westos: westosPrefs };
+  await supabase
+    .from('ff_user_profiles')
+    .update({
+      preferences: nextPrefs,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId)
+    .eq('tenant_id', tenantId);
+  return nextPrefs;
+}
+
+async function saveDailyCheckin(
+  supabase: any,
+  tenantId: string,
+  userId: string,
+  args: Record<string, unknown>,
+  currentPrefs?: any
+) {
+  const checkinDate = toDateOnlyISO((args.checkin_date as string) || new Date());
+  const noteInput = typeof args.note === 'string' ? (args.note as string) : null;
+  const isSkip = noteInput ? /pular|skip/i.test(noteInput) : false;
+
+  const { data: existing } = await supabase
+    .from('ff_daily_checkins')
+    .select('dominant_vector, nuclear_block_done, human_connection_done, focus_drift, mood, note')
+    .eq('tenant_id', tenantId)
+    .eq('user_id', userId)
+    .eq('checkin_date', checkinDate)
+    .maybeSingle();
+
+  const payload = {
+    tenant_id: tenantId,
+    user_id: userId,
+    checkin_date: checkinDate,
+    dominant_vector: (args.dominant_vector as string) ?? existing?.dominant_vector ?? null,
+    nuclear_block_done: args.nuclear_block_done !== undefined
+      ? Boolean(args.nuclear_block_done)
+      : (existing?.nuclear_block_done ?? false),
+    human_connection_done: args.human_connection_done !== undefined
+      ? Boolean(args.human_connection_done)
+      : (existing?.human_connection_done ?? false),
+    focus_drift: args.focus_drift !== undefined
+      ? clampNumber(args.focus_drift, 0, 3, existing?.focus_drift ?? 0)
+      : (existing?.focus_drift ?? 0),
+    mood: args.mood !== undefined
+      ? clampNumber(args.mood, 0, 10, existing?.mood ?? 5)
+      : (existing?.mood ?? 5),
+    note: isSkip ? 'check-in pulado' : (noteInput ?? existing?.note ?? null),
+  };
+
+  const { error } = await supabase
+    .from('ff_daily_checkins')
+    .upsert(payload, { onConflict: 'tenant_id,user_id,checkin_date' });
+
+  if (error) return { ok: false, error: error.message };
+
+  let prefsToUse = currentPrefs;
+  if (!prefsToUse) {
+    const { data: currentProfile } = await supabase
+      .from('ff_user_profiles')
+      .select('preferences')
+      .eq('user_id', userId)
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+    prefsToUse = currentProfile?.preferences || {};
+  }
+
+  await updateWestosPreferences(supabase, tenantId, userId, prefsToUse, {
+    checkin_prompted_date: null,
+    checkin_draft: null,
+  });
+
+  return { ok: true };
+}
+
+async function handleCheckinFlow(
+  supabase: any,
+  tenantId: string,
+  userId: string,
+  userProfile: any,
+  message: string,
+  westosState: any,
+  checkinRequired: boolean
+) {
+  if (!checkinRequired || !userProfile) return { handled: false };
+
+  const text = (message || '').trim();
+  const currentPrefs = userProfile.preferences || {};
+  const westosPrefs = currentPrefs.westos || {};
+  let draft: CheckinDraft = westosPrefs.checkin_draft || {};
+
+  if (/^\s*(pular|skip)\b/i.test(text)) {
+    const saved = await saveDailyCheckin(
+      supabase,
+      tenantId,
+      userId,
+      { note: 'check-in pulado', checkin_date: westosState.today },
+      currentPrefs
+    );
+    if (!saved.ok) {
+      return { handled: true, reply: 'Tive um problema ao salvar seu check-in. Tente novamente.' };
+    }
+    return { handled: true, reply: 'Check-in de hoje foi pulado. Quer seguir com o que você precisava?' };
+  }
+
+  const currentField = getNextCheckinField(draft);
+  if (!currentField) {
+    const saved = await saveDailyCheckin(
+      supabase,
+      tenantId,
+      userId,
+      { ...draft, checkin_date: westosState.today },
+      currentPrefs
+    );
+    if (!saved.ok) {
+      return { handled: true, reply: 'Tive um problema ao salvar seu check-in. Tente novamente.' };
+    }
+    return { handled: true, reply: 'Check-in de hoje salvo. O que você precisa agora?' };
+  }
+
+  if (!text) {
+    await updateWestosPreferences(supabase, tenantId, userId, currentPrefs, {
+      checkin_prompted_date: westosState.today,
+      checkin_draft: draft,
+    });
+    return { handled: true, reply: buildCheckinPrompt(currentField) };
+  }
+
+  let parsedOk = false;
+  const updatedDraft: CheckinDraft = { ...draft };
+
+  switch (currentField) {
+    case 'dominant_vector': {
+      const dv = parseDominantVector(text);
+      if (dv) {
+        updatedDraft.dominant_vector = dv;
+        parsedOk = true;
+      }
+      break;
+    }
+    case 'nuclear_block_done': {
+      const val = parseYesNo(text);
+      if (val !== null) {
+        updatedDraft.nuclear_block_done = val;
+        parsedOk = true;
+      }
+      break;
+    }
+    case 'human_connection_done': {
+      const val = parseYesNo(text);
+      if (val !== null) {
+        updatedDraft.human_connection_done = val;
+        parsedOk = true;
+      }
+      break;
+    }
+    case 'focus_drift': {
+      const val = parseNumberInRange(text, 0, 3);
+      if (val !== null) {
+        updatedDraft.focus_drift = val;
+        parsedOk = true;
+      }
+      break;
+    }
+    case 'mood': {
+      const val = parseNumberInRange(text, 0, 10);
+      if (val !== null) {
+        updatedDraft.mood = val;
+        parsedOk = true;
+      }
+      break;
+    }
+    default:
+      parsedOk = false;
+  }
+
+  if (!parsedOk) {
+    return { handled: true, reply: buildCheckinPrompt(currentField) };
+  }
+
+  const nextField = getNextCheckinField(updatedDraft);
+  if (nextField) {
+    await updateWestosPreferences(supabase, tenantId, userId, currentPrefs, {
+      checkin_prompted_date: westosState.today,
+      checkin_draft: updatedDraft,
+    });
+    return { handled: true, reply: buildCheckinPrompt(nextField) };
+  }
+
+  const saved = await saveDailyCheckin(
+    supabase,
+    tenantId,
+    userId,
+    { ...updatedDraft, checkin_date: westosState.today },
+    currentPrefs
+  );
+  if (!saved.ok) {
+    return { handled: true, reply: 'Tive um problema ao salvar seu check-in. Tente novamente.' };
+  }
+  return { handled: true, reply: 'Check-in de hoje salvo. O que você precisa agora?' };
+}
+
+async function fetchWestosSnapshot(supabase: any, tenantId: string, userId: string) {
+  const today = toDateOnlyISO(new Date());
+
+  try {
+    const [checkinTodayResult, lastCheckinResult, cycleResult, patternsResult] = await Promise.all([
+      supabase
+        .from('ff_daily_checkins')
+        .select('id, checkin_date, dominant_vector, nuclear_block_done, human_connection_done, focus_drift, mood, note')
+        .eq('tenant_id', tenantId)
+        .eq('user_id', userId)
+        .eq('checkin_date', today)
+        .maybeSingle(),
+      supabase
+        .from('ff_daily_checkins')
+        .select('id, checkin_date, dominant_vector, nuclear_block_done, human_connection_done, focus_drift, mood, note')
+        .eq('tenant_id', tenantId)
+        .eq('user_id', userId)
+        .order('checkin_date', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('ff_cycles')
+        .select('id, start_date, end_date, primary_metric, score_total, tier, notes')
+        .eq('tenant_id', tenantId)
+        .eq('user_id', userId)
+        .lte('start_date', today)
+        .gte('end_date', today)
+        .order('start_date', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('ff_behavior_patterns')
+        .select('id, pattern_key, pattern_type, severity, last_seen_at, evidence')
+        .eq('tenant_id', tenantId)
+        .eq('user_id', userId)
+        .eq('is_active', true),
+    ]);
+
+    const checkinToday = checkinTodayResult.data || null;
+    const lastCheckin = lastCheckinResult.data || null;
+    const lastCheckinDaysAgo = lastCheckin?.checkin_date
+      ? diffDaysISO(lastCheckin.checkin_date, today)
+      : null;
+
+    return {
+      today,
+      checkin_today: checkinToday,
+      last_checkin: lastCheckin,
+      last_checkin_days_ago: lastCheckinDaysAgo,
+      cycle: cycleResult.data || null,
+      patterns: patternsResult.data || [],
+      checkin_required: !checkinToday,
+    };
+  } catch (error) {
+    console.error('[GUTA] WestOS snapshot error', error);
+    return {
+      today,
+      checkin_today: null,
+      last_checkin: null,
+      last_checkin_days_ago: null,
+      cycle: null,
+      patterns: [],
+      checkin_required: false,
+    };
+  }
+}
+
 // ==================== TOOL EXECUTION ====================
 async function executeTool(
   toolName: string,
   args: Record<string, unknown>,
   supabase: any,
   tenantId: string,
-  userId: string
-): Promise<string> {
+  userId: string,
+  context?: { projectStructureMode?: boolean; returnStructured?: boolean; userMessage?: string }
+): Promise<any> {
   const today = new Date().toISOString().split("T")[0];
+  const projectStructureMode = Boolean(context?.projectStructureMode);
   const startOfWeek = new Date();
   startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
   const endOfWeek = new Date(startOfWeek);
   endOfWeek.setDate(endOfWeek.getDate() + 6);
+
+  const returnStructured = Boolean(context?.returnStructured);
+
+  const okResult = (message: string, data?: Record<string, unknown>, rollback?: ToolRollbackAction[]) => {
+    if (!returnStructured) return message;
+    return { ok: true, message, data, rollback };
+  };
+
+  const errorResult = (
+    message: string,
+    options?: Array<{ id: string; label: string }>,
+    errorType?: string
+  ) => {
+    if (!returnStructured) return message;
+    return {
+      ok: false,
+      message,
+      error: message,
+      error_type: errorType,
+      needs_clarification: errorType === "disambiguation" || errorType === "missing_fields",
+      options,
+    };
+  };
 
   switch (toolName) {
     // ==================== CONSULTAS ====================
@@ -2024,12 +3275,14 @@ async function executeTool(
       const projectInput = args.project_id as string;
       if (!projectInput) return "Projeto é obrigatório.";
 
-      const { id: projectId, error: projectError } = await resolveProjectId(
+      const { id: projectId, error: projectError, options: projectOptions } = await resolveProjectId(
         supabase,
         tenantId,
         projectInput
       );
-      if (projectError) return projectError;
+      if (projectError) {
+        return errorResult(projectError, projectOptions, projectOptions?.length ? "disambiguation" : undefined);
+      }
       if (!projectId) return "Projeto inválido. Use query_projects para ver os disponíveis.";
 
       const { data, error } = await supabase
@@ -2570,6 +3823,35 @@ async function executeTool(
       );
     }
 
+    case "get_westos_state": {
+      const includePatterns = args.include_patterns !== false;
+      const snapshot = await fetchWestosSnapshot(supabase, tenantId, userId);
+      const lastCheckin = snapshot.last_checkin;
+      const daysAgo = lastCheckin?.checkin_date ? diffDaysISO(lastCheckin.checkin_date, snapshot.today) : null;
+      const patterns = includePatterns
+        ? (snapshot.patterns || []).map((p: any) => ({
+            pattern_key: p.pattern_key,
+            pattern_type: p.pattern_type,
+            severity: p.severity,
+            last_seen_at: p.last_seen_at,
+            evidence: p.evidence,
+          }))
+        : [];
+
+      return JSON.stringify({
+        today: snapshot.today,
+        checkin_required: snapshot.checkin_required,
+        cycle: snapshot.cycle,
+        last_checkin: lastCheckin
+          ? {
+              ...lastCheckin,
+              days_ago: daysAgo,
+            }
+          : null,
+        patterns,
+      });
+    }
+
     // ==================== LISTAGENS ====================
     case "list_wallets": {
       const { data, error } = await supabase
@@ -2633,14 +3915,99 @@ async function executeTool(
     }
 
     // ==================== CRIAÇÕES ====================
+    case "create_daily_checkin": {
+      const result = await saveDailyCheckin(supabase, tenantId, userId, {
+        checkin_date: args.checkin_date as string,
+        dominant_vector: args.dominant_vector as string,
+        nuclear_block_done: args.nuclear_block_done as boolean,
+        human_connection_done: args.human_connection_done as boolean,
+        focus_drift: args.focus_drift as number,
+        mood: args.mood as number,
+        note: args.note as string,
+      });
+
+      if (!result.ok) return 'Erro: ' + result.error;
+
+      return 'Check-in diário registrado.';
+    }
+
+    case "update_westos_consent": {
+      const consentStatus = (args.consent_status as string | undefined) || '';
+      if (consentStatus !== 'granted' && consentStatus !== 'declined') {
+        return 'Consent_status inválido. Use granted ou declined.';
+      }
+
+      const patternKey = (args.pattern_key as string | undefined)?.trim();
+      let pattern: any = null;
+
+      if (patternKey) {
+        const { data: found, error } = await supabase
+          .from('ff_behavior_patterns')
+          .select('id, pattern_key, evidence')
+          .eq('tenant_id', tenantId)
+          .eq('user_id', userId)
+          .eq('pattern_key', patternKey)
+          .maybeSingle();
+        if (error) return `Erro: ${error.message}`;
+        pattern = found;
+      } else {
+        const { data: found, error } = await supabase
+          .from('ff_behavior_patterns')
+          .select('id, pattern_key, evidence')
+          .eq('tenant_id', tenantId)
+          .eq('user_id', userId)
+          .eq('is_active', true)
+          .in('pattern_type', ['emotional', 'relational'])
+          .order('last_seen_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (error) return `Erro: ${error.message}`;
+        pattern = found;
+      }
+
+      if (!pattern?.id) return 'Nenhum padrão sensível ativo para consentimento.';
+
+      const now = new Date().toISOString();
+      const prevEvidence = (pattern.evidence as Record<string, unknown>) || {};
+      const newEvidence = {
+        ...prevEvidence,
+        consent_status: consentStatus,
+        consent_updated_at: now,
+      };
+
+      const { error: updateError } = await supabase
+        .from('ff_behavior_patterns')
+        .update({ evidence: newEvidence, updated_at: now })
+        .eq('id', pattern.id);
+
+      if (updateError) return `Erro: ${updateError.message}`;
+
+      return consentStatus === 'granted'
+        ? 'Consentimento registrado. Podemos explorar quando quiser.'
+        : 'Consentimento registrado. Vou respeitar isso por aqui.';
+    }
+
     case "create_task": {
+      if (projectStructureMode) {
+        return "Este pedido descreve estrutura de projeto. Não vou criar tarefa no módulo geral. Use create_project_stage/item/checklist.";
+      }
+
+      const taskTitle = typeof args.title === "string" ? args.title.trim() : "";
+      if (!taskTitle) {
+        return errorResult(
+          "Preciso do título da tarefa. Ex: \"crie a tarefa Revisar contrato\".",
+          undefined,
+          "missing_fields"
+        );
+      }
+
       const { data, error } = await supabase
         .from("ff_tasks")
         .insert({
           tenant_id: tenantId,
           created_by: userId,
-          title: args.title,
-          description: args.description || null,
+          title: taskTitle,
+          description: typeof args.description === "string" ? args.description : null,
           priority: args.priority || "medium",
           due_at: args.due_at || null,
           status: "open",
@@ -2650,8 +4017,12 @@ async function executeTool(
         .select()
         .single();
 
-      if (error) return `Erro: ${error.message}`;
-      return `Tarefa "${data.title}" criada!`;
+      if (error) return errorResult(`Erro: ${error.message}`);
+      return okResult(
+        `Tarefa "${data.title}" criada!`,
+        { id: data.id, title: data.title, entity: "task" },
+        [{ tool: "delete_task", args: { task_id: data.id } }]
+      );
     }
 
     case "create_project": {
@@ -2667,23 +4038,190 @@ async function executeTool(
         .select()
         .single();
 
-      if (error) return `Erro: ${error.message}`;
-      return `Projeto "${data.title}" criado!`;
+      if (error) return errorResult(`Erro: ${error.message}`);
+      return okResult(
+        `Projeto "${data.title}" criado!`,
+        { id: data.id, title: data.title, entity: "project" },
+        [{ tool: "delete_project", args: { project_id: data.id } }]
+      );
     }
 
-    case "add_task_to_project": {
+    case "create_project_stage": {
       const projectInput = args.project_id as string;
       if (!projectInput) return "Projeto é obrigatório.";
 
-      const { id: projectId, error: projectError } = await resolveProjectId(
+      const { id: projectId, error: projectError, options: projectOptions } = await resolveProjectId(
         supabase,
         tenantId,
         projectInput
       );
-      if (projectError) return projectError;
+      if (projectError) {
+        return errorResult(projectError, projectOptions, projectOptions?.length ? "disambiguation" : undefined);
+      }
+      if (!projectId) return "Projeto inválido. Use query_projects para ver os disponíveis.";
+
+      const { data, error } = await supabase
+        .from("ff_project_stages")
+        .insert({
+          tenant_id: tenantId,
+          project_id: projectId,
+          title: args.title,
+          sort_order: args.sort_order ?? 0,
+          status: args.status || "open",
+        })
+        .select()
+        .single();
+
+      if (error) return errorResult(`Erro: ${error.message}`);
+      return okResult(
+        `Etapa "${data.title}" criada!`,
+        { id: data.id, title: data.title, entity: "project_stage", project_id: projectId }
+      );
+    }
+
+    case "create_project_item": {
+      const projectInput = args.project_id as string;
+      if (!projectInput) return "Projeto é obrigatório.";
+
+      const { id: projectId, error: projectError, options: projectOptions } = await resolveProjectId(
+        supabase,
+        tenantId,
+        projectInput
+      );
+      if (projectError) {
+        return errorResult(projectError, projectOptions, projectOptions?.length ? "disambiguation" : undefined);
+      }
+      if (!projectId) return "Projeto inválido. Use query_projects para ver os disponíveis.";
+
+      const stageInput = (args.stage_id as string) || (args.stage_title as string) || (args.stage as string);
+      if (!stageInput) {
+        return "Informe a etapa (stage_id ou stage_title) para criar a subtarefa.";
+      }
+
+      const { id: stageId, error: stageError, options: stageOptions } = await resolveProjectStageId(
+        supabase,
+        tenantId,
+        projectId,
+        stageInput
+      );
+      if (stageError) {
+        return errorResult(stageError, stageOptions, stageOptions?.length ? "disambiguation" : undefined);
+      }
+      if (!stageId) return "Etapa inválida.";
+
+      const { data, error } = await supabase
+        .from("ff_project_items")
+        .insert({
+          tenant_id: tenantId,
+          project_id: projectId,
+          stage_id: stageId,
+          title: args.title,
+          description: args.description || null,
+          status: args.status || "open",
+          priority: args.priority || "medium",
+          due_at: args.due_at || null,
+          sort_order: args.sort_order ?? 0,
+        })
+        .select()
+        .single();
+
+      if (error) return errorResult(`Erro: ${error.message}`);
+      return okResult(
+        `Subtarefa "${data.title}" criada!`,
+        { id: data.id, title: data.title, entity: "project_item", project_id: projectId, stage_id: stageId }
+      );
+    }
+
+    case "create_project_checklist_item": {
+      const projectInput = args.project_id as string;
+      if (!projectInput) return "Projeto é obrigatório.";
+
+      const { id: projectId, error: projectError, options: projectOptions } = await resolveProjectId(
+        supabase,
+        tenantId,
+        projectInput
+      );
+      if (projectError) {
+        return errorResult(projectError, projectOptions, projectOptions?.length ? "disambiguation" : undefined);
+      }
+      if (!projectId) return "Projeto inválido. Use query_projects para ver os disponíveis.";
+
+      const stageInput = (args.stage_id as string) || (args.stage_title as string) || (args.stage as string) || undefined;
+      let stageId;
+      if (stageInput) {
+        const { id: resolvedStageId, error: stageError, options: stageOptions } = await resolveProjectStageId(
+          supabase,
+          tenantId,
+          projectId,
+          stageInput
+        );
+        if (stageError) {
+          return errorResult(stageError, stageOptions, stageOptions?.length ? "disambiguation" : undefined);
+        }
+        stageId = resolvedStageId || undefined;
+      }
+
+      const itemInput = (args.item_id as string) || (args.item_title as string) || (args.item as string);
+      if (!itemInput) {
+        return "Informe a subtarefa (item_id ou item_title) para criar checklist.";
+      }
+
+      const { id: itemId, error: itemError, options: itemOptions } = await resolveProjectItemId(
+        supabase,
+        tenantId,
+        projectId,
+        itemInput,
+        stageId
+      );
+      if (itemError) {
+        return errorResult(itemError, itemOptions, itemOptions?.length ? "disambiguation" : undefined);
+      }
+      if (!itemId) return "Subtarefa inválida.";
+
+      const titles = Array.isArray(args.titles) ? args.titles : [];
+      const singleTitle = (args.title as string) || "";
+      const checklistTitles = titles.length > 0 ? titles : singleTitle ? [singleTitle] : [];
+      if (checklistTitles.length === 0) {
+        return "Informe title ou titles para criar checklist.";
+      }
+
+      const payload = checklistTitles.map((title, index) => ({
+        tenant_id: tenantId,
+        project_item_id: itemId,
+        title,
+        sort_order: typeof args.sort_order === "number" ? args.sort_order + index : index,
+      }));
+
+      const { error } = await supabase
+        .from("ff_project_checklist_items")
+        .insert(payload);
+
+      if (error) return errorResult(`Erro: ${error.message}`);
+      return okResult(
+        `Checklist criada (${checklistTitles.length} item(ns)).`,
+        { count: checklistTitles.length, entity: "project_checklist" }
+      );
+    }
+
+    case "add_task_to_project": {
+      if (projectStructureMode) {
+        return "Este pedido descreve estrutura de projeto. Não vou criar tarefas vinculadas no Kanban. Use create_project_stage/item/checklist.";
+      }
+      const projectInput = args.project_id as string;
+      if (!projectInput) return "Projeto é obrigatório.";
+
+      const { id: projectId, error: projectError, options: projectOptions } = await resolveProjectId(
+        supabase,
+        tenantId,
+        projectInput
+      );
+      if (projectError) {
+        return errorResult(projectError, projectOptions, projectOptions?.length ? "disambiguation" : undefined);
+      }
       if (!projectId) return "Projeto inválido. Use query_projects para ver os disponíveis.";
 
       let taskId = args.task_id as string | undefined;
+      let createdTaskId: string | null = null;
 
       if (!taskId) {
         const taskTitle = args.task_title as string | undefined;
@@ -2707,8 +4245,9 @@ async function executeTool(
           .select("id, title")
           .single();
 
-        if (taskError) return `Erro: ${taskError.message}`;
+        if (taskError) return errorResult(`Erro: ${taskError.message}`);
         taskId = createdTask.id;
+        createdTaskId = createdTask.id;
       }
 
       const { error: linkError } = await supabase
@@ -2721,34 +4260,108 @@ async function executeTool(
 
       if (linkError) {
         if (linkError.code === "23505") {
-          return "Essa tarefa já está vinculada ao projeto.";
+          return errorResult("Essa tarefa já está vinculada ao projeto.");
         }
-        return `Erro: ${linkError.message}`;
+        return errorResult(`Erro: ${linkError.message}`);
       }
 
-      return "Tarefa vinculada ao projeto com sucesso.";
+      const rollback: ToolRollbackAction[] = [
+        { tool: "remove_task_from_project", args: { project_id: projectId, task_id: taskId } },
+      ];
+      if (createdTaskId) {
+        rollback.push({ tool: "delete_task", args: { task_id: createdTaskId } });
+      }
+
+      return okResult(
+        "Tarefa vinculada ao projeto com sucesso.",
+        { project_id: projectId, task_id: taskId, created_task_id: createdTaskId || undefined },
+        rollback
+      );
     }
 
     case "create_reminder": {
+      const reminderTitle = typeof args.title === "string" ? args.title.trim() : "";
+      const remindAtInput = typeof args.remind_at === "string" ? args.remind_at.trim() : "";
+
+      if (!reminderTitle && !remindAtInput) {
+        return errorResult(
+          "Preciso do título e do horário do lembrete. Ex: \"me lembre de pagar o aluguel amanhã às 09:00\".",
+          undefined,
+          "missing_fields"
+        );
+      }
+      if (!reminderTitle) {
+        return errorResult(
+          "Qual o título do lembrete? Ex: \"pagar o aluguel\".",
+          undefined,
+          "missing_fields"
+        );
+      }
+      if (!remindAtInput) {
+        return errorResult(
+          "Qual a data e hora do lembrete? Ex: \"2026-02-23 09:00\".",
+          undefined,
+          "missing_fields"
+        );
+      }
+
+      let parsed = parseReminderDateTime(remindAtInput, new Date());
+      const fallbackMessage = typeof context?.userMessage === "string" ? context.userMessage : "";
+
+      if ((!parsed.value || parsed.error === 'past') && fallbackMessage) {
+        const fallbackParsed = parseReminderDateTime(fallbackMessage, new Date());
+        if (fallbackParsed.value) {
+          parsed = fallbackParsed;
+        }
+      }
+
+      if (!parsed.value) {
+        if (parsed.error == 'missing_time') {
+          return errorResult(
+            "Qual o horário do lembrete? Ex: \"amanhã às 09:00\".",
+            undefined,
+            "missing_fields"
+          );
+        }
+        if (parsed.error == 'past') {
+          return errorResult(
+            "A data/hora informada já passou. Informe uma nova data para o lembrete.",
+            undefined,
+            "missing_fields"
+          );
+        }
+        return errorResult(
+          "Qual a data do lembrete? Ex: \"amanhã às 09:00\".",
+          undefined,
+          "missing_fields"
+        );
+      }
+
+      const remindAt = parsed.value;
+
       const { data, error } = await supabase
         .from("ff_reminders")
         .insert({
           tenant_id: tenantId,
           created_by: userId,
-          title: args.title,
-          remind_at: args.remind_at,
+          title: reminderTitle,
+          remind_at: remindAt,
           channel: args.channel || "push",
           status: "pending",
         })
         .select()
         .single();
 
-      if (error) return `Erro: ${error.message}`;
-      return `Lembrete "${data.title}" criado para ${new Date(data.remind_at).toLocaleString("pt-BR")}!`;
+      if (error) return errorResult(`Erro: ${error.message}`);
+      return okResult(
+        `Lembrete "${data.title}" criado para ${new Date(data.remind_at).toLocaleString("pt-BR")}!`,
+        { id: data.id, title: data.title, entity: "reminder" },
+        [{ tool: "delete_reminder", args: { reminder_id: data.id } }]
+      );
     }
 
     case "create_memory": {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("ff_memory_items")
         .insert({
           tenant_id: tenantId,
@@ -2758,10 +4371,16 @@ async function executeTool(
           title: args.title || null,
           source: "jarvis",
           metadata: {},
-        });
+        })
+        .select("id")
+        .single();
 
-      if (error) return `Erro: ${error.message}`;
-      return `Informação salva na memória!`;
+      if (error) return errorResult(`Erro: ${error.message}`);
+      return okResult(
+        `Informação salva na memória!`,
+        { id: data?.id, entity: "memory" },
+        data?.id ? [{ tool: "delete_memory", args: { memory_id: data.id } }] : undefined
+      );
     }
 
     case "create_category": {
@@ -2777,12 +4396,16 @@ async function executeTool(
 
       if (error) {
         if (error.code === "23505") {
-          return `Já existe uma categoria com o nome "${args.nome}".`;
+          return errorResult(`Já existe uma categoria com o nome "${args.nome}".`);
         }
-        return `Erro: ${error.message}`;
+        return errorResult(`Erro: ${error.message}`);
       }
 
-      return `Categoria "${data.nome}" criada!`;
+      return okResult(
+        `Categoria "${data.nome}" criada!`,
+        { id: data.id, nome: data.nome, entity: "category" },
+        [{ tool: "delete_category", args: { category_id: data.id } }]
+      );
     }
 
     case "create_budget": {
@@ -2802,13 +4425,15 @@ async function executeTool(
 
       let categoryId = categoryInput;
       if (!isUUID(categoryInput)) {
-        const { id: resolvedId, error: categoryError } = await resolveCategoryId(
+        const { id: resolvedId, error: categoryError, options: categoryOptions } = await resolveCategoryId(
           supabase,
           userId,
           categoryInput,
           "despesa"
         );
-        if (categoryError) return categoryError;
+        if (categoryError) {
+          return errorResult(categoryError, categoryOptions, categoryOptions?.length ? "disambiguation" : undefined);
+        }
         if (!resolvedId) return "Categoria inválida. Use list_categories para escolher uma.";
         categoryId = resolvedId;
       }
@@ -2824,7 +4449,7 @@ async function executeTool(
         .maybeSingle();
 
       if (existing) {
-        return "Já existe um orçamento para esta categoria neste mês.";
+        return errorResult("Já existe um orçamento para esta categoria neste mês.");
       }
 
       const budgetData: any = {
@@ -2844,10 +4469,14 @@ async function executeTool(
         .select()
         .single();
 
-      if (error) return `Erro: ${error.message}`;
+      if (error) return errorResult(`Erro: ${error.message}`);
 
       const periodo = `${ano}-${String(mes).padStart(2, "0")}`;
-      return `Orçamento criado para ${periodo}! Limite: R$ ${Number(data.limite_valor).toFixed(2)}`;
+      return okResult(
+        `Orçamento criado para ${periodo}! Limite: R$ ${Number(data.limite_valor).toFixed(2)}`,
+        { id: data.id, entity: "budget", periodo },
+        [{ tool: "delete_budget", args: { budget_id: data.id } }]
+      );
     }
 
     case "create_goal": {
@@ -2867,8 +4496,12 @@ async function executeTool(
         .select()
         .single();
 
-      if (error) return `Erro: ${error.message}`;
-      return `Meta "${data.nome}" criada! Alvo: R$ ${Number(data.valor_meta).toFixed(2)}`;
+      if (error) return errorResult(`Erro: ${error.message}`);
+      return okResult(
+        `Meta "${data.nome}" criada! Alvo: R$ ${Number(data.valor_meta).toFixed(2)}`,
+        { id: data.id, nome: data.nome, entity: "goal" },
+        [{ tool: "delete_goal", args: { goal_id: data.id } }]
+      );
     }
 
     case "add_goal_contribution": {
@@ -2909,10 +4542,14 @@ async function executeTool(
         .select()
         .single();
 
-      if (error) return `Erro: ${error.message}`;
+      if (error) return errorResult(`Erro: ${error.message}`);
       
       const tipoLabel = data.tipo === "cartao" ? "Cartão" : "Conta";
-      return `${tipoLabel} "${data.nome}" criado!${data.saldo_inicial ? ` Saldo: R$ ${data.saldo_inicial.toFixed(2)}` : ''}`;
+      return okResult(
+        `${tipoLabel} "${data.nome}" criado!${data.saldo_inicial ? ` Saldo: R$ ${data.saldo_inicial.toFixed(2)}` : ''}`,
+        { id: data.id, nome: data.nome, entity: "wallet" },
+        [{ tool: "delete_wallet", args: { wallet_id: data.id } }]
+      );
     }
 
     case "create_transaction": {
@@ -2930,7 +4567,7 @@ async function executeTool(
         );
 
       if (Number.isNaN(valor)) {
-        return "Valor inválido. Informe um número válido.";
+        return errorResult("Valor inválido. Informe um número válido.");
       }
 
       const fetchLatestWallet = async () => {
@@ -2946,13 +4583,13 @@ async function executeTool(
       };
 
       if (walletId) {
-        const { id: resolvedId, error: walletError } = await resolveWalletId(
+        const { id: resolvedId, error: walletError, options: walletOptions } = await resolveWalletId(
           supabase,
           userId,
           walletId
         );
         if (walletError) {
-          return walletError;
+          return errorResult(walletError, walletOptions, walletOptions?.length ? "disambiguation" : undefined);
         }
         walletId = resolvedId || walletId;
       }
@@ -2960,7 +4597,7 @@ async function executeTool(
       if (!walletId) {
         const wallet = await fetchLatestWallet();
         if (!wallet) {
-          return "Erro: Nenhuma carteira cadastrada. Crie uma primeiro com create_wallet.";
+          return errorResult("Erro: Nenhuma carteira cadastrada. Crie uma primeiro com create_wallet.");
         }
         walletId = wallet.id;
       }
@@ -2969,7 +4606,7 @@ async function executeTool(
       let categoryNote = "";
 
       if (args.category_id && !isCategoryTypeToken) {
-        const { id: resolvedId, error: categoryError } = await resolveCategoryId(
+        const { id: resolvedId, error: categoryError, options: categoryOptions } = await resolveCategoryId(
           supabase,
           userId,
           args.category_id as string,
@@ -2977,7 +4614,7 @@ async function executeTool(
         );
 
         if (categoryError) {
-          return categoryError;
+          return errorResult(categoryError, categoryOptions, categoryOptions?.length ? "disambiguation" : undefined);
         }
         resolvedCategoryId = resolvedId;
       } else {
@@ -2988,14 +4625,14 @@ async function executeTool(
           tipo
         );
         if (!suggestion) {
-          return "Categoria é obrigatória. Use list_categories para escolher uma.";
+          return errorResult("Categoria é obrigatória. Use list_categories para escolher uma.");
         }
         resolvedCategoryId = suggestion.id;
         categoryNote = ` Categoria sugerida: ${suggestion.nome}.`;
       }
 
       if (!resolvedCategoryId) {
-        return "Categoria inválida. Use list_categories para escolher uma.";
+        return errorResult("Categoria inválida. Use list_categories para escolher uma.");
       }
 
       // Check for duplicates
@@ -3010,7 +4647,11 @@ async function executeTool(
       );
 
       if (isDuplicate) {
-        return `Já existe uma ${tipo} de R$ ${valor.toFixed(2)} na mesma data e carteira. Não criei duplicata.`;
+        return errorResult(
+          `Já existe uma ${tipo} de R$ ${valor.toFixed(2)} na mesma data e carteira. Não criei duplicata.`,
+          undefined,
+          "duplicate"
+        );
       }
 
       const mesReferencia = transactionDate.slice(0, 7);
@@ -3038,7 +4679,7 @@ async function executeTool(
       if (error?.code === '23503') {
         console.log("FK violation, retrying...");
         await new Promise(r => setTimeout(r, 500));
-        
+
         const freshWallet = await fetchLatestWallet();
         if (freshWallet) {
           const retryResult = await supabase
@@ -3046,13 +4687,13 @@ async function executeTool(
             .insert({ ...transactionData, wallet_id: freshWallet.id })
             .select(`*, categories:category_id(nome), wallets:wallet_id(nome)`)
             .single();
-          
+
           data = retryResult.data;
           error = retryResult.error;
         }
       }
 
-      if (error) return `Erro: ${error.message}`;
+      if (error) return errorResult(`Erro: ${error.message}`);
 
       if (data?.tipo === "despesa" && data.wallet_id) {
         const { data: wallet } = await supabase
@@ -3076,7 +4717,11 @@ async function executeTool(
       }
 
       const tipoLabel = data.tipo === "despesa" ? "Despesa" : "Receita";
-      return `${tipoLabel} de R$ ${Number(data.valor).toFixed(2)} registrada! Carteira: ${data.wallets?.nome}, Categoria: ${data.categories?.nome}.${categoryNote}`;
+      return okResult(
+        `${tipoLabel} de R$ ${Number(data.valor).toFixed(2)} registrada! Carteira: ${data.wallets?.nome}, Categoria: ${data.categories?.nome}.${categoryNote}`,
+        { id: data.id, entity: "transaction", tipo: data.tipo, valor: data.valor },
+        [{ tool: "delete_transaction", args: { transaction_id: data.id } }]
+      );
     }
 
     case "create_transfer": {
@@ -3084,34 +4729,38 @@ async function executeTool(
       const toInput = args.to_wallet_id as string;
 
       if (!fromInput || !toInput) {
-        return "Informe as carteiras de origem e destino para a transferência.";
+        return errorResult("Informe as carteiras de origem e destino para a transferência.");
       }
 
-      const { id: fromId, error: fromError } = await resolveWalletId(
+      const { id: fromId, error: fromError, options: fromOptions } = await resolveWalletId(
         supabase,
         userId,
         fromInput
       );
-      if (fromError) return fromError;
+      if (fromError) {
+        return errorResult(fromError, fromOptions, fromOptions?.length ? "disambiguation" : undefined);
+      }
 
-      const { id: toId, error: toError } = await resolveWalletId(
+      const { id: toId, error: toError, options: toOptions } = await resolveWalletId(
         supabase,
         userId,
         toInput
       );
-      if (toError) return toError;
+      if (toError) {
+        return errorResult(toError, toOptions, toOptions?.length ? "disambiguation" : undefined);
+      }
 
       if (!fromId || !toId) {
-        return "Não foi possível identificar as carteiras. Use list_wallets para ver as opções.";
+        return errorResult("Não foi possível identificar as carteiras. Use list_wallets para ver as opções.");
       }
 
       if (fromId === toId) {
-        return "A carteira de origem deve ser diferente da carteira de destino.";
+        return errorResult("A carteira de origem deve ser diferente da carteira de destino.");
       }
 
       const valor = Number(args.valor);
       if (Number.isNaN(valor) || valor <= 0) {
-        return "Valor inválido para transferência.";
+        return errorResult("Valor inválido para transferência.");
       }
 
       const transferenciaData = {
@@ -3129,9 +4778,13 @@ async function executeTool(
         .select("id, valor, data, descricao, from_wallet:from_wallet_id(nome), to_wallet:to_wallet_id(nome)")
         .single();
 
-      if (error) return `Erro: ${error.message}`;
+      if (error) return errorResult(`Erro: ${error.message}`);
 
-      return `Transferência de R$ ${Number(data.valor).toFixed(2)} registrada: ${data.from_wallet?.nome} → ${data.to_wallet?.nome}.`;
+      return okResult(
+        `Transferência de R$ ${Number(data.valor).toFixed(2)} registrada: ${data.from_wallet?.nome} → ${data.to_wallet?.nome}.`,
+        { id: data.id, entity: "transfer" },
+        [{ tool: "delete_transfer", args: { transfer_id: data.id } }]
+      );
     }
 
     case "create_event": {
@@ -3155,13 +4808,17 @@ async function executeTool(
         .select()
         .single();
 
-      if (error) return `Erro: ${error.message}`;
-      
+      if (error) return errorResult(`Erro: ${error.message}`);
+
       const dateStr = new Date(data.start_at).toLocaleString("pt-BR", {
         dateStyle: "full",
         timeStyle: data.all_day ? undefined : "short",
       });
-      return `Evento "${data.title}" criado para ${dateStr}!`;
+      return okResult(
+        `Evento "${data.title}" criado para ${dateStr}!`,
+        { id: data.id, entity: "event" },
+        [{ tool: "delete_event", args: { event_id: data.id } }]
+      );
     }
 
     // ==================== HÁBITOS ====================
@@ -3183,7 +4840,7 @@ async function executeTool(
         .select()
         .single();
 
-      if (error) return `Erro ao criar hábito: ${error.message}`;
+      if (error) return errorResult(`Erro ao criar hábito: ${error.message}`);
 
       const cadenceLabels: Record<string, string> = {
         daily: "diário",
@@ -3191,7 +4848,11 @@ async function executeTool(
         monthly: "mensal",
       };
 
-      return `Hábito "${data.title}" criado! 🎯 Frequência: ${cadenceLabels[data.cadence] || data.cadence}, Meta: ${data.times_per_cadence}x por período.`;
+      return okResult(
+        `Hábito "${data.title}" criado! 🎯 Frequência: ${cadenceLabels[data.cadence] || data.cadence}, Meta: ${data.times_per_cadence}x por período.`,
+        { id: data.id, entity: "habit" },
+        [{ tool: "delete_habit", args: { habit_id: data.id } }]
+      );
     }
 
     // ==================== ATUALIZAÇÕES ====================
@@ -3259,12 +4920,14 @@ async function executeTool(
       const projectInput = args.project_id as string;
       if (!projectInput) return "Projeto é obrigatório.";
 
-      const { id: projectId, error: projectError } = await resolveProjectId(
+      const { id: projectId, error: projectError, options: projectOptions } = await resolveProjectId(
         supabase,
         tenantId,
         projectInput
       );
-      if (projectError) return projectError;
+      if (projectError) {
+        return errorResult(projectError, projectOptions, projectOptions?.length ? "disambiguation" : undefined);
+      }
       if (!projectId) return "Projeto inválido. Use query_projects para ver os disponíveis.";
 
       const updateData: any = {
@@ -3305,12 +4968,14 @@ async function executeTool(
       const projectInput = args.project_id as string;
       if (!projectInput) return "Projeto é obrigatório.";
 
-      const { id: projectId, error: projectError } = await resolveProjectId(
+      const { id: projectId, error: projectError, options: projectOptions } = await resolveProjectId(
         supabase,
         tenantId,
         projectInput
       );
-      if (projectError) return projectError;
+      if (projectError) {
+        return errorResult(projectError, projectOptions, projectOptions?.length ? "disambiguation" : undefined);
+      }
       if (!projectId) return "Projeto inválido. Use query_projects para ver os disponíveis.";
 
       const { error } = await supabase
@@ -3328,12 +4993,14 @@ async function executeTool(
       const taskId = args.task_id as string | undefined;
       if (!projectInput || !taskId) return "Informe project_id e task_id.";
 
-      const { id: projectId, error: projectError } = await resolveProjectId(
+      const { id: projectId, error: projectError, options: projectOptions } = await resolveProjectId(
         supabase,
         tenantId,
         projectInput
       );
-      if (projectError) return projectError;
+      if (projectError) {
+        return errorResult(projectError, projectOptions, projectOptions?.length ? "disambiguation" : undefined);
+      }
       if (!projectId) return "Projeto inválido. Use query_projects para ver os disponíveis.";
 
       const { error } = await supabase
@@ -4038,6 +5705,71 @@ async function executeTool(
   }
 }
 
+// ==================== PLANNER EXECUTION ====================
+async function executePlannedIntents(
+  intents: Array<{ tool: string; args: Record<string, unknown> }>,
+  supabase: any,
+  tenantId: string,
+  userId: string,
+  context?: { projectStructureMode?: boolean; userMessage?: string }
+): Promise<{ handled: boolean; content: string; executions: Array<{ tool: string; result: ToolExecutionResult }>; rollbackResults: ToolExecutionResult[] }> {
+  if (!intents || intents.length === 0) {
+    return { handled: false, content: "", executions: [], rollbackResults: [] };
+  }
+
+  const executions: Array<{ tool: string; result: ToolExecutionResult }> = [];
+  const rollbackStack: ToolRollbackAction[] = [];
+  const rollbackResults: ToolExecutionResult[] = [];
+  let failed = false;
+
+  for (const intent of intents) {
+    const rawResult = await executeTool(
+      intent.tool,
+      intent.args,
+      supabase,
+      tenantId,
+      userId,
+      { ...context, returnStructured: true, userMessage: context?.userMessage }
+    );
+
+    const result = normalizeToolExecutionResult(rawResult, intent.tool);
+    executions.push({ tool: intent.tool, result });
+
+    if (result.rollback?.length) {
+      rollbackStack.push(...result.rollback);
+    }
+
+    if (!result.ok) {
+      if (result.needs_clarification) {
+        break;
+      }
+      if (result.error_type === "duplicate") {
+        continue;
+      }
+      failed = true;
+      break;
+    }
+  }
+
+  if (failed) {
+    for (let i = rollbackStack.length - 1; i >= 0; i -= 1) {
+      const action = rollbackStack[i];
+      const rawRollback = await executeTool(
+        action.tool,
+        action.args,
+        supabase,
+        tenantId,
+        userId,
+        { ...context, returnStructured: true, userMessage: context?.userMessage }
+      );
+      rollbackResults.push(normalizeToolExecutionResult(rawRollback, action.tool));
+    }
+  }
+
+  const summary = buildPlannedSummary(executions, rollbackResults);
+  return { handled: true, content: summary, executions, rollbackResults };
+}
+
 // ==================== FETCH USER CONTEXT ====================
 async function fetchUserContext(supabase: any, userId: string, tenantId: string) {
   const today = new Date().toISOString().split("T")[0];
@@ -4243,6 +5975,29 @@ serve(async (req) => {
 
     const { profile: userProfile, context: userContext } = await fetchUserContext(supabase, user.id, tenantId);
 
+    let westosState = await fetchWestosSnapshot(supabase, tenantId, user.id);
+    const onboardingActive = !userProfile || userProfile.onboarding_completed === false;
+    let checkinRequired = false;
+
+    if (!onboardingActive && !westosState.checkin_today) {
+      checkinRequired = true;
+      const promptedDate = userProfile?.preferences?.westos?.checkin_prompted_date;
+      if (promptedDate !== westosState.today && userProfile) {
+        const currentPrefs = userProfile.preferences || {};
+        const westosPrefs = { ...(currentPrefs.westos || {}), checkin_prompted_date: westosState.today };
+        await supabase
+          .from('ff_user_profiles')
+          .update({
+            preferences: { ...currentPrefs, westos: westosPrefs },
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', user.id)
+          .eq('tenant_id', tenantId);
+      }
+    }
+
+    westosState = { ...westosState, checkin_required: checkinRequired };
+
     let convId = conversationId;
     if (!convId) {
       const { data: newConv, error: convError } = await supabase
@@ -4314,6 +6069,34 @@ serve(async (req) => {
       attachments: processedAttachments.length > 0 ? processedAttachments : null,
     }).select("id, created_at").single();
 
+    const checkinFlow = await handleCheckinFlow(
+      supabase,
+      tenantId,
+      user.id,
+      userProfile,
+      processedMessage,
+      westosState,
+      checkinRequired
+    );
+
+    if (checkinFlow.handled) {
+      const replyText = checkinFlow.reply || 'Check-in em andamento.';
+      await supabase.from('ff_conversation_messages').insert({
+        conversation_id: convId,
+        tenant_id: tenantId,
+        role: 'assistant',
+        content: replyText,
+      });
+
+      return new Response(
+        JSON.stringify({
+          conversationId: convId,
+          message: replyText,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ==================== FIX: Fetch LAST 15 messages (not first) ====================
     const { data: historyRaw } = await supabase
       .from("ff_conversation_messages")
@@ -4346,7 +6129,231 @@ serve(async (req) => {
 
     console.log(`[GUTA] Conv=${convId}, History count=${history.length}, Last msg role=${history[history.length - 1]?.role}, Attachments=${processedAttachments.length}`);
 
-    const systemPrompt = buildSystemPrompt(userProfile, userContext);
+    const parsedStructure = parseProjectStructure(processedMessage);
+    const projectStructureMode =
+      isProjectStructureRequest(processedMessage) || Boolean(parsedStructure);
+    const systemPrompt = buildSystemPrompt(userProfile, userContext, westosState, projectStructureMode);
+
+    if (projectStructureMode && !checkinRequired) {
+      if (!parsedStructure || parsedStructure.stages.length === 0) {
+        const replyText =
+          "Parece que você quer estruturar um projeto. Envie no formato:\n" +
+          "1. Etapa\n- Subtarefa\n  - Item do checklist";
+        await supabase.from("ff_conversation_messages").insert({
+          conversation_id: convId,
+          tenant_id: tenantId,
+          role: "assistant",
+          content: replyText,
+        });
+        return new Response(
+          JSON.stringify({
+            conversationId: convId,
+            message: replyText,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const projectTitle = parsedStructure.projectTitle;
+      if (!projectTitle) {
+        const replyText = "Qual o nome do projeto? Ex: \"STRATI - HUB\".";
+        await supabase.from("ff_conversation_messages").insert({
+          conversation_id: convId,
+          tenant_id: tenantId,
+          role: "assistant",
+          content: replyText,
+        });
+        return new Response(
+          JSON.stringify({
+            conversationId: convId,
+            message: replyText,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const { data: existingProject } = await supabase
+        .from("ff_projects")
+        .select("id, title")
+        .eq("tenant_id", tenantId)
+        .ilike("title", projectTitle)
+        .limit(1);
+
+      let projectId = existingProject?.[0]?.id;
+      let projectCreated = false;
+      let projectFinalTitle = existingProject?.[0]?.title || projectTitle;
+
+      if (!projectId) {
+        const { data: createdProject, error: createError } = await supabase
+          .from("ff_projects")
+          .insert({
+            tenant_id: tenantId,
+            created_by: user.id,
+            title: projectTitle,
+            description: null,
+            status: "active",
+          })
+          .select("id, title")
+          .single();
+        if (createError) {
+          const replyText = "Erro ao criar projeto: " + createError.message;
+          await supabase.from("ff_conversation_messages").insert({
+            conversation_id: convId,
+            tenant_id: tenantId,
+            role: "assistant",
+            content: replyText,
+          });
+          return new Response(
+            JSON.stringify({
+              conversationId: convId,
+              message: replyText,
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        projectId = createdProject.id;
+        projectFinalTitle = createdProject.title;
+        projectCreated = true;
+      }
+
+      const { data: existingStages } = await supabase
+        .from("ff_project_stages")
+        .select("id, title")
+        .eq("tenant_id", tenantId)
+        .eq("project_id", projectId);
+
+      const stageMap = new Map((existingStages || []).map((stage) => [stage.title.toLowerCase(), stage]));
+      const stagesCreated = [];
+      const itemsCreated = [];
+      let checklistCount = 0;
+
+      for (let stageIndex = 0; stageIndex < parsedStructure.stages.length; stageIndex += 1) {
+        const stage = parsedStructure.stages[stageIndex];
+        let stageRecord = stageMap.get(stage.title.toLowerCase());
+        if (!stageRecord) {
+          const { data: createdStage, error: stageError } = await supabase
+            .from("ff_project_stages")
+            .insert({
+              tenant_id: tenantId,
+              project_id: projectId,
+              title: stage.title,
+              sort_order: stageIndex,
+              status: "open",
+            })
+            .select("id, title")
+            .single();
+          if (stageError) {
+            console.error("[GUTA] create stage error", stageError);
+            continue;
+          }
+          stageRecord = createdStage;
+          stageMap.set(stage.title.toLowerCase(), stageRecord);
+          stagesCreated.push(stage.title);
+        }
+
+        const { data: existingItems } = await supabase
+          .from("ff_project_items")
+          .select("id, title")
+          .eq("tenant_id", tenantId)
+          .eq("project_id", projectId)
+          .eq("stage_id", stageRecord.id);
+
+        const itemMap = new Map((existingItems || []).map((item) => [item.title.toLowerCase(), item]));
+
+        for (let itemIndex = 0; itemIndex < stage.items.length; itemIndex += 1) {
+          const item = stage.items[itemIndex];
+          let itemRecord = itemMap.get(item.title.toLowerCase());
+          if (!itemRecord) {
+            const { data: createdItem, error: itemError } = await supabase
+              .from("ff_project_items")
+              .insert({
+                tenant_id: tenantId,
+                project_id: projectId,
+                stage_id: stageRecord.id,
+                title: item.title,
+                description: null,
+                status: "open",
+                priority: "medium",
+                due_at: null,
+                sort_order: itemIndex,
+              })
+              .select("id, title")
+              .single();
+            if (itemError) {
+              console.error("[GUTA] create item error", itemError);
+              continue;
+            }
+            itemRecord = createdItem;
+            itemMap.set(item.title.toLowerCase(), itemRecord);
+            itemsCreated.push(item.title);
+          }
+
+          if (item.checklist.length > 0 && itemRecord) {
+            const { data: existingChecklist } = await supabase
+              .from("ff_project_checklist_items")
+              .select("id, title")
+              .eq("tenant_id", tenantId)
+              .eq("project_item_id", itemRecord.id);
+
+            const checklistSet = new Set((existingChecklist || []).map((check) => check.title.toLowerCase()));
+
+            const toInsert = item.checklist
+              .map((title) => title.trim())
+              .filter((title) => title && !checklistSet.has(title.toLowerCase()))
+              .map((title, idx) => ({
+                tenant_id: tenantId,
+                project_item_id: itemRecord.id,
+                title,
+                sort_order: (existingChecklist?.length || 0) + idx,
+              }));
+
+            if (toInsert.length > 0) {
+              const { error: checklistError } = await supabase
+                .from("ff_project_checklist_items")
+                .insert(toInsert);
+              if (checklistError) {
+                console.error("[GUTA] checklist error", checklistError);
+              } else {
+                checklistCount += toInsert.length;
+              }
+            }
+          }
+        }
+      }
+
+      const replyText = buildProjectStructureSummary({
+        projectTitle: projectFinalTitle,
+        projectCreated,
+        stagesCreated,
+        itemsCreated,
+        checklistCount,
+      });
+
+      await supabase.from("ff_conversation_messages").insert({
+        conversation_id: convId,
+        tenant_id: tenantId,
+        role: "assistant",
+        content: replyText,
+      });
+
+      if (!conversationId) {
+        await supabase
+          .from("ff_conversations")
+          .update({
+            title: projectFinalTitle,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", convId);
+      }
+
+      return new Response(
+        JSON.stringify({
+          conversationId: convId,
+          message: replyText,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Determine if we have images in this request
     const hasImages = processedAttachments.some((a: Attachment) => a.type === "image");
@@ -4417,6 +6424,85 @@ serve(async (req) => {
       return await aiResponse.json();
     };
 
+    const plannerEnabled = shouldUsePlanner(processedMessage, hasImages, projectStructureMode);
+    if (plannerEnabled) {
+      const plan = await planMultiIntent(
+        callOpenAI,
+        processedMessage,
+        userContext,
+        history,
+        projectStructureMode
+      );
+
+      if (plan?.intents?.length && plan.intents.length > 1) {
+        console.log(`[GUTA] Planner selected ${plan.intents.length} intents`);
+        const planned = await executePlannedIntents(
+          plan.intents,
+          supabase,
+          tenantId,
+          user.id,
+          { projectStructureMode, userMessage: processedMessage }
+        );
+
+        const plannedContent = planned.content;
+        await supabase.from("ff_conversation_messages").insert({
+          conversation_id: convId,
+          tenant_id: tenantId,
+          role: "assistant",
+          content: plannedContent,
+        });
+
+        const isNewConversation = !conversationId;
+        if (isNewConversation && message) {
+          try {
+            console.log(`[GUTA] Generating title for new conversation ${convId}`);
+            const titleData = await callOpenAI({
+              model: AGENT_MODEL,
+              instructions: "Gere um título MUITO CURTO (2-5 palavras) que resume o assunto da conversa. Apenas o título, sem aspas ou pontuação final. Seja conciso e direto.",
+              input: [
+                {
+                  role: "user",
+                  content: `Primeira mensagem do usuário: "${message.substring(0, 150)}"`,
+                },
+              ],
+            });
+
+            const generatedTitle = extractAssistantText(titleData)?.trim();
+
+            if (generatedTitle) {
+              await supabase
+                .from("ff_conversations")
+                .update({
+                  title: generatedTitle,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("id", convId);
+
+              console.log(`[GUTA] Title generated: "${generatedTitle}"`);
+            }
+          } catch (titleError) {
+            console.error(`[GUTA] Error generating title:`, titleError);
+            const fallbackTitle = message.split(' ').slice(0, 4).join(' ');
+            await supabase
+              .from("ff_conversations")
+              .update({
+                title: fallbackTitle,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", convId);
+          }
+        }
+
+        return new Response(
+          JSON.stringify({
+            conversationId: convId,
+            message: plannedContent,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     let webSearchMode: WebSearchMode = "web_search";
     let webSearchFailed = false;
 
@@ -4457,10 +6543,14 @@ serve(async (req) => {
 
     let assistantContent = extractAssistantText(aiData);
     let functionCalls = extractFunctionCalls(aiData);
+
+    if (Array.isArray(aiData?.output)) {
+      inputMessages.push(...aiData.output);
+    }
     let assistantMessage = {
       content: assistantContent,
       tool_calls: functionCalls.map((call: any) => ({
-        id: call.call_id,
+        id: getFunctionCallId(call),
         type: "function",
         function: {
           name: call.name,
@@ -4499,7 +6589,8 @@ serve(async (req) => {
             args,
             supabase,
             tenantId,
-            user.id
+            user.id,
+            { projectStructureMode, userMessage: processedMessage }
           );
         } catch (toolError) {
           console.error(`[GUTA][${errorId}] Tool execution error:`, toolError);
@@ -4522,9 +6613,6 @@ serve(async (req) => {
         });
       }
 
-      if (assistantMessage.content && assistantMessage.content.trim().length > 0) {
-        inputMessages.push({ role: "assistant", content: assistantMessage.content });
-      }
       inputMessages.push(...toolResults);
 
       // Use gpt-4o-mini for tool follow-ups (cost optimization)
@@ -4537,10 +6625,14 @@ serve(async (req) => {
 
       assistantContent = extractAssistantText(aiData);
       functionCalls = extractFunctionCalls(aiData);
+
+      if (Array.isArray(aiData?.output)) {
+        inputMessages.push(...aiData.output);
+      }
       assistantMessage = {
         content: assistantContent,
         tool_calls: functionCalls.map((call: any) => ({
-          id: call.call_id,
+          id: getFunctionCallId(call),
           type: "function",
           function: {
             name: call.name,
@@ -4631,6 +6723,8 @@ serve(async (req) => {
   } catch (error) {
     console.error(`[GUTA][${errorId}] Chat error:`, error);
     const status = (error as any)?.status;
+    const errorMessage = (error as any)?.message;
+    const errorRaw = (error as any)?.raw;
     if (status === 429) {
       return new Response(
         JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns segundos." }),
@@ -4647,6 +6741,8 @@ serve(async (req) => {
       JSON.stringify({ 
         error: "Ocorreu um erro ao processar sua mensagem. Tente novamente.",
         errorId: errorId,
+        details: errorMessage,
+        raw: errorRaw ? String(errorRaw).slice(0, 400) : undefined,
       }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

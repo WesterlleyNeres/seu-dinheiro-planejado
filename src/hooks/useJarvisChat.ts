@@ -46,9 +46,39 @@ interface SendMessageParams {
   attachments?: LocalAttachment[];
 }
 
-function getAttachmentType(mimeType: string): "image" | "audio" | "document" {
-  if (mimeType.startsWith("image/")) return "image";
-  if (mimeType.startsWith("audio/")) return "audio";
+const IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "gif", "webp", "heic", "heif"]);
+const AUDIO_EXTS = new Set(["mp3", "mpeg", "wav", "m4a", "mp4", "aac", "ogg", "webm"]);
+const EXT_TO_MIME: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  gif: "image/gif",
+  webp: "image/webp",
+  heic: "image/heic",
+  heif: "image/heif",
+  mp3: "audio/mpeg",
+  mpeg: "audio/mpeg",
+  wav: "audio/wav",
+  m4a: "audio/m4a",
+  mp4: "audio/mp4",
+  aac: "audio/aac",
+  ogg: "audio/ogg",
+  webm: "audio/webm",
+  pdf: "application/pdf",
+  txt: "text/plain",
+};
+
+function getFileExtension(name: string): string | undefined {
+  const parts = name.split(".");
+  if (parts.length <= 1) return undefined;
+  return parts[parts.length - 1]?.toLowerCase();
+}
+
+function getAttachmentType(mimeType: string, ext?: string): "image" | "audio" | "document" {
+  if (mimeType && mimeType.startsWith("image/")) return "image";
+  if (mimeType && mimeType.startsWith("audio/")) return "audio";
+  if (ext && IMAGE_EXTS.has(ext)) return "image";
+  if (ext && AUDIO_EXTS.has(ext)) return "audio";
   return "document";
 }
 
@@ -148,6 +178,8 @@ export function useJarvisChat() {
   ): Promise<Attachment> => {
     const ext = file.name.split(".").pop() || "bin";
     const path = `${tenantId}/${targetConvId}/${crypto.randomUUID()}.${ext}`;
+    const normalizedExt = ext.toLowerCase();
+    const inferredMime = file.type || EXT_TO_MIME[normalizedExt] || "application/octet-stream";
 
     const { error: uploadError } = await supabase.storage
       .from("chat-attachments")
@@ -165,11 +197,11 @@ export function useJarvisChat() {
     }
 
     return {
-      type: getAttachmentType(file.type),
+      type: getAttachmentType(inferredMime, normalizedExt),
       url: signedUrlData.signedUrl,
       name: file.name,
       size: file.size,
-      mime_type: file.type,
+      mime_type: inferredMime,
     };
   };
 
@@ -210,14 +242,21 @@ export function useJarvisChat() {
       );
 
       if (!response.ok) {
-        const errorData = await response.json();
+        let errorData: any = {};
+        try {
+          errorData = await response.json();
+        } catch {
+          // ignore json parse errors
+        }
         if (response.status === 429) {
           throw new Error("Limite de requisições excedido. Aguarde alguns segundos.");
         }
         if (response.status === 402) {
           throw new Error("Créditos insuficientes. Adicione créditos à sua conta.");
         }
-        throw new Error(errorData.error || "Erro ao enviar mensagem");
+        const errorId = errorData?.errorId ? ` (ID: ${errorData.errorId})` : "";
+        const details = errorData?.details ? ` - ${errorData.details}` : "";
+        throw new Error(`${errorData.error || "Erro ao enviar mensagem"}${details}${errorId}`);
       }
 
       return response.json();

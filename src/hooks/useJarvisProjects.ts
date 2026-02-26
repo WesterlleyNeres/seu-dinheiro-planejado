@@ -7,10 +7,19 @@ import type { JarvisProject, JarvisTask } from "@/types/jarvis";
 interface CreateProjectInput {
   title: string;
   description?: string | null;
-  status?: 'active' | 'completed' | 'archived';
+  status?: "active" | "completed" | "archived";
 }
 
 interface UpdateProjectInput extends Partial<CreateProjectInput> {}
+
+interface CleanupChatTasksResponse {
+  removed_links: number;
+  deleted_tasks: number;
+}
+
+const isNotFoundError = (error: unknown) => {
+  return error instanceof Error && /404|nao encontrado|não encontrado|not found/i.test(error.message);
+};
 
 export const useJarvisProjects = (projectId?: string) => {
   const { tenantId } = useTenant();
@@ -33,9 +42,18 @@ export const useJarvisProjects = (projectId?: string) => {
     queryKey: tasksQueryKey,
     queryFn: async () => {
       if (!projectId) return [];
-      return apiRequest<JarvisTask[]>(`/projects/${projectId}/tasks`);
+      try {
+        return await apiRequest<JarvisTask[]>(`/projects/${projectId}/tasks`);
+      } catch (error) {
+        if (isNotFoundError(error)) return [];
+        throw error;
+      }
     },
     enabled: !!projectId,
+    retry: (failureCount, error) => {
+      if (isNotFoundError(error)) return false;
+      return failureCount < 2;
+    },
   });
 
   const createProject = useMutation({
@@ -126,6 +144,28 @@ export const useJarvisProjects = (projectId?: string) => {
     },
   });
 
+  const cleanupChatTasks = useMutation({
+    mutationFn: async (projectId: string) => {
+      return apiRequest<CleanupChatTasksResponse>(`/projects/${projectId}/tasks/cleanup`, {
+        method: "POST",
+      });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: tasksQueryKey });
+      queryClient.invalidateQueries({ queryKey: projectsQueryKey });
+      const removed = data?.removed_links ?? 0;
+      const deleted = data?.deleted_tasks ?? 0;
+      const description =
+        removed === 0
+          ? "Nenhuma tarefa do chat encontrada para limpar."
+          : `${removed} tarefa(s) desvinculada(s) e ${deleted} excluída(s).`;
+      toast({ title: "Limpeza concluída", description });
+    },
+    onError: (error) => {
+      toast({ title: "Erro ao limpar tarefas", description: error.message, variant: "destructive" });
+    },
+  });
+
   return {
     projects,
     isLoading,
@@ -136,5 +176,6 @@ export const useJarvisProjects = (projectId?: string) => {
     deleteProject,
     addTaskToProject,
     removeTaskFromProject,
+    cleanupChatTasks,
   };
 };

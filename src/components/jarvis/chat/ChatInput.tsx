@@ -26,19 +26,97 @@ const MAX_AUDIO_SIZE = 25 * 1024 * 1024; // 25MB
 
 const ACCEPTED_IMAGE_TYPES = [
   "image/jpeg",
+  "image/jpg",
   "image/png",
   "image/gif",
   "image/webp",
   "image/heic",
   "image/heif",
 ];
-const ACCEPTED_AUDIO_TYPES = ["audio/mp3", "audio/mpeg", "audio/wav", "audio/m4a", "audio/ogg", "audio/webm"];
+const ACCEPTED_AUDIO_TYPES = [
+  "audio/mp3",
+  "audio/mpeg",
+  "audio/wav",
+  "audio/m4a",
+  "audio/mp4",
+  "audio/aac",
+  "audio/x-m4a",
+  "audio/ogg",
+  "audio/webm",
+];
 const ACCEPTED_DOCUMENT_TYPES = ["application/pdf", "text/plain"];
 
-function getAttachmentType(mimeType: string): "image" | "audio" | "document" {
-  if (ACCEPTED_IMAGE_TYPES.includes(mimeType)) return "image";
-  if (ACCEPTED_AUDIO_TYPES.includes(mimeType)) return "audio";
+const IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "gif", "webp", "heic", "heif"]);
+const AUDIO_EXTS = new Set(["mp3", "mpeg", "wav", "m4a", "mp4", "aac", "ogg", "webm"]);
+const DOC_EXTS = new Set(["pdf", "txt"]);
+
+const EXT_TO_MIME: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  gif: "image/gif",
+  webp: "image/webp",
+  heic: "image/heic",
+  heif: "image/heif",
+  mp3: "audio/mpeg",
+  mpeg: "audio/mpeg",
+  wav: "audio/wav",
+  m4a: "audio/m4a",
+  mp4: "audio/mp4",
+  aac: "audio/aac",
+  ogg: "audio/ogg",
+  webm: "audio/webm",
+  pdf: "application/pdf",
+  txt: "text/plain",
+};
+
+function getAttachmentType(mimeType: string, ext?: string): "image" | "audio" | "document" {
+  if (mimeType && ACCEPTED_IMAGE_TYPES.includes(mimeType)) return "image";
+  if (mimeType && ACCEPTED_AUDIO_TYPES.includes(mimeType)) return "audio";
+  if (ext && IMAGE_EXTS.has(ext)) return "image";
+  if (ext && AUDIO_EXTS.has(ext)) return "audio";
   return "document";
+}
+
+function getFileExtension(name: string): string | undefined {
+  const parts = name.split(".");
+  if (parts.length <= 1) return undefined;
+  return parts[parts.length - 1]?.toLowerCase();
+}
+
+function normalizeFile(file: File) {
+  const ext = getFileExtension(file.name);
+  const inferredMime = (!file.type && ext && EXT_TO_MIME[ext]) ? EXT_TO_MIME[ext] : file.type;
+  const type = getAttachmentType(inferredMime, ext);
+  const normalized =
+    file.type || !inferredMime
+      ? file
+      : new File([file], file.name, { type: inferredMime });
+  return { file: normalized, ext, mime: inferredMime || normalized.type || "", type };
+}
+
+function getSupportedAudioMimeType(): string | undefined {
+  if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported) return undefined;
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+    "audio/m4a",
+    "audio/aac",
+    "audio/ogg;codecs=opus",
+    "audio/ogg",
+  ];
+  return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate));
+}
+
+function getAudioExtension(mimeType: string): string {
+  if (!mimeType) return "webm";
+  if (mimeType.includes("mp4") || mimeType.includes("m4a")) return "m4a";
+  if (mimeType.includes("aac")) return "aac";
+  if (mimeType.includes("ogg")) return "ogg";
+  if (mimeType.includes("wav")) return "wav";
+  if (mimeType.includes("mpeg") || mimeType.includes("mp3")) return "mp3";
+  return "webm";
 }
 
 function formatFileSize(bytes: number): string {
@@ -54,9 +132,13 @@ export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
   const [recordingTime, setRecordingTime] = useState(0);
   const [isDragOver, setIsDragOver] = useState(false);
   const isMobile = useIsMobile();
+  const isIOS =
+    typeof navigator !== "undefined" &&
+    /iPad|iPhone|iPod/i.test(navigator.userAgent);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -153,7 +235,13 @@ export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
     const fileArray = Array.from(files);
 
     for (const file of fileArray) {
-      if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+      const normalized = normalizeFile(file);
+      const ext = normalized.ext;
+      const mimeType = normalized.mime;
+      const normalizedFile = normalized.file;
+      const isPdf = mimeType === "application/pdf" || ext === "pdf";
+
+      if (isPdf) {
         const images = await convertPdfToImages(file);
         if (images.length > 0) {
           setAttachments((prev) => [...prev, ...images]);
@@ -161,30 +249,32 @@ export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
         continue;
       }
 
-      const type = getAttachmentType(file.type);
+      const type = normalized.type;
       const maxSize = type === "audio" ? MAX_AUDIO_SIZE : MAX_FILE_SIZE;
 
-      if (file.size > maxSize) {
-        toast.error(`${file.name} excede o limite de ${formatFileSize(maxSize)}`);
+      if (normalizedFile.size > maxSize) {
+        toast.error(`${normalizedFile.name} excede o limite de ${formatFileSize(maxSize)}`);
         return;
       }
 
-      if (
-        !ACCEPTED_IMAGE_TYPES.includes(file.type) &&
-        !ACCEPTED_AUDIO_TYPES.includes(file.type) &&
-        !ACCEPTED_DOCUMENT_TYPES.includes(file.type)
-      ) {
-        toast.error(`Tipo de arquivo não suportado: ${file.type || file.name}`);
+      const isAccepted =
+        (mimeType && ACCEPTED_IMAGE_TYPES.includes(mimeType)) ||
+        (mimeType && ACCEPTED_AUDIO_TYPES.includes(mimeType)) ||
+        (mimeType && ACCEPTED_DOCUMENT_TYPES.includes(mimeType)) ||
+        (ext && (IMAGE_EXTS.has(ext) || AUDIO_EXTS.has(ext) || DOC_EXTS.has(ext)));
+
+      if (!isAccepted) {
+        toast.error(`Tipo de arquivo não suportado: ${normalizedFile.type || normalizedFile.name}`);
         return;
       }
 
       const attachment: LocalAttachment = {
         id: crypto.randomUUID(),
         type,
-        file,
-        name: file.name,
-        size: file.size,
-        preview: type === "image" ? URL.createObjectURL(file) : undefined,
+        file: normalizedFile,
+        name: normalizedFile.name,
+        size: normalizedFile.size,
+        preview: type === "image" ? URL.createObjectURL(normalizedFile) : undefined,
       };
 
       setAttachments((prev) => [...prev, attachment]);
@@ -203,10 +293,20 @@ export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
 
   const startRecording = async () => {
     try {
+      const secureContext = typeof window !== "undefined" ? window.isSecureContext : false;
+      const canUseMedia = !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined";
+
+      if (!secureContext || !canUseMedia) {
+        audioInputRef.current?.click();
+        toast.error("Gravação direta indisponível. Selecione um áudio.");
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: "audio/webm;codecs=opus",
-      });
+      const mimeType = getSupportedAudioMimeType();
+      const mediaRecorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
 
       audioChunksRef.current = [];
 
@@ -219,8 +319,10 @@ export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
       mediaRecorder.onstop = () => {
         stream.getTracks().forEach((track) => track.stop());
 
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        const file = new File([blob], `audio-${Date.now()}.webm`, { type: "audio/webm" });
+        const blobType = mediaRecorder.mimeType || "audio/webm";
+        const blob = new Blob(audioChunksRef.current, { type: blobType });
+        const ext = getAudioExtension(blobType);
+        const file = new File([blob], `audio-${Date.now()}.${ext}`, { type: blobType });
 
         const attachment: LocalAttachment = {
           id: crypto.randomUUID(),
@@ -243,7 +345,8 @@ export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
       }, 1000);
     } catch (error) {
       console.error("Error starting recording:", error);
-      toast.error("Não foi possível acessar o microfone");
+      audioInputRef.current?.click();
+      toast.error("Não foi possível acessar o microfone. Selecione um áudio.");
     }
   };
 
@@ -372,8 +475,22 @@ export function ChatInput({ onSend, isSending, disabled }: ChatInputProps) {
         <input
           ref={fileInputRef}
           type="file"
-          accept={[...ACCEPTED_IMAGE_TYPES, ...ACCEPTED_AUDIO_TYPES, ...ACCEPTED_DOCUMENT_TYPES].join(",")}
+          accept="image/*,audio/*,application/pdf,text/plain"
           multiple
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files) {
+              handleFileSelect(e.target.files);
+              e.target.value = "";
+            }
+          }}
+        />
+
+        <input
+          ref={audioInputRef}
+          type="file"
+          accept="audio/*"
+          capture={isIOS ? undefined : "microphone"}
           className="hidden"
           onChange={(e) => {
             if (e.target.files) {

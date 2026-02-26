@@ -32,6 +32,7 @@ import {
   Lightbulb,
   MessageCircle,
   FolderKanban,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/jarvis-helpers";
@@ -40,6 +41,7 @@ import fracttoLogo from "@/assets/logo-fractto.png";
 const jarvisNavigation = [
   { name: "Início", href: "/jarvis", icon: Brain },
   { name: "Chat", href: "/jarvis/chat", icon: MessageCircle },
+  { name: "WestOS", href: "/jarvis/westos", icon: Activity },
   { name: "Tarefas", href: "/jarvis/tasks", icon: CheckSquare },
   { name: "Projetos", href: "/jarvis/projects", icon: FolderKanban },
   { name: "Agenda", href: "/jarvis/calendar", icon: CalendarDays },

@@ -35,6 +35,45 @@ export interface JarvisProjectTask {
   task?: JarvisTask;
 }
 
+export interface JarvisProjectChecklistItem {
+  id: string;
+  tenant_id: string;
+  project_item_id: string;
+  title: string;
+  is_done: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JarvisProjectItem {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  stage_id: string;
+  title: string;
+  description?: string | null;
+  status: 'open' | 'in_progress' | 'done';
+  priority: 'low' | 'medium' | 'high';
+  due_at?: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  checklist_items?: JarvisProjectChecklistItem[];
+}
+
+export interface JarvisProjectStage {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  title: string;
+  status: 'open' | 'in_progress' | 'done';
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  items?: JarvisProjectItem[];
+}
+
 export interface JarvisEvent {
   id: string;
   tenant_id: string;

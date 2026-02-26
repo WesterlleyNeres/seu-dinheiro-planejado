@@ -1,15 +1,19 @@
-import { useState, useMemo } from "react";
-import { Plus, Search, MessageSquare, Pencil, Trash2, Check, X, ChevronDown, ChevronRight } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  MessageSquare,
+  MoreVertical,
+  Plus,
+  Search,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import {
-  isToday,
-  isYesterday,
-  subDays,
-  startOfToday,
-} from "date-fns";
+import { isToday, isYesterday, subDays, startOfToday } from "date-fns";
 import {
   Collapsible,
   CollapsibleContent,
@@ -24,8 +28,13 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export interface Conversation {
   id: string;
@@ -61,7 +70,7 @@ const ConversationItem = ({
 }: ConversationItemProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(conversation.title || "");
-  const [isHovered, setIsHovered] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
   const handleRename = () => {
     if (editTitle.trim()) {
@@ -89,7 +98,12 @@ const ConversationItem = ({
           className="h-7 text-sm"
           autoFocus
         />
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleRename}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={handleRename}
+        >
           <Check className="h-3 w-3" />
         </Button>
         <Button
@@ -110,58 +124,68 @@ const ConversationItem = ({
   return (
     <div
       className={cn(
-        "group flex items-center gap-2 rounded-lg px-2 py-2 cursor-pointer transition-colors",
+        "group grid grid-cols-[16px,1fr,28px] items-center gap-2 rounded-lg px-2 py-2 cursor-pointer transition-colors",
         isActive
           ? "bg-primary/10 text-primary"
           : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
       )}
       onClick={onSelect}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
     >
       <MessageSquare className="h-4 w-4 shrink-0" />
-      <span className="flex-1 truncate text-sm">
+      <span
+        className="min-w-0 truncate text-sm"
+        title={conversation.title || "Nova conversa"}
+      >
         {conversation.title || "Nova conversa"}
       </span>
-      {isHovered && (
-        <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className={cn(
+              "inline-flex h-7 w-7 items-center justify-center rounded-md",
+              "border border-border/60 bg-background/90 text-foreground/70 shadow-sm",
+              "hover:bg-accent hover:text-foreground"
+            )}
+            onClick={(event) => event.stopPropagation()}
+            aria-label="Opções da conversa"
+            title="Opções"
+          >
+            <MoreVertical className="h-4 w-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-40">
+          <DropdownMenuItem
             onClick={() => {
               setEditTitle(conversation.title || "");
               setIsEditing(true);
             }}
           >
-            <Pencil className="h-3 w-3" />
-          </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-              >
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Excluir conversa?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Esta ação não pode ser desfeita. A conversa e todas as mensagens serão
-                  permanentemente removidas.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={onDelete}>Excluir</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      )}
+            Renomear
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            onClick={() => setIsDeleteOpen(true)}
+          >
+            Excluir
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <AlertDialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir conversa?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. A conversa e todas as mensagens serão
+              permanentemente removidas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={onDelete}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
@@ -229,9 +253,7 @@ export const ChatSidebar = ({
   const filteredConversations = useMemo(() => {
     if (!searchQuery.trim()) return conversations;
     const query = searchQuery.toLowerCase();
-    return conversations.filter(
-      (c) => c.title?.toLowerCase().includes(query)
-    );
+    return conversations.filter((c) => c.title?.toLowerCase().includes(query));
   }, [conversations, searchQuery]);
 
   const groupedConversations = useMemo(() => {
@@ -265,12 +287,7 @@ export const ChatSidebar = ({
   if (isCollapsed) {
     return (
       <div className="w-12 border-r border-border flex flex-col items-center py-4 gap-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onNewConversation}
-          className="h-8 w-8"
-        >
+        <Button variant="ghost" size="icon" onClick={onNewConversation} className="h-8 w-8">
           <Plus className="h-4 w-4" />
         </Button>
       </div>
@@ -279,13 +296,8 @@ export const ChatSidebar = ({
 
   return (
     <div className="w-full border-r border-border flex flex-col bg-muted/30 sm:w-64">
-      {/* Header */}
       <div className="p-3 space-y-2">
-        <Button
-          variant="outline"
-          className="w-full justify-start gap-2"
-          onClick={onNewConversation}
-        >
+        <Button variant="outline" className="w-full justify-start gap-2" onClick={onNewConversation}>
           <Plus className="h-4 w-4" />
           Nova conversa
         </Button>
@@ -300,7 +312,6 @@ export const ChatSidebar = ({
         </div>
       </div>
 
-      {/* Conversations List */}
       <ScrollArea className="flex-1 px-2">
         <div className="space-y-2 pb-4">
           <PeriodGroup

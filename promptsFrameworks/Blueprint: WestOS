@@ -1,0 +1,607 @@
+Blueprint: WestOS Replicável como Camada Supervisora
+1) Separar “persona” de “motor”
+
+Hoje você tem GUTA como assistente geral. O WestOS vai ser:
+
+Motor (lógica): ciclos, detecção de padrões, regras de intervenção
+
+Persona (voz): “igual competitivo”, humor provocativo, consentimento antes de temas sensíveis
+
+Regra: Persona é configuração por usuário/tenant, não hardcode.
+
+Implementação mínima
+
+Guardar isso em ff_user_profiles.preferences (já existe) 
+
+DOCUMENTATION
+
+:
+
+westos.persona_style: "competitive_peer"
+
+westos.humor_level: 0–3
+
+westos.consent_sensitive: true
+
+westos.proactivity_level: 1–3
+
+westos.focus_mode: "supervisor"
+
+2) Criar o “Check-in diário” estruturado (o coração do longitudinal)
+
+Sem dado estruturado, o “você fez isso há 17 dias” vira chute.
+
+Nova tabela: ff_daily_checkins
+
+Campos recomendados:
+
+tenant_id, user_id
+
+checkin_date (date)
+
+dominant_vector (text)
+
+nuclear_block_done (bool)
+
+human_connection_done (bool)
+
+focus_drift (0–3) (quão fora do trilho)
+
+mood (0–10)
+
+note (text)
+
+created_at
+
+RLS: igual às outras ff_* por tenant_id e user_id. 
+
+DOCUMENTATION
+
+3) Separar “memória” de “achados”
+
+Você já tem ff_memory_items 
+
+DOCUMENTATION
+
+, mas ela mistura coisas.
+
+Para produto replicável, crie um tipo claro de achado:
+
+Opção A (rápida): usar ff_memory_items.kind = 'pattern'
+
+e metadata com:
+
+pattern_type: productivity/emotional/relational
+
+severity: 1–3
+
+evidence_window_days: 14
+
+evidence_refs: ids (checkins/tasks/etc)
+
+Opção B (melhor): nova tabela ff_behavior_patterns
+
+pattern_key (ex: scope_expansion_after_anxiety)
+
+pattern_type
+
+severity
+
+first_seen_at, last_seen_at
+
+occurrences
+
+evidence_json
+
+Para escalar produto, B é o caminho.
+
+4) Criar o “Motor de Ciclos” (14 dias)
+
+Você definiu ciclos adaptativos por performance.
+
+Nova tabela: ff_cycles
+
+tenant_id, user_id
+
+start_date, end_date
+
+primary_metric (enum: execution/strategy/revenue)
+
+score_total
+
+tier (expand/maintain/reduce/reset)
+
+notes
+
+O WestOS usa isso para dizer:
+“há 17 dias você repetiu o mesmo padrão”.
+
+5) Criar o Job Supervisor (proativo de verdade)
+
+Você já tem pg_cron + funções de reminders 
+
+DOCUMENTATION
+
+.
+
+Então o WestOS Supervisor pode ser:
+
+Nova Edge Function: ff-westos-supervisor
+
+Rodar via cron 1x/dia e (opcional) micro-check 2x/dia.
+
+Ele faz:
+
+Puxa últimos 14 dias de ff_daily_checkins
+
+Puxa tarefas (criadas vs concluídas), hábitos, eventos
+
+Atualiza ff_cycles
+
+Detecta padrões
+
+Decide intervenções
+
+Cria:
+
+ff_reminders (push/email/whatsapp)
+
+ou “mensagem do sistema” em ff_conversation_messages
+
+Importante: Intervenção relacional/emocional sensível → sempre com consentimento (sua regra C).
+
+6) Consentimento como protocolo
+
+Você escolheu: “pergunte antes”.
+
+Então padronize:
+
+SENSITIVE_FLAG = true
+
+CONSENT_REQUEST (pergunta)
+
+CONSENT_RESPONSE (sim/não)
+
+Se “não”: registra e recua
+
+Se repetir 3 vezes: o WestOS aponta o padrão de “evitação” (sem forçar)
+
+Isso vira produto, porque funciona para qualquer pessoa.
+
+O que isso muda no ff-jarvis-chat (onde está sua IA)
+
+Na documentação, ff-jarvis-chat já:
+
+resolve tenant via JWT
+
+injeta contexto
+
+escolhe modelo
+
+executa tools 
+
+DOCUMENTATION
+
+Agora ele precisa ganhar 3 coisas:
+
+(1) Tool: create_daily_checkin
+
+para registrar check-in sem fricção.
+
+(2) Tool: get_westos_state
+
+retorna:
+
+tier do ciclo
+
+padrões ativos
+
+últimos lembretes
+
+pendências humanas
+
+(3) “System prompt” dinâmico por usuário
+
+montado de:
+
+persona config (preferences)
+
+regras fixas (competitivo, humor, consentimento)
+
+padrões atuais (para “você fez isso há X dias”)
+
+Risco que vai te ferrar se ignorar
+
+Se você tentar fazer “supervisor” só com texto e embeddings, vai dar:
+
+falso positivo (ele acusa padrão que não existe)
+
+usuário perde confiança
+
+produto morre
+
+O supervisor tem que ser data-driven:
+checkins + contadores + evidência.
+
+Próximo passo objetivo (sem entrar em projeto)
+
+Você quer “modelo replicável”, então a primeira entrega é:
+
+Schema mínimo: ff_daily_checkins + ff_cycles
+
+Tooling: tools de check-in e consulta de estado
+
+Supervisor Cron: detectar 3 padrões básicos (1 por dimensão)
+
+Padrões básicos recomendados:
+
+Produtividade: “cria muito, conclui pouco”
+
+Emocional: “irritação após interrupção + queda de mood”
+
+Relacional: “dias sem conexão intencional”
+
+Se você topar, eu já te devolvo na próxima mensagem:
+
+o schema SQL dessas duas tabelas com RLS no padrão do teu projeto
+
+e o prompt system completo do WestOS Supervisor (persona + regras + consentimento + longitudinal)
+
+Mas antes: você quer que o check-in diário seja feito via chat (GUTA) ou via card UI no dashboard?
+
+Fontes
+Via GUTA, preciso de toda a documentação e especificação do projeto, pois vou mandar para o codex fazer as auterações necessarias. 
+Vc sabe a melhor forma de contextualizar isso para ele, pois vcs são do mesmo grupo né 
+
+Beleza — via GUTA é o caminho certo, porque o check-in tem que acontecer no fluxo inevitável do dia. E não: eu e o Codex “não somos do mesmo grupo” nem tenho nenhuma relação interna com ele; o que existe é que ele responde muito melhor quando você dá contexto e critérios de aceite claros.
+
+Abaixo vai um pacote completo (especificação + backlog técnico + critérios + prompts) alinhado com a sua arquitetura atual do FRACTTO FLOW (multi-tenant, ff_*, ff-jarvis-chat, cron, reminders, etc.). 
+
+DOCUMENTATION
+
+1) Objetivo do projeto
+
+Transformar a GUTA em camada supervisora (“mente do FracttoFlow”), replicável para qualquer usuário, com:
+
+memória longitudinal estruturada (não só texto)
+
+ciclos adaptativos de 14 dias
+
+intervenção proativa
+
+3 dimensões: produtividade + emocional + relacional
+
+consentimento antes de explorar tópicos sensíveis
+
+persona “igual competitivo” com humor provocativo (sem infantilizar)
+
+2) Escopo e não-escopo
+Em escopo (MVP)
+
+Check-in diário via GUTA (chat) gerando registro estruturado
+
+Ciclos 14 dias com score e tier (expand/maintain/reduce/reset)
+
+Detecção diária de 3 padrões base (1 por dimensão) com evidência
+
+Intervenções proativas via ff_reminders (push) + opção de “mensagem do sistema” no chat
+
+Consentimento para assuntos sensíveis (relacional/emocional)
+
+Fora do escopo (agora)
+
+embeddings para “memória psicológica” (vai gerar falso positivo se vier antes do dado estruturado)
+
+integrações WhatsApp/Telegram/Alexa (podem vir depois)
+
+UI nova complexa (kanban, dashboards avançados)
+
+3) Modelo de dados (SQL) — novo núcleo WestOS
+3.1 Tabela ff_daily_checkins (o coração do longitudinal)
+-- 1) Daily check-in (structured)
+create table if not exists public.ff_daily_checkins (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references public.tenants(id) on delete cascade,
+  user_id uuid not null,
+  checkin_date date not null default current_date,
+
+  dominant_vector text, -- ex: "Strati", "FracttoFlow", "Família", etc.
+  nuclear_block_done boolean not null default false,
+  human_connection_done boolean not null default false,
+
+  focus_drift smallint not null default 0, -- 0..3
+  mood smallint not null default 5,        -- 0..10
+
+  note text,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  unique (tenant_id, user_id, checkin_date)
+);
+
+create index if not exists idx_ff_daily_checkins_tenant_user_date
+  on public.ff_daily_checkins (tenant_id, user_id, checkin_date desc);
+
+3.2 Tabela ff_cycles (ciclo adaptativo 14 dias)
+create table if not exists public.ff_cycles (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references public.tenants(id) on delete cascade,
+  user_id uuid not null,
+
+  start_date date not null,
+  end_date date not null,
+
+  primary_metric text not null default 'execution', -- execution | strategy | revenue
+  score_total integer not null default 0,
+
+  tier text not null default 'maintain', -- expand | maintain | reduce | reset
+  notes text,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  unique (tenant_id, user_id, start_date)
+);
+
+create index if not exists idx_ff_cycles_tenant_user_end
+  on public.ff_cycles (tenant_id, user_id, end_date desc);
+
+3.3 Tabela ff_behavior_patterns (padrões com evidência)
+create table if not exists public.ff_behavior_patterns (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references public.tenants(id) on delete cascade,
+  user_id uuid not null,
+
+  pattern_key text not null,              -- ex: "prod_create_more_than_finish"
+  pattern_type text not null,             -- productivity | emotional | relational
+  severity smallint not null default 1,   -- 1..3
+
+  first_seen_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  occurrences integer not null default 1,
+
+  evidence jsonb not null default '{}'::jsonb, -- refs (checkins/tasks/events)
+  is_active boolean not null default true,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  unique (tenant_id, user_id, pattern_key)
+);
+
+create index if not exists idx_ff_patterns_tenant_user_active
+  on public.ff_behavior_patterns (tenant_id, user_id, is_active, last_seen_at desc);
+
+4) RLS (multi-tenant) — padrão do seu projeto
+
+Você já usa isolamento por tenant_id em tabelas ff_*. 
+
+DOCUMENTATION
+
+
+Replicar o mesmo:
+
+alter table public.ff_daily_checkins enable row level security;
+alter table public.ff_cycles enable row level security;
+alter table public.ff_behavior_patterns enable row level security;
+
+create policy "tenant_isolation_ff_daily_checkins"
+on public.ff_daily_checkins
+for all
+using (
+  tenant_id in (select tenant_id from public.tenant_members where user_id = auth.uid())
+);
+
+create policy "tenant_isolation_ff_cycles"
+on public.ff_cycles
+for all
+using (
+  tenant_id in (select tenant_id from public.tenant_members where user_id = auth.uid())
+);
+
+create policy "tenant_isolation_ff_behavior_patterns"
+on public.ff_behavior_patterns
+for all
+using (
+  tenant_id in (select tenant_id from public.tenant_members where user_id = auth.uid())
+);
+
+
+Observação: user_id não está FK para auth.users no seu padrão atual; manter coerente com o resto.
+
+5) Fluxo via GUTA (chat) — check-in inevitável
+5.1 Gatilho diário
+
+Quando o usuário abre a GUTA pela 1ª vez no dia (ou envia a 1ª mensagem do dia), o sistema verifica:
+
+existe ff_daily_checkins para hoje?
+
+se não → inicia “modo check-in” com 5 perguntas rápidas
+
+5.2 Perguntas (mínimo viável)
+
+Vetor dominante hoje (texto curto)
+
+Bloco nuclear feito ontem? (sim/não)
+
+Conexão humana ontem? (sim/não)
+
+Humor (0–10)
+
+Desvio de foco (0–3) + nota opcional
+
+Regra de persona: provocativo inteligente, competitivo, sem infantilizar.
+
+5.3 Registro
+
+Ao finalizar, tool create_daily_checkin salva e a GUTA responde:
+
+um micro-plano do dia (1 prioridade + 1 anti-tarefa + 1 ação relacional)
+
+se detectar padrão sensível → pede consentimento (C)
+
+6) Tools (function calling) — novas ferramentas do WestOS
+
+Adicionar ferramentas ao ff-jarvis-chat (Edge Function) 
+
+DOCUMENTATION
+
+:
+
+6.1 create_daily_checkin
+
+input: dominant_vector, nuclear_block_done, human_connection_done, mood, focus_drift, note
+
+output: id + resumo
+
+6.2 get_westos_state
+
+Retorna:
+
+ciclo atual (tier, score, primary_metric)
+
+padrões ativos (top 3)
+
+último check-in
+
+próximos lembretes
+
+6.3 request_sensitive_exploration
+
+Registra um “pedido de consentimento” (pode ser só uma convenção no chat + salvar no banco como memory/pattern metadata)
+
+7) Motor Supervisor (cron) — proatividade real
+
+Criar Edge Function: ff-westos-supervisor
+
+7.1 Frequência
+
+1x/dia (manhã) para análise e intervenção
+
+opcional: 1x no fim do dia para cobrar check-in faltando
+
+7.2 Inputs e dados
+
+checkins últimos 14 dias
+
+tarefas ff_tasks (criadas vs concluídas)
+
+eventos ff_events (cancelados/ignorados)
+
+hábitos ff_habit_logs (consistência)
+
+7.3 Padrões base (MVP)
+
+Produtividade
+
+prod_create_more_than_finish: criadas > concluídas por 3+ dias na janela
+
+Emocional
+
+emo_irritation_proxy: mood baixo + foco_drift alto repetido (proxy simples sem inventar psicologia)
+
+Relacional
+
+rel_no_connection_streak: 3 dias seguidos sem human_connection_done
+
+Salvar/atualizar em ff_behavior_patterns com evidência.
+
+7.4 Intervenção
+
+Se padrão relacional/emocional sensível → criar reminder pedindo consentimento:
+
+“Detectei um padrão. Quer explorar agora ou só registrar?”
+
+Se produtividade → cutucada competitiva:
+
+“Você repetiu o mesmo ciclo de criação sem fechamento. Hoje fecha o quê?”
+
+8) Critérios de aceite
+Check-in
+
+ ao 1º uso do chat no dia, se não existir check-in, o fluxo inicia
+
+ tool salva registro com unique(tenant_id,user_id,checkin_date)
+
+ UI não precisa mudar: tudo via chat
+
+Longitudinal
+
+ get_westos_state consegue citar fatos com data (ex “há 17 dias” baseado em checkin_date)
+
+ supervisor cria/atualiza ff_behavior_patterns com occurrences e last_seen_at
+
+Consentimento
+
+ se pattern_type in (emotional, relational) e severity >= 2 → sempre pedir consentimento antes de aprofundar
+
+ se usuário recusar 3 vezes → registrar “evitação” como dado (sem forçar)
+
+9) Melhor forma de contextualizar isso pro Codex (sem firula)
+
+O Codex trabalha melhor quando você dá:
+
+Objetivo (1 parágrafo)
+
+Arquitetura atual (o que já existe no repo)
+
+Lista de mudanças (arquivos e responsabilidades)
+
+Critérios de aceite (checklist)
+
+Restrições (não quebrar RLS, manter multi-tenant, seguir padrão de edge functions)
+
+Prompt pronto para você colar no Codex (VS Code)
+Você está no repo do FRACTTO FLOW (React+TS+Supabase) com módulo GUTA/Jarvis e Edge Function ff-jarvis-chat já implementados (function calling, multi-tenant via TenantContext, tabelas ff_* com RLS, cron de reminders). 
+
+Objetivo: implementar o “WestOS Supervisor” como camada acima das ferramentas:
+- Check-in diário via chat (GUTA) com registro estruturado e memória longitudinal (produtividade + emocional + relacional).
+- Ciclos adaptativos de 14 dias.
+- Detecção de padrões com evidência e intervenções proativas.
+- Consentimento obrigatório antes de explorar padrões sensíveis (emocional/relacional).
+
+Tarefas:
+1) Criar migrations SQL para:
+   - ff_daily_checkins
+   - ff_cycles
+   - ff_behavior_patterns
+   Inclua índices, constraints (unique tenant_id+user_id+date), timestamps e RLS policies no padrão tenant_isolation (tenant_members + auth.uid()).
+
+2) Atualizar Edge Function ff-jarvis-chat:
+   - adicionar tool create_daily_checkin
+   - adicionar tool get_westos_state
+   - implementar gatilho: se não existe check-in do dia, iniciar fluxo de perguntas (sem UI extra, via chat).
+   - system prompt dinâmico: persona “igual competitivo” + humor provocativo (sem infantilizar) + regra de consentimento para assuntos sensíveis.
+   - garantir que tudo seja tenant-aware (resolver tenant via JWT e usar tenant_id em queries).
+
+3) Criar Edge Function nova: ff-westos-supervisor
+   - rotina: buscar dados últimos 14 dias (checkins + tasks + events + habits)
+   - calcular 3 padrões MVP: prod_create_more_than_finish, emo_irritation_proxy, rel_no_connection_streak
+   - upsert em ff_behavior_patterns com evidence JSON
+   - criar intervenções proativas via ff_reminders (push) e/ou mensagem de sistema no chat
+   - se padrão sensível (emotional/relational): apenas perguntar se o usuário quer explorar; se não, registrar e recuar.
+
+4) Adicionar pg_cron schedule para chamar ff-westos-supervisor 1x/dia.
+
+Critérios de aceite:
+- Ao abrir/enviar msg no chat pela 1ª vez no dia, se não houver check-in, o chat conduz check-in e salva em ff_daily_checkins.
+- get_westos_state retorna ciclo atual e padrões ativos e permite citar datas reais (“há X dias”) baseado em checkin_date.
+- RLS multi-tenant funcionando; usuário só enxerga dados do tenant.
+- Nenhuma alteração quebra módulos existentes.
+
+Regras:
+- Faça alterações mínimas necessárias, seguindo padrões do repo.
+- Sempre reescreva arquivos inteiros quando modificar (regra do projeto).
+- Inclua comentários curtos e testes/validações básicas quando aplicável.
+- Ao final, entregue um resumo do que mudou + lista de arquivos alterados + comandos para aplicar migrations.
+
+10) Falhas prováveis (pra você não ser enrolado pelo Codex)
+
+Ele pode esquecer de aplicar tenant_id em queries novas → quebra isolamento
+
+Pode implementar “emoção” via texto do chat → vai alucinar padrão
+Você quer proxy numérico + evidência.
+
+Pode criar reminders demais → vira spam e você desliga
+Tem que ter thresholds e cooldown.

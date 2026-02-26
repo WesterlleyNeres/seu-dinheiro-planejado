@@ -23,15 +23,39 @@ CREATE TABLE IF NOT EXISTS public.ff_project_tasks (
 ALTER TABLE public.ff_projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ff_project_tasks ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "tenant_isolation_projects" ON public.ff_projects
-  FOR ALL
-  USING (tenant_id IN (SELECT tenant_id FROM public.tenant_members WHERE user_id = auth.uid()))
-  WITH CHECK (tenant_id IN (SELECT tenant_id FROM public.tenant_members WHERE user_id = auth.uid()));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'ff_projects'
+      AND policyname = 'tenant_isolation_projects'
+  ) THEN
+    CREATE POLICY "tenant_isolation_projects" ON public.ff_projects
+      FOR ALL
+      USING (tenant_id IN (SELECT tenant_id FROM public.tenant_members WHERE user_id = auth.uid()))
+      WITH CHECK (tenant_id IN (SELECT tenant_id FROM public.tenant_members WHERE user_id = auth.uid()));
+  END IF;
+END
+$$;
 
-CREATE POLICY "tenant_isolation_project_tasks" ON public.ff_project_tasks
-  FOR ALL
-  USING (tenant_id IN (SELECT tenant_id FROM public.tenant_members WHERE user_id = auth.uid()))
-  WITH CHECK (tenant_id IN (SELECT tenant_id FROM public.tenant_members WHERE user_id = auth.uid()));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'ff_project_tasks'
+      AND policyname = 'tenant_isolation_project_tasks'
+  ) THEN
+    CREATE POLICY "tenant_isolation_project_tasks" ON public.ff_project_tasks
+      FOR ALL
+      USING (tenant_id IN (SELECT tenant_id FROM public.tenant_members WHERE user_id = auth.uid()))
+      WITH CHECK (tenant_id IN (SELECT tenant_id FROM public.tenant_members WHERE user_id = auth.uid()));
+  END IF;
+END
+$$;
 
 DROP TRIGGER IF EXISTS ff_projects_set_updated_at ON public.ff_projects;
 CREATE TRIGGER ff_projects_set_updated_at
