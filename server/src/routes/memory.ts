@@ -1,6 +1,7 @@
+import type { Prisma } from "@prisma/client";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { ensureTenantAccess } from "../utils/tenant";
+import { ensureTenantAccess } from "../utils/tenant.js";
 
 export async function registerMemoryRoutes(fastify: FastifyInstance) {
   fastify.get(
@@ -60,7 +61,7 @@ export async function registerMemoryRoutes(fastify: FastifyInstance) {
           kind: data.kind,
           title: data.title ?? null,
           content: data.content,
-          metadata: data.metadata ?? {},
+          metadata: (data.metadata ?? {}) as Prisma.InputJsonValue,
           source: data.source ?? "manual",
         },
       });

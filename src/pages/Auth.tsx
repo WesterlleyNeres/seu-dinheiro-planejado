@@ -123,7 +123,7 @@ const Auth = () => {
         {/* Right side - Auth forms */}
         <Card className="shadow-2xl">
           <CardHeader>
-            <CardTitle>Bem-vindo</CardTitle>
+            <CardTitle>Vá se fude</CardTitle>
             <CardDescription>
               Entre na sua conta ou crie uma nova para começar
             </CardDescription>

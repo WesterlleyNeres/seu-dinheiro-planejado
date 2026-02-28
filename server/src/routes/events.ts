@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { ensureTenantAccess } from "../utils/tenant";
+import { ensureTenantAccess } from "../utils/tenant.js";
 
 const prioritySchema = z.enum(["low", "medium", "high"]);
 const statusSchema = z.enum(["scheduled", "cancelled", "completed"]);

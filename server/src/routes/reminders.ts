@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { ensureTenantAccess } from "../utils/tenant";
+import { ensureTenantAccess } from "../utils/tenant.js";
 
 const channelSchema = z.enum(["whatsapp", "email", "push"]);
 const statusSchema = z.enum(["pending", "sent", "dismissed", "canceled"]);

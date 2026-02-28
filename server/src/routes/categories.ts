@@ -1,3 +1,4 @@
+import type { CategoryType } from "@prisma/client";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
@@ -10,7 +11,7 @@ const categoryTypeSchema = z.enum([
   "variavel",
 ]);
 
-const defaultCategories = [
+const defaultCategories: Array<{ nome: string; tipo: CategoryType }> = [
   { nome: "Assinaturas", tipo: "despesa" },
   { nome: "Carro", tipo: "despesa" },
   { nome: "Casa", tipo: "despesa" },

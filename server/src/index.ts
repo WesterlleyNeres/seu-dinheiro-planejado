@@ -1,10 +1,10 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { ZodError } from "zod";
-import { config } from "./config";
-import { prismaPlugin } from "./plugins/prisma";
-import { authPlugin } from "./plugins/auth";
-import { registerRoutes } from "./routes";
+import { config } from "./config.js";
+import { prismaPlugin } from "./plugins/prisma.js";
+import { authPlugin } from "./plugins/auth.js";
+import { registerRoutes } from "./routes/index.js";
 
 const app = Fastify({ logger: true });
 

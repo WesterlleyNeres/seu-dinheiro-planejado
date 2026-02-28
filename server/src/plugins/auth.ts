@@ -1,6 +1,6 @@
 import fp from "fastify-plugin";
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import { config } from "../config";
+import { config } from "../config.js";
 
 export const authPlugin = fp(async (fastify) => {
   const issuer = config.supabaseIssuer || `${config.supabaseUrl}/auth/v1`;
@@ -13,6 +13,21 @@ export const authPlugin = fp(async (fastify) => {
   };
   const secretKey = secret ? new TextEncoder().encode(secret) : null;
 
+  const verifyToken = async (token: string) => {
+    if (secretKey) {
+      try {
+        return (await jwtVerify(token, secretKey, verifyOptions)).payload;
+      } catch (error) {
+        fastify.log.warn(
+          { err: error },
+          "JWT verify failed with secret, retrying with JWKS"
+        );
+      }
+    }
+
+    return (await jwtVerify(token, jwks, verifyOptions)).payload;
+  };
+
   fastify.decorate("authenticate", async (request, reply) => {
     const authHeader = request.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -22,18 +37,7 @@ export const authPlugin = fp(async (fastify) => {
 
     const token = authHeader.slice("Bearer ".length).trim();
     try {
-      let payload;
-      try {
-        payload = (
-          await jwtVerify(token, secretKey ?? jwks, verifyOptions)
-        ).payload;
-      } catch (error) {
-        if (secretKey) {
-          payload = (await jwtVerify(token, jwks, verifyOptions)).payload;
-        } else {
-          throw error;
-        }
-      }
+      const payload = await verifyToken(token);
 
       request.user = {
         id: payload.sub as string,

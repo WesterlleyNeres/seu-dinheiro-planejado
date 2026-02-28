@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { ensureTenantAccess } from "../utils/tenant";
+import { ensureTenantAccess } from "../utils/tenant.js";
 
 const cadenceSchema = z.enum(["daily", "weekly", "monthly"]);
 const targetTypeSchema = z.enum(["count", "duration"]);

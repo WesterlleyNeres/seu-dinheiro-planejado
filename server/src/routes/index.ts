@@ -1,17 +1,17 @@
 import type { FastifyInstance } from "fastify";
-import { registerHealthRoutes } from "./health";
-import { registerCategoryRoutes } from "./categories";
-import { registerWalletRoutes } from "./wallets";
-import { registerTransactionRoutes } from "./transactions";
-import { registerTransferRoutes } from "./transfers";
-import { registerBudgetRoutes } from "./budgets";
-import { registerGoalRoutes } from "./goals";
-import { registerTaskRoutes } from "./tasks";
-import { registerEventRoutes } from "./events";
-import { registerHabitRoutes } from "./habits";
-import { registerReminderRoutes } from "./reminders";
-import { registerMemoryRoutes } from "./memory";
-import { registerProjectRoutes } from "./projects";
+import { registerHealthRoutes } from "./health.js";
+import { registerCategoryRoutes } from "./categories.js";
+import { registerWalletRoutes } from "./wallets.js";
+import { registerTransactionRoutes } from "./transactions.js";
+import { registerTransferRoutes } from "./transfers.js";
+import { registerBudgetRoutes } from "./budgets.js";
+import { registerGoalRoutes } from "./goals.js";
+import { registerTaskRoutes } from "./tasks.js";
+import { registerEventRoutes } from "./events.js";
+import { registerHabitRoutes } from "./habits.js";
+import { registerReminderRoutes } from "./reminders.js";
+import { registerMemoryRoutes } from "./memory.js";
+import { registerProjectRoutes } from "./projects.js";
 
 export async function registerRoutes(fastify: FastifyInstance) {
   await registerHealthRoutes(fastify);

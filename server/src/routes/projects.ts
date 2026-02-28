@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { ensureTenantAccess } from "../utils/tenant";
+import { ensureTenantAccess } from "../utils/tenant.js";
 
 const projectStatusSchema = z.enum(["active", "completed", "archived"]);
 const taskStatusSchema = z.enum(["open", "in_progress", "done"]);
