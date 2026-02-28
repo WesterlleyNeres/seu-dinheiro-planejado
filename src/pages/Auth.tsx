@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { DollarSign, TrendingUp, PiggyBank } from "lucide-react";
+import { TrendingUp, PiggyBank } from "lucide-react";
 import fracttoLogo from "@/assets/logo-fractto.png";
 
 const Auth = () => {
@@ -33,7 +33,7 @@ const Auth = () => {
 
     try {
       const { error } = await signIn(loginEmail, loginPassword);
-      
+
       if (error) {
         if (error.message.includes("Invalid login credentials")) {
           toast.error("E-mail ou senha incorretos");
@@ -52,7 +52,7 @@ const Auth = () => {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (signupPassword.length < 8) {
       toast.error("A senha deve ter pelo menos 8 caracteres");
       return;
@@ -62,7 +62,7 @@ const Auth = () => {
 
     try {
       const { error } = await signUp(signupEmail, signupPassword, signupFullName);
-      
+
       if (error) {
         if (error.message.includes("already registered")) {
           toast.error("Este e-mail já está cadastrado");
@@ -88,10 +88,8 @@ const Auth = () => {
             <img src={fracttoLogo} alt="FRACTTO FLOW" className="h-12 w-12 object-contain" />
             <h1 className="text-3xl font-bold text-primary">FRACTTO FLOW</h1>
           </div>
-          
-          <p className="text-xl text-muted-foreground">
-            Suas finanças, peça por peça
-          </p>
+
+          <p className="text-xl text-muted-foreground">Suas finanças, peça por peça</p>
 
           <div className="space-y-4 pt-4">
             <div className="flex items-start gap-3">
@@ -123,7 +121,7 @@ const Auth = () => {
         {/* Right side - Auth forms */}
         <Card className="shadow-2xl">
           <CardHeader>
-            <CardTitle>Vá se fude</CardTitle>
+            <CardTitle>Seja Bem vindo!</CardTitle>
             <CardDescription>
               Entre na sua conta ou crie uma nova para começar
             </CardDescription>
@@ -205,9 +203,7 @@ const Auth = () => {
                       disabled={isLoading}
                       minLength={8}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Mínimo de 8 caracteres
-                    </p>
+                    <p className="text-xs text-muted-foreground">Mínimo de 8 caracteres</p>
                   </div>
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? "Criando conta..." : "Criar Conta"}
